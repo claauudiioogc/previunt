@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PREVIUNT · Prevención y Alerta Temprana – Ciudad Universitaria UNT</title>
+<meta name="description" content="PREVIUNT: Sistema Inteligente de Prevención y Alerta Temprana ante lluvias intensas para la Ciudad Universitaria de la Universidad Nacional de Trujillo.">
+<meta name="theme-color" content="#0b2e4f">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b2e4f'/%3E%3Cpath d='M32 9C24 21 17 30 17 39a15 15 0 0 0 30 0c0-9-7-18-15-30z' fill='%2314c8b8'/%3E%3Cpath d='M25 40a7 7 0 0 0 7 7' stroke='%23fff' stroke-width='4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+:root{
+  --navy:#0b2e4f; --blue:#0e5a8a; --blue2:#1273b8; --teal:#0fb5a6; --teal2:#14c8b8; --aqua:#e3f6f4;
+  --bg:#f1f5f9; --card:#ffffff; --text:#12263a; --muted:#607489; --line:#e1e8ef;
+  --ok:#16a34a; --okbg:#e6f6ec; --okt:#15803d;
+  --warn:#eab308; --warnbg:#fff5d1; --warnt:#a16207;
+  --bad:#dc2626; --badbg:#fde6e6; --badt:#b91c1c;
+  --hdr:64px;
+  --shadow:0 1px 2px rgba(16,40,70,.05),0 6px 20px rgba(16,40,70,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input,select,textarea{font:inherit;color:inherit}
+.ico{width:18px;height:18px;flex:none;display:inline-block;vertical-align:middle}
+h1,h2,h3,h4{line-height:1.2}
+
+/* ---------- Topbar ---------- */
+.topbar{position:sticky;top:0;z-index:1100;background:linear-gradient(100deg,#0b2e4f 0%,#0e4f7c 55%,#0c8a8a 100%);color:#fff;box-shadow:0 2px 14px rgba(11,46,79,.28);overflow:hidden}
+.topbar::after{content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .6s;background:repeating-linear-gradient(105deg,transparent 0 18px,rgba(255,255,255,.16) 18px 19px);background-size:300px 300px;animation:rain .55s linear infinite}
+body.raining .topbar::after{opacity:1}
+@keyframes rain{from{background-position:0 0}to{background-position:-60px 300px}}
+.topbar-in{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 20px;position:relative;z-index:1}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand svg{width:38px;height:38px;flex:none}
+.brand h1{font-size:19px;font-weight:800;letter-spacing:.07em}
+.brand small{display:block;font-size:11px;opacity:.8;font-weight:500;letter-spacing:0;white-space:nowrap}
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,.1);padding:4px;border-radius:12px;margin:0 auto}
+.tab{padding:8px 14px;border-radius:9px;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:7px;color:rgba(255,255,255,.86);white-space:nowrap;transition:background .2s}
+.tab:hover{background:rgba(255,255,255,.12)}
+.tab.active{background:#fff;color:var(--navy);box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.top-actions{display:flex;align-items:center;gap:8px}
+.hpill{display:flex;align-items:center;gap:7px;padding:7px 11px;border-radius:10px;background:rgba(255,255,255,.12);font-size:12.5px;font-weight:600;white-space:nowrap}
+.hpill .dot{width:9px;height:9px;border-radius:50%;background:var(--c,#22c55e);box-shadow:0 0 0 3px rgba(255,255,255,.18)}
+.icon-btn{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.12);display:grid;place-items:center}
+.icon-btn.off{opacity:.5}
+.btn-rain{background:var(--teal2);color:#04283a;font-weight:700;padding:8px 13px;border-radius:10px;display:inline-flex;gap:7px;align-items:center;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:transform .15s}
+.btn-rain:active{transform:scale(.97)}
+.btn-rain.on{background:#ef4444;color:#fff;animation:glow 1.4s infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}50%{box-shadow:0 0 0 7px rgba(239,68,68,0)}}
+
+/* ---------- Views ---------- */
+.view{display:none;max-width:1440px;margin:0 auto;padding:20px}
+.view.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.card-h h3{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.card-b{padding:16px}
+.mt{margin-top:16px}
+.phead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.phead h2{font-size:22px;font-weight:800;color:var(--navy)}
+.phead p{color:var(--muted);margin-top:3px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--okt);background:var(--okbg);padding:5px 10px;border-radius:999px}
+.live::before{content:'';width:8px;height:8px;border-radius:50%;background:#22c55e;animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.25}}
+
+/* badges & chips */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.badge::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor}
+.b-ok{background:var(--okbg);color:var(--okt)} .b-warn{background:var(--warnbg);color:var(--warnt)} .b-bad{background:var(--badbg);color:var(--badt)}
+.b-info{background:#e3effa;color:var(--blue)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:8px;font-size:11.5px;font-weight:700;border:1.5px solid;white-space:nowrap;background:#fff}
+.st-pend{color:#9a3412;border-color:#fdba74}
+.st-val{color:#0e5a8a;border-color:#93c5fd}
+.st-aten{color:#0f766e;border-color:#5eead4}
+.st-res{color:#475569;border-color:#cbd5e1;background:#f8fafc}
+.tag-new{background:var(--teal);color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:6px;letter-spacing:.04em}
+.btn-primary{background:linear-gradient(135deg,var(--blue2),var(--teal));color:#fff;font-weight:700;padding:11px 16px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(18,115,184,.28)}
+.btn-primary:hover{filter:brightness(1.05)}
+.btn-ghost{background:#eef4f9;color:var(--blue);font-weight:700;padding:10px 14px;border-radius:12px;display:inline-flex;align-items:center;gap:7px}
+.btn-ghost:hover{background:#e2edf6}
+.btn-sm{padding:6px 10px;border-radius:9px;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;gap:5px}
+.btn-sm .ico{width:15px;height:15px}
+.b-validate{background:var(--teal);color:#fff}
+.b-validate:hover{filter:brightness(1.07)}
+.b-plain{background:#eef4f9;color:var(--blue)}
+.b-plain:hover{background:#e0ebf5}
+
+/* ---------- APP view ---------- */
+.app-wrap{display:grid;grid-template-columns:410px minmax(0,560px);gap:32px;justify-content:center;align-items:start}
+.phone{width:400px;height:max(660px,min(820px,calc(100dvh - var(--hdr) - 40px)));background:#0a1624;border-radius:48px;padding:11px;box-shadow:0 30px 60px -20px rgba(11,46,79,.45),0 0 0 2px #1d2c3d inset;position:relative}
+.screen{background:#f3f7fa;border-radius:38px;height:100%;overflow:hidden;display:flex;flex-direction:column;position:relative}
+.notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:112px;height:28px;background:#0a1624;border-radius:20px;z-index:30}
+.sbar{height:44px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 5px;font-size:12px;font-weight:700;background:var(--navy);color:#fff}
+.appbar{flex:none;background:var(--navy);color:#fff;padding:6px 16px 14px;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden}
+.appbar::after{content:'';position:absolute;inset:0;opacity:0;transition:opacity .6s;background:repeating-linear-gradient(105deg,transparent 0 16px,rgba(255,255,255,.15) 16px 17px);background-size:300px 300px;animation:rain .55s linear infinite;pointer-events:none}
+body.raining .appbar::after{opacity:1}
+.appbar .ab-brand{display:flex;align-items:center;gap:8px;font-weight:800;letter-spacing:.06em;font-size:16px;position:relative;z-index:1}
+.appbar .ab-brand svg{width:28px;height:28px}
+.appbar small{display:block;font-size:10.5px;font-weight:500;letter-spacing:0;opacity:.75}
+.bell{position:relative;width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.12);display:grid;place-items:center;z-index:1}
+.bell b{position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:10px;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px;border:2px solid var(--navy)}
+.ascreen{flex:1;overflow-y:auto;display:none;padding:14px 14px 18px;-webkit-overflow-scrolling:touch}
+.ascreen.active{display:block}
+#as-mapa.active{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.tabbar{height:68px;flex:none;background:#fff;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-around;padding-bottom:6px;position:relative;z-index:5}
+.tbtn{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;color:#8a9bb0;width:80px}
+.tbtn .ico{width:22px;height:22px}
+.tbtn.active{color:var(--blue2)}
+.tbtn.fab .fab-c{width:52px;height:52px;border-radius:17px;margin-top:-26px;background:linear-gradient(135deg,var(--blue2),var(--teal));color:#fff;display:grid;place-items:center;box-shadow:0 8px 18px rgba(18,115,184,.4)}
+.tbtn.fab .fab-c .ico{width:26px;height:26px}
+.tbtn.fab.active{color:var(--blue2)}
+
+.hero{border-radius:18px;padding:15px;color:#fff;position:relative;overflow:hidden}
+.hero.h-ok{background:linear-gradient(135deg,#15803d,#22a35a)}
+.hero.h-warn{background:linear-gradient(135deg,#b7791f,#e0a800)}
+.hero.h-bad{background:linear-gradient(135deg,#b91c1c,#e23b3b)}
+.hero::after{content:'';position:absolute;inset:0;opacity:0;background:repeating-linear-gradient(105deg,transparent 0 14px,rgba(255,255,255,.18) 14px 15px);background-size:300px 300px;animation:rain .5s linear infinite;transition:opacity .6s}
+body.raining .hero::after{opacity:1}
+.hero-top{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-weight:600;opacity:.95;position:relative;z-index:1}
+.hero-top .lv{background:rgba(255,255,255,.2);padding:3px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:5px}
+.hero-top .lv::before{content:'';width:7px;height:7px;border-radius:50%;background:#fff;animation:blink 1.2s infinite}
+.hero-main{display:flex;align-items:center;gap:14px;margin-top:12px;position:relative;z-index:1}
+.semaforo{background:#0b1b2b;border-radius:14px;padding:7px 6px;display:flex;flex-direction:column;gap:5px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.1)}
+.semaforo i{width:17px;height:17px;border-radius:50%;opacity:.22;display:block}
+.semaforo i.r{background:#ff4d4d}.semaforo i.y{background:#ffd23f}.semaforo i.g{background:#3ddc84}
+.semaforo i.on{opacity:1;box-shadow:0 0 12px currentColor}
+.semaforo i.r.on{color:#ff4d4d}.semaforo i.y.on{color:#ffd23f}.semaforo i.g.on{color:#3ddc84}
+.hero-lvl{font-size:21px;font-weight:800;line-height:1.1}
+.hero-sub{font-size:12px;opacity:.92;margin-top:4px}
+.advice{margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px 12px;font-size:12.5px;color:#334a61;display:flex;gap:9px}
+.advice .ico{color:var(--blue2);margin-top:1px}
+.quick{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.quick button{background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px;color:var(--navy);text-align:left}
+.quick button .qi{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:var(--aqua);color:var(--teal);flex:none}
+.quick button:first-child .qi{background:#e3effa;color:var(--blue2)}
+.sec{font-size:13.5px;font-weight:800;color:var(--navy);margin:16px 2px 8px;display:flex;justify-content:space-between;align-items:center}
+.sec span{font-size:11.5px;color:var(--muted);font-weight:600}
+.alist{display:flex;flex-direction:column;gap:8px}
+.al{background:#fff;border:1px solid var(--line);border-left:5px solid var(--c);border-radius:13px;padding:10px 11px;display:flex;gap:10px;align-items:flex-start;text-align:left;width:100%}
+.al .al-ic{width:34px;height:34px;border-radius:10px;background:var(--cb);display:grid;place-items:center;font-size:16px;flex:none}
+.al .al-t{font-weight:700;font-size:12.8px;color:var(--text)}
+.al .al-s{font-size:11.5px;color:var(--muted);margin-top:2px}
+.al .al-r{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.al .al-r small{font-size:10.5px;color:var(--muted)}
+.al .src{font-size:9.5px;font-weight:800;letter-spacing:.05em;color:var(--blue);background:#e8f1fa;padding:1px 5px;border-radius:5px;margin-right:4px}
+.empty{background:#fff;border:1px dashed #cdd8e3;border-radius:13px;padding:14px;text-align:center;color:var(--muted);font-size:12.5px}
+.mine{background:#fff;border:1px solid var(--line);border-radius:13px;padding:11px}
+.mine + .mine{margin-top:8px}
+.mine-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mine-h b{font-size:12.8px}
+.mine small{color:var(--muted);font-size:11.5px}
+.prog{display:flex;align-items:center;margin-top:10px}
+.prog .st{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:9.5px;font-weight:700;color:#9aabbd;flex:1;position:relative;text-align:center}
+.prog .st i{width:13px;height:13px;border-radius:50%;background:#dbe4ec;border:2px solid #fff;box-shadow:0 0 0 1.5px #dbe4ec;z-index:1}
+.prog .st::before{content:'';position:absolute;top:6px;left:-50%;width:100%;height:2.5px;background:#dbe4ec}
+.prog .st:first-child::before{display:none}
+.prog .st.done{color:var(--teal)}
+.prog .st.done i{background:var(--teal);box-shadow:0 0 0 1.5px var(--teal)}
+.prog .st.done::before{background:var(--teal)}
+
+/* report form */
+.scr-title{font-size:18px;font-weight:800;color:var(--navy)}
+.scr-sub{font-size:12.3px;color:var(--muted);margin-top:3px}
+.fl{display:block;font-size:12.5px;font-weight:800;color:var(--navy);margin:15px 0 7px}
+.tipos{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tipo input{position:absolute;opacity:0;pointer-events:none}
+.tipo span{display:flex;flex-direction:column;gap:5px;background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:10px;font-size:12px;font-weight:700;color:#304860;cursor:pointer;min-height:76px;transition:.15s}
+.tipo span em{font-style:normal;font-size:20px}
+.tipo input:checked + span{border-color:var(--teal);background:var(--aqua);color:#0b5e57;box-shadow:0 0 0 3px rgba(15,181,166,.15)}
+.tipo input:focus-visible + span{outline:2px solid var(--blue2)}
+.photo{display:block;position:relative;border:2px dashed #b9cad9;border-radius:14px;background:#fff;min-height:110px;cursor:pointer;overflow:hidden}
+.photo input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.ph-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:110px;color:var(--muted);font-size:12px;pointer-events:none}
+.ph-empty .ico{width:28px;height:28px;color:var(--blue2)}
+.ph-empty b{color:var(--navy)}
+.photo img{display:none;width:100%;height:170px;object-fit:cover}
+.photo.has img{display:block}
+.photo.has .ph-empty{display:none}
+.ph-del{display:none;margin-top:6px;font-size:12px;font-weight:700;color:var(--badt)}
+.ph-del.show{display:inline-block}
+textarea,.inp,select.inp{width:100%;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:10px 11px;font-size:13px;outline:none;transition:border .15s}
+textarea:focus,.inp:focus{border-color:var(--blue2);box-shadow:0 0 0 3px rgba(18,115,184,.12)}
+textarea{resize:vertical;min-height:78px}
+.cnt{text-align:right;font-size:10.5px;color:var(--muted);margin-top:3px}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:12.3px;font-weight:600;color:#3b5269;margin-top:8px;cursor:pointer}
+.chk input{margin-top:2px;accent-color:var(--bad);width:16px;height:16px}
+.locbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.locbtns button{background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:10px 8px;font-size:12px;font-weight:700;color:var(--blue);display:flex;align-items:center;justify-content:center;gap:6px}
+.locbtns button:hover{border-color:var(--blue2)}
+.locbtns button.busy{opacity:.6;pointer-events:none}
+.mappick{height:190px;border-radius:13px;margin-top:8px;border:1.5px solid var(--line);position:relative;z-index:0;transition:box-shadow .3s}
+.mappick.flash{box-shadow:0 0 0 4px rgba(15,181,166,.45)}
+.locinfo{font-size:11.8px;color:var(--muted);margin-top:6px;display:flex;gap:6px;align-items:flex-start}
+.locinfo .ico{width:15px;height:15px;color:var(--teal);margin-top:1px}
+.locinfo.ok{color:#0b5e57;font-weight:600}
+.riskprev{margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12.3px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ferr{color:var(--badt);font-size:12px;font-weight:700;margin-top:10px;min-height:0}
+.btn-send{width:100%;margin-top:12px;padding:13px}
+.psuccess{position:absolute;inset:0;background:rgba(243,247,250,.97);z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px}
+.psuccess.show{display:flex;animation:fade .25s}
+.psuccess .okc{width:78px;height:78px;border-radius:50%;background:linear-gradient(135deg,var(--teal),#22c55e);display:grid;place-items:center;color:#fff;box-shadow:0 10px 30px rgba(15,181,166,.4);animation:pop .4s}
+.psuccess .okc .ico{width:40px;height:40px;stroke-width:3}
+.psuccess h3{margin-top:16px;font-size:18px;color:var(--navy)}
+.psuccess p{color:var(--muted);font-size:12.8px;margin-top:6px}
+.psuccess .code{font-size:22px;font-weight:800;color:var(--blue2);margin-top:10px;letter-spacing:.04em}
+.psuccess .acts{display:flex;flex-direction:column;gap:8px;margin-top:20px;width:100%}
+@keyframes pop{0%{transform:scale(.4)}70%{transform:scale(1.1)}100%{transform:scale(1)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.pnotif{position:absolute;top:50px;left:10px;right:10px;z-index:45;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);border-radius:16px;padding:10px 12px;box-shadow:0 12px 30px rgba(10,22,36,.28);display:flex;gap:10px;align-items:flex-start;transform:translateY(-220%);opacity:0;visibility:hidden;transition:transform .35s cubic-bezier(.2,.9,.3,1.2),opacity .25s,visibility .35s;border-left:5px solid var(--c,#1273b8)}
+.pnotif.show{transform:translateY(0);opacity:1;visibility:visible}
+.pnotif .pn-ic{width:30px;height:30px;border-radius:9px;background:var(--navy);display:grid;place-items:center;flex:none}
+.pnotif .pn-ic svg{width:20px;height:20px}
+.pnotif b{font-size:12.5px;display:block}
+.pnotif p{font-size:11.5px;color:var(--muted);margin-top:1px}
+.pnotif small{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.04em}
+
+/* app map */
+.mchips{display:flex;gap:6px;padding:10px 12px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto;flex:none}
+.mchip{padding:6px 11px;border-radius:999px;font-size:11.5px;font-weight:700;border:1.5px solid var(--line);color:var(--muted);white-space:nowrap;background:#fff}
+.mchip.on{background:var(--navy);border-color:var(--navy);color:#fff}
+#mapApp{flex:1;min-height:240px;position:relative;z-index:0}
+.mlist{flex:none;max-height:38%;overflow-y:auto;background:#fff;border-top:1px solid var(--line);padding:10px 12px}
+.mlist h4{font-size:12.5px;color:var(--navy);margin-bottom:7px}
+.mrow{display:flex;gap:9px;align-items:center;padding:7px 2px;border-bottom:1px solid #f0f4f7;width:100%;text-align:left}
+.mrow:last-child{border-bottom:0}
+.mrow .dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.mrow b{font-size:12px;display:block}
+.mrow small{font-size:11px;color:var(--muted)}
+.mrow .ago{margin-left:auto;font-size:10.5px;color:var(--muted);white-space:nowrap}
+
+/* side panel next to phone */
+.side{display:flex;flex-direction:column;gap:16px}
+.side .card-b h2{font-size:21px;color:var(--navy);font-weight:800}
+.side .card-b p{color:#45596e;margin-top:6px}
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:12px;margin-top:4px}
+.steps li{list-style:none;display:flex;gap:11px;align-items:flex-start;color:#3a4f64}
+.steps li::before{counter-increment:s;content:counter(s);width:26px;height:26px;border-radius:8px;background:var(--aqua);color:var(--teal);font-weight:800;display:grid;place-items:center;flex:none;font-size:13px}
+.steps b{color:var(--navy)}
+.side-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.arch{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap}
+.arch .node{flex:1;min-width:110px;background:#f5f9fc;border:1px solid var(--line);border-radius:12px;padding:10px;font-size:12px;color:#3a4f64}
+.arch .node b{display:block;color:var(--navy);font-size:12.5px;margin-bottom:2px}
+.arch .arr{display:grid;place-items:center;color:var(--teal);font-weight:800}
+.mini-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.mini-stats div{background:#f5f9fc;border-radius:12px;padding:10px;text-align:center}
+.mini-stats b{display:block;font-size:20px;color:var(--navy)}
+.mini-stats span{font-size:11px;color:var(--muted)}
+
+/* ---------- ADMIN view ---------- */
+.critbar{display:none;align-items:center;gap:12px;background:linear-gradient(90deg,#b91c1c,#dc2626);color:#fff;border-radius:14px;padding:11px 14px;margin-bottom:14px;box-shadow:0 6px 20px rgba(220,38,38,.25)}
+.critbar.show{display:flex}
+.critbar .ico{width:22px;height:22px;animation:blink 1.2s infinite}
+.critbar .ct{flex:1;min-width:0}
+.critbar b{display:block}
+.critbar small{opacity:.92;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.critbar button{background:#fff;color:var(--badt);font-weight:700;padding:7px 12px;border-radius:9px;font-size:12.5px;flex:none}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+.kpi{display:flex;gap:12px;align-items:center;padding:15px}
+.kpi-ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;flex:none;background:var(--kb);color:var(--kc)}
+.kpi-ic .ico{width:22px;height:22px}
+.kpi-v{font-size:25px;font-weight:800;color:var(--navy);line-height:1}
+.kpi-v small{font-size:13px;font-weight:700;color:var(--muted);margin-left:2px}
+.kpi-l{font-size:12.5px;font-weight:700;color:#3a4f64;margin-top:4px}
+.kpi-s{font-size:11.3px;color:var(--muted);margin-top:1px}
+.admin-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:16px;margin-top:16px}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.admin-grid > .card{display:flex;flex-direction:column}
+.map-admin{flex:1;min-height:480px;border-radius:0 0 16px 16px;position:relative;z-index:0}
+.maptg{display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;font-weight:600;color:#3a4f64}
+.maptg label{display:flex;gap:5px;align-items:center;cursor:pointer}
+.maptg input{accent-color:var(--teal)}
+.feed{max-height:262px;overflow-y:auto;padding:6px 10px}
+.fi{display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid #f0f4f7;align-items:flex-start}
+.fi:last-child{border-bottom:0}
+.fi .fd{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:none;background:var(--c)}
+.fi b{font-size:12.5px;display:block}
+.fi p{font-size:11.5px;color:var(--muted);margin-top:1px}
+.fi time{margin-left:auto;font-size:10.8px;color:var(--muted);white-space:nowrap;padding-left:6px}
+.fi .k{font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:1px 5px;border-radius:5px;margin-right:4px;vertical-align:1px}
+.k-iot{background:#e3effa;color:var(--blue)} .k-app{background:var(--aqua);color:#0b766d} .k-sys{background:#eef2f6;color:#475569}
+.chartbox{position:relative;height:210px;padding:10px 14px 14px}
+.chartbox.tall{height:290px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters .inp{width:auto;padding:7px 10px;font-size:12.5px;border-radius:10px}
+.filters input.inp{width:200px}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:1000px}
+th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:10px 12px;background:#f7fafc;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid #edf2f6;vertical-align:middle;font-size:13px}
+tr:hover td{background:#fafcfe}
+tr.row-new td{background:#f0fbf9}
+.tc{font-weight:800;color:var(--blue);white-space:nowrap}
+.tinc{display:flex;gap:10px;align-items:center;min-width:250px}
+.thumb{width:42px;height:42px;border-radius:10px;flex:none;overflow:hidden;display:grid;place-items:center;font-size:18px;background:var(--tg)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.tinc b{font-size:13px;display:block}
+.tinc small{font-size:11.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;max-width:300px}
+.sel-est{padding:6px 8px;border-radius:9px;border:1.5px solid var(--line);font-size:12.5px;font-weight:700;background:#fff;cursor:pointer}
+.acts{display:flex;gap:6px;white-space:nowrap}
+.origin{font-size:11.5px;font-weight:700;color:#475569;white-space:nowrap}
+.tfoot{padding:10px 16px;font-size:12px;color:var(--muted)}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(8,24,40,.55);display:none;align-items:center;justify-content:center;z-index:3000;padding:16px;backdrop-filter:blur(2px)}
+.modal-bg.show{display:flex;animation:fade .2s}
+.modal{background:#fff;border-radius:20px;max-width:820px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 30px 70px rgba(0,0,0,.3)}
+.md-h{display:flex;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:2}
+.md-code{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:.03em}
+.md-h h3{font-size:19px;color:var(--navy);margin-top:3px}
+.md-loc{font-size:12.5px;color:#45596e;margin-top:4px;display:flex;align-items:center;gap:5px}
+.md-loc .ico{width:15px;height:15px;color:var(--teal)}
+.md-x{width:36px;height:36px;border-radius:10px;background:#f1f5f9;display:grid;place-items:center;flex:none}
+.md-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:18px 20px}
+.photo-big{width:100%;height:220px;border-radius:14px;overflow:hidden;display:grid;place-items:center;background:var(--tg);position:relative}
+.photo-big img{width:100%;height:100%;object-fit:cover}
+.photo-big .pe{font-size:58px}
+.photo-big .cap{position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.45);color:#fff;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:6px}
+.md-desc{margin-top:12px;color:#2d4256;font-size:13.5px}
+.md-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.md-meta div{background:#f7fafc;border-radius:10px;padding:8px 10px}
+.md-meta span{display:block;font-size:10.8px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.md-meta b{font-size:12.5px}
+.md-sec + .md-sec{margin-top:16px}
+.lbl{display:block;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:8px;border-radius:10px;border:1.5px solid var(--line);font-weight:700;font-size:12.5px;color:var(--muted);background:#fff}
+.seg button.on.s-ok{background:var(--okbg);border-color:var(--ok);color:var(--okt)}
+.seg button.on.s-warn{background:var(--warnbg);border-color:var(--warn);color:var(--warnt)}
+.seg button.on.s-bad{background:var(--badbg);border-color:var(--bad);color:var(--badt)}
+.stepper{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.stepper button{padding:9px 4px;border-radius:10px;border:1.5px solid var(--line);font-size:11.8px;font-weight:700;color:var(--muted);background:#fff}
+.stepper button.done{background:var(--aqua);border-color:#9fe5dc;color:#0b766d}
+.stepper button.cur{background:var(--teal);border-color:var(--teal);color:#fff}
+.tl{list-style:none;border-left:2px solid var(--line);margin-left:5px;padding-left:12px;display:flex;flex-direction:column;gap:8px;max-height:160px;overflow:auto}
+.tl li{font-size:12.3px;color:#3a4f64;position:relative}
+.tl li::before{content:'';position:absolute;left:-18px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--teal);border:2px solid #fff}
+.tl b{color:var(--navy);margin-right:4px}
+.md-f{display:flex;gap:10px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--line);flex-wrap:wrap;position:sticky;bottom:0;background:#fff}
+
+/* ---------- IoT view ---------- */
+.iot-top{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px}
+.raincard{padding:18px;background:linear-gradient(135deg,#0b2e4f,#0e5a8a 60%,#0c8a8a);color:#fff;border:0;position:relative;overflow:hidden}
+.raincard::after{content:'';position:absolute;inset:0;opacity:0;background:repeating-linear-gradient(105deg,transparent 0 14px,rgba(255,255,255,.2) 14px 15px);background-size:300px 300px;animation:rain .45s linear infinite;transition:opacity .6s;pointer-events:none}
+body.raining .raincard::after{opacity:1}
+.raincard > *{position:relative;z-index:1}
+.rc-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.rc-top h3{font-size:17px}
+.rc-top p{font-size:12.5px;opacity:.85;margin-top:3px;max-width:440px}
+.rc-cond{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);padding:5px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.rc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.rc-stats div{background:rgba(255,255,255,.1);border-radius:12px;padding:10px 12px}
+.rc-stats b{display:block;font-size:22px;font-weight:800}
+.rc-stats span{font-size:11.5px;opacity:.85}
+.rc-int{margin-top:14px}
+.rc-int .bar{height:8px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden;margin-top:6px}
+.rc-int .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#14c8b8,#facc15,#ef4444);transition:width .8s}
+.rc-int small{font-size:11.5px;opacity:.85;display:flex;justify-content:space-between}
+.rc-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;align-items:center}
+.btn-rain.big{padding:13px 20px;font-size:15px;border-radius:13px}
+.rc-actions .meta{font-size:11.5px;opacity:.85}
+.thr{padding:6px 16px 14px}
+.thr-row{padding:12px 0;border-bottom:1px solid #edf2f6}
+.thr-row:last-of-type{border-bottom:0}
+.thr-row h4{font-size:13px;color:var(--navy);display:flex;justify-content:space-between;align-items:center}
+.thr-row h4 small{font-weight:600;color:var(--muted);font-size:11.5px}
+.thr-in{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.thr-in label{font-size:11.5px;font-weight:700;color:#45596e;display:flex;flex-direction:column;gap:4px}
+.thr-in label span{display:flex;align-items:center;gap:5px}
+.thr-in label span::before{content:'';width:9px;height:9px;border-radius:3px;background:var(--c)}
+.thr-in .wrap{display:flex;align-items:center;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.thr-in input{width:100%;border:0;padding:8px 10px;outline:none;font-weight:700;font-size:13px}
+.thr-in .wrap em{font-style:normal;font-size:11.5px;color:var(--muted);padding:0 10px;background:#f7fafc;align-self:stretch;display:grid;place-items:center;border-left:1px solid var(--line)}
+.thr-in .wrap:focus-within{border-color:var(--blue2)}
+.thr-f{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.thr-msg{font-size:12px;font-weight:700;color:var(--okt)}
+.thr-msg.err{color:var(--badt)}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:16px}
+.scard{padding:14px;cursor:pointer;border-top:4px solid var(--c);transition:transform .15s,box-shadow .15s;text-align:left;width:100%;display:block}
+.scard:hover{transform:translateY(-2px)}
+.scard.sel{box-shadow:0 0 0 2px var(--blue2),var(--shadow)}
+.scard.crit{animation:critp 1.5s infinite}
+@keyframes critp{50%{box-shadow:0 0 0 3px rgba(220,38,38,.35),var(--shadow)}}
+.sc-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.sc-code{font-size:10.8px;font-weight:800;color:var(--muted);letter-spacing:.05em}
+.sc-name{font-size:13px;font-weight:700;color:var(--navy);margin-top:1px}
+.sc-val{display:flex;align-items:baseline;gap:5px;margin-top:10px}
+.sc-val b{font-size:30px;font-weight:800;color:var(--text);line-height:1;font-variant-numeric:tabular-nums}
+.sc-val span{font-size:13px;font-weight:700;color:var(--muted)}
+.sc-val small{margin-left:auto;font-size:11px;color:var(--muted);font-weight:600;text-align:right}
+.sc-bar{position:relative;height:8px;background:#edf2f6;border-radius:5px;margin-top:10px}
+.sc-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--c);transition:width .6s}
+.sc-bar em{position:absolute;top:-3px;bottom:-3px;width:2px;border-radius:1px}
+.spark{display:block;width:100%;height:38px;margin-top:8px}
+.sc-foot{display:flex;justify-content:space-between;gap:6px;font-size:11px;color:var(--muted);font-weight:600;margin-top:6px}
+.iot-bottom{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:16px;margin-top:16px}
+.iot-bottom .feed{max-height:300px}
+
+/* map markers */
+.imk{width:30px;height:30px;border-radius:50%;background:#fff;border:3px solid var(--c);display:grid;place-items:center;font-size:14px;box-shadow:0 2px 7px rgba(0,0,0,.3);position:relative}
+.imk.res{opacity:.55;filter:grayscale(1)}
+.smk{width:30px;height:30px;border-radius:9px;background:var(--c);color:#fff;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 2px 7px rgba(0,0,0,.35);position:relative}
+.smk svg{width:17px;height:17px}
+.pulse::after{content:'';position:absolute;inset:-4px;border-radius:inherit;border:3px solid var(--c);animation:ring 1.6s ease-out infinite;pointer-events:none}
+@keyframes ring{0%{transform:scale(1);opacity:.9}100%{transform:scale(2);opacity:0}}
+.pin{width:26px;height:26px;border-radius:50% 50% 50% 0;background:var(--teal);transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.4)}
+.leaflet-popup-content{margin:12px 14px;font-family:inherit;font-size:12.5px;line-height:1.4}
+.leaflet-popup-content-wrapper{border-radius:13px}
+.pp-h{font-weight:800;color:var(--navy);font-size:13px;margin-bottom:3px}
+.pp-b{display:flex;gap:5px;margin:7px 0 5px;flex-wrap:wrap}
+.pp-s{font-size:11px;color:var(--muted)}
+.pp-btn{margin-top:8px;background:var(--blue2);color:#fff;font-weight:700;font-size:12px;padding:6px 10px;border-radius:8px;width:100%}
+.legend{background:rgba(255,255,255,.95);padding:8px 10px;border-radius:11px;box-shadow:0 2px 10px rgba(0,0,0,.15);font-size:11px;line-height:1.7;color:#2d4256}
+.legend b{display:block;font-size:11px;color:var(--navy);margin-bottom:2px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.legend i.sq{border-radius:3px}
+
+/* toasts */
+#toasts{position:fixed;right:16px;bottom:16px;z-index:4000;display:flex;flex-direction:column;gap:8px;width:min(360px,calc(100vw - 32px));pointer-events:none}
+.toast{background:#fff;border-radius:14px;padding:11px 13px;box-shadow:0 12px 34px rgba(10,30,50,.22);display:flex;gap:10px;border-left:5px solid var(--c);animation:tin .3s;pointer-events:auto;transition:opacity .4s,transform .4s}
+.toast.out{opacity:0;transform:translateX(30px)}
+.toast b{font-size:13px;display:block}
+.toast p{font-size:12px;color:var(--muted);margin-top:2px}
+.toast .t-ic{width:30px;height:30px;border-radius:9px;background:var(--cb);color:var(--c);display:grid;place-items:center;flex:none}
+@keyframes tin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+footer{max-width:1440px;margin:10px auto 0;padding:14px 20px 26px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+footer button{color:var(--blue);font-weight:700;text-decoration:underline}
+
+/* ---------- Responsive ---------- */
+@media (max-width:1180px){
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .admin-grid,.iot-bottom,.iot-top{grid-template-columns:minmax(0,1fr)}
+  .app-wrap{grid-template-columns:410px minmax(0,1fr)}
+}
+@media (max-width:1020px){
+  .topbar-in{flex-wrap:wrap;row-gap:8px}
+  .tabs{order:3;width:100%;margin:0}
+  .tab{flex:1;justify-content:center}
+  .top-actions{margin-left:auto}
+}
+@media (max-width:900px){
+  .app-wrap{grid-template-columns:minmax(0,1fr)}
+  .phone{margin:0 auto}
+}
+@media (max-width:640px){
+  .view{padding:12px}
+  .topbar-in{padding:8px 12px}
+  .brand small,.hpill.rain-pill .txt,.btn-rain .txt{display:none}
+  .brand h1{font-size:17px}
+  .tab{padding:7px 6px;font-size:12.5px;gap:5px}
+  #v-app{padding:0}
+  .app-wrap{display:block}
+  .phone{width:100%;height:calc(100dvh - var(--hdr));min-height:520px;border-radius:0;padding:0;box-shadow:none;background:none}
+  .screen{border-radius:0}
+  .notch,.sbar{display:none}
+  .pnotif{top:10px}
+  .side{padding:14px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .kpi{padding:12px;gap:10px}
+  .kpi-ic{width:38px;height:38px}
+  .kpi-v{font-size:21px}
+  .map-admin{min-height:380px}
+  .md-grid{grid-template-columns:1fr}
+  .rc-stats b{font-size:18px}
+  .filters input.inp{width:100%}
+  .phead h2{font-size:19px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="rgba(255,255,255,.14)"/><path d="M32 9C24 21 17 30 17 39a15 15 0 0 0 30 0c0-9-7-18-15-30z" fill="#14c8b8"/><path d="M25 40a7 7 0 0 0 7 7" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/></svg>
+      <div><h1>PREVIUNT</h1><small>Prevención y Alerta Temprana · Ciudad Universitaria UNT</small></div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="app" role="tab"><i data-ic="phone"></i>App móvil</button>
+      <button class="tab" data-view="panel" role="tab"><i data-ic="monitor"></i>Panel admin</button>
+      <button class="tab" data-view="iot" role="tab"><i data-ic="radio"></i>Monitoreo IoT</button>
+    </nav>
+    <div class="top-actions">
+      <div class="hpill rain-pill" id="hRisk" title="Nivel de riesgo actual del campus"><span class="dot"></span><span class="txt">Riesgo: Bajo</span></div>
+      <button class="icon-btn" id="btnSound" title="Sonido de alertas"><i data-ic="volume"></i></button>
+      <button class="btn-rain js-rain" title="Simula un evento de lluvia intensa (El Niño)"><i data-ic="rain"></i><span class="txt">Simular lluvia intensa</span></button>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== VISTA 1: APP MÓVIL ===================== -->
+<section class="view active" id="v-app">
+  <div class="app-wrap">
+    <div class="phone">
+      <div class="screen" id="screen">
+        <div class="notch"></div>
+        <div class="sbar"><span id="pClock">--:--</span><span>●●●● 4G &nbsp;▮▮▮</span></div>
+        <div class="appbar">
+          <div class="ab-brand">
+            <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 6C24 19 16 29 16 39a16 16 0 0 0 32 0c0-10-8-20-16-33z" fill="#14c8b8"/><path d="M25 40a7 7 0 0 0 7 7" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/></svg>
+            <div>PREVIUNT<small>Ciudad Universitaria · UNT</small></div>
+          </div>
+          <button class="bell" id="pBell" title="Alertas activas"><i data-ic="bell"></i><b id="pBellN">0</b></button>
+        </div>
+
+        <div class="pnotif" id="pNotif"><div class="pn-ic"><svg viewBox="0 0 64 64"><path d="M32 6C24 19 16 29 16 39a16 16 0 0 0 32 0c0-10-8-20-16-33z" fill="#14c8b8"/></svg></div><div><small>PREVIUNT · AHORA</small><b id="pnT"></b><p id="pnS"></p></div></div>
+
+        <!-- Inicio -->
+        <div class="ascreen active" id="as-inicio"><div id="homeBox"></div></div>
+
+        <!-- Reportar -->
+        <div class="ascreen" id="as-reportar">
+          <form id="frm" novalidate>
+            <h2 class="scr-title">Reportar incidencia</h2>
+            <p class="scr-sub">Tu reporte llega al Centro de Control PREVIUNT en tiempo real.</p>
+
+            <span class="fl">1. Tipo de incidencia *</span>
+            <div class="tipos" id="tiposBox"></div>
+
+            <span class="fl">2. Foto de la incidencia</span>
+            <label class="photo" id="photoBox">
+              <input type="file" id="fFoto" accept="image/*" capture="environment" aria-label="Subir foto">
+              <div class="ph-empty"><i data-ic="camera"></i><b>Tomar o subir foto</b><small>JPG o PNG · opcional pero recomendado</small></div>
+              <img id="phPrev" alt="Vista previa de la foto">
+            </label>
+            <button type="button" class="ph-del" id="phDel">✕ Quitar foto</button>
+
+            <label class="fl" for="fDesc">3. Descripción *</label>
+            <textarea id="fDesc" maxlength="400" placeholder="Ej.: Cae agua del techo sobre las mesas del laboratorio 2, cerca de un tomacorriente."></textarea>
+            <div class="cnt"><span id="descCnt">0</span>/400</div>
+            <label class="chk"><input type="checkbox" id="fUrg"> Hay personas, equipos o material bibliográfico en riesgo inmediato</label>
+
+            <span class="fl">4. Ubicación *</span>
+            <div class="locbtns">
+              <button type="button" id="btnGeo"><i data-ic="crosshair"></i>Usar mi ubicación</button>
+              <button type="button" id="btnPickMap"><i data-ic="map"></i>Elegir en el mapa</button>
+            </div>
+            <select class="inp" id="fLugar" aria-label="Edificio o acceso"></select>
+            <div id="mapPick" class="mappick"></div>
+            <div class="locinfo" id="locInfo"><i data-ic="pin"></i><span>Toca el mapa, usa tu ubicación o elige un edificio.</span></div>
+
+            <div class="riskprev" id="riskPrev"><span>Riesgo estimado automáticamente</span><span class="badge b-info">Selecciona un tipo</span></div>
+            <div class="ferr" id="fErr"></div>
+            <button class="btn-primary btn-send" type="submit"><i data-ic="send"></i>Enviar reporte</button>
+          </form>
+        </div>
+
+        <!-- Mapa -->
+        <div class="ascreen" id="as-mapa">
+          <div class="mchips">
+            <button class="mchip on" data-layer="zones">Zonas vulnerables</button>
+            <button class="mchip on" data-layer="inc">Reportes</button>
+            <button class="mchip on" data-layer="sens">Sensores IoT</button>
+          </div>
+          <div id="mapApp"></div>
+          <div class="mlist"><h4>Reportes recientes</h4><div id="mRecent"></div></div>
+        </div>
+
+        <div class="psuccess" id="pSuccess">
+          <div class="okc"><i data-ic="check"></i></div>
+          <h3>¡Reporte enviado!</h3>
+          <div class="code" id="psCode">INC-0000</div>
+          <p>Estado: <b>Pendiente de validación</b>. El Centro de Control ya lo está viendo en el panel. Te avisaremos cuando cambie su estado.</p>
+          <div class="acts">
+            <button class="btn-primary" id="psMine">Ver mis reportes</button>
+            <button class="btn-ghost" id="psNew" style="justify-content:center">Reportar otra incidencia</button>
+          </div>
+        </div>
+
+        <nav class="tabbar">
+          <button class="tbtn active" data-as="inicio"><i data-ic="home"></i>Inicio</button>
+          <button class="tbtn fab" data-as="reportar"><span class="fab-c"><i data-ic="plus"></i></span>Reportar</button>
+          <button class="tbtn" data-as="mapa"><i data-ic="map"></i>Mapa</button>
+        </nav>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="card"><div class="card-b">
+        <span class="live">Prototipo funcional · datos simulados</span>
+        <h2 style="margin-top:12px">Detectar a tiempo, actuar antes</h2>
+        <p>Estudiantes, docentes y personal reportan filtraciones, azoteas con agua o accesos inundados en segundos. Los sensores ESP32 vigilan azoteas y accesos 24/7 y PREVIUNT centraliza todo en un solo panel para que el Centro de Control actúe antes de que el agua llegue a laboratorios, bibliotecas o tableros eléctricos.</p>
+        <div class="mini-stats" id="sideStats"></div>
+      </div></div>
+      <div class="card"><div class="card-h"><h3><i data-ic="play"></i>Demo guiada en 60 segundos</h3></div><div class="card-b">
+        <ol class="steps">
+          <li><div>Pulsa <b>«Simular lluvia intensa»</b> (arriba). Los sensores de nivel y pluviómetros suben y, al superar los umbrales, se generan <b>alertas automáticas</b>.</div></li>
+          <li><div>Observa el <b>semáforo de riesgo</b> y las <b>notificaciones</b> que llegan a la app.</div></li>
+          <li><div>Ve a <b>Reportar</b>: elige el tipo, sube una foto, describe y marca la ubicación.</div></li>
+          <li><div>En el <b>Panel admin</b>, valida el reporte y cámbialo a «En atención»: la app del usuario se actualiza al instante.</div></li>
+        </ol>
+        <div class="side-actions">
+          <button class="btn-primary" data-goview="panel"><i data-ic="monitor"></i>Ir al Panel</button>
+          <button class="btn-ghost" data-goview="iot"><i data-ic="radio"></i>Ver sensores IoT</button>
+        </div>
+      </div></div>
+      <div class="card"><div class="card-h"><h3><i data-ic="layers"></i>Arquitectura de la solución</h3></div><div class="card-b">
+        <div class="arch">
+          <div class="node"><b>Sensores ESP32</b>Nivel de agua ultrasónico y pluviómetro en azoteas y accesos</div>
+          <div class="arr">→</div>
+          <div class="node"><b>Wi-Fi / MQTT</b>Lecturas cada pocos segundos al servidor</div>
+          <div class="arr">→</div>
+          <div class="node"><b>Motor de reglas</b>Umbrales configurables y alerta automática</div>
+          <div class="arr">→</div>
+          <div class="node"><b>App + Panel</b>Notificaciones, mapa y gestión de incidencias</div>
+        </div>
+      </div></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ===================== VISTA 2: PANEL ADMIN ===================== -->
+<section class="view" id="v-panel">
+  <div class="phead">
+    <div><h2>Centro de Control PREVIUNT</h2><p>Gestión centralizada de incidencias y alertas · Ciudad Universitaria UNT</p></div>
+    <span class="live" id="panelClock">En vivo</span>
+  </div>
+  <div class="critbar" id="critBar"><i data-ic="alert"></i><div class="ct"><b id="cbT"></b><small id="cbS"></small></div><button id="cbBtn">Ver en mapa</button></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="admin-grid">
+    <div class="card">
+      <div class="card-h"><h3><i data-ic="map"></i>Mapa de incidencias y sensores</h3>
+        <div class="maptg">
+          <label><input type="checkbox" data-admlayer="zones" checked>Zonas vulnerables</label>
+          <label><input type="checkbox" data-admlayer="inc" checked>Incidencias</label>
+          <label><input type="checkbox" data-admlayer="sens" checked>Sensores</label>
+        </div>
+      </div>
+      <div id="mapAdmin" class="map-admin"></div>
+    </div>
+    <div class="col">
+      <div class="card"><div class="card-h"><h3><i data-ic="bell"></i>Alertas y eventos en tiempo real</h3><span class="badge b-info" id="feedN">0</span></div><div class="feed" id="feedAdmin"></div></div>
+      <div class="card"><div class="card-h"><h3><i data-ic="chart"></i>Incidencias activas por tipo</h3></div><div class="chartbox"><canvas id="chTipo" aria-label="Gráfico de incidencias por tipo"></canvas></div></div>
+    </div>
+  </div>
+  <div class="card mt">
+    <div class="card-h"><h3><i data-ic="clipboard"></i>Incidencias registradas <span class="badge b-info" id="tblCount">0</span></h3>
+      <div class="filters">
+        <input class="inp" id="fq" type="search" placeholder="Buscar código, lugar o texto…">
+        <select class="inp" id="fRiesgo"><option value="">Riesgo: todos</option><option value="alto">Alto (rojo)</option><option value="medio">Medio (amarillo)</option><option value="bajo">Bajo (verde)</option></select>
+        <select class="inp" id="fEstado"><option value="">Estado: todos</option><option>Pendiente</option><option>Validado</option><option>En atención</option><option>Resuelto</option></select>
+        <select class="inp" id="fTipo"><option value="">Tipo: todos</option></select>
+        <button class="btn-sm b-plain" id="fClear">Limpiar</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Código</th><th>Incidencia</th><th>Ubicación</th><th>Riesgo</th><th>Estado</th><th>Origen</th><th>Reportado</th><th>Acciones</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="tfoot" id="tfoot"></div>
+  </div>
+</section>
+
+<!-- ===================== VISTA 3: MONITOREO IoT ===================== -->
+<section class="view" id="v-iot">
+  <div class="phead">
+    <div><h2>Monitoreo IoT en tiempo real</h2><p>Red de sensores ESP32 · nivel de agua y pluviómetros en azoteas y accesos del campus</p></div>
+    <span class="live" id="iotClock">Gateway en línea</span>
+  </div>
+  <div class="iot-top">
+    <div class="card raincard">
+      <div class="rc-top">
+        <div><h3>Simulación de evento climático</h3><p>Reproduce una lluvia intensa tipo El Niño costero para demostrar la detección temprana y las alertas automáticas.</p></div>
+        <span class="rc-cond" id="rcCond">☀️ Condición normal</span>
+      </div>
+      <div class="rc-stats">
+        <div><b id="rcRain">0.0</b><span>mm/h (máx. pluviómetros)</span></div>
+        <div><b id="rcAlert">0</b><span>sensores en alerta</span></div>
+        <div><b id="rcOnline">8/8</b><span>sensores en línea</span></div>
+      </div>
+      <div class="rc-int"><small><span>Intensidad del evento</span><span id="rcPct">0%</span></small><div class="bar"><i id="rcBar"></i></div></div>
+      <div class="rc-actions">
+        <button class="btn-rain big js-rain"><i data-ic="rain"></i><span class="txt">Simular lluvia intensa</span></button>
+        <span class="meta">Actualización cada 1,5 s · Protocolo MQTT (simulado)</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3><i data-ic="sliders"></i>Umbrales de riesgo configurables</h3></div>
+      <div class="thr" id="thrBox"></div>
+    </div>
+  </div>
+  <div class="sgrid" id="sgrid"></div>
+  <div class="iot-bottom">
+    <div class="card">
+      <div class="card-h"><h3><i data-ic="chart"></i>Lecturas en tiempo real</h3><select class="inp" id="selSensor" style="width:auto;padding:7px 10px;font-size:12.5px"></select></div>
+      <div class="chartbox tall"><canvas id="chSensor" aria-label="Gráfico de lecturas del sensor"></canvas></div>
+    </div>
+    <div class="card"><div class="card-h"><h3><i data-ic="alert"></i>Registro de alertas automáticas</h3></div><div class="feed" id="feedIot"></div></div>
+  </div>
+</section>
+
+<footer>
+  <span>PREVIUNT · Prototipo para hackathon · Datos simulados con fines demostrativos · Mapa © colaboradores de OpenStreetMap</span>
+  <button id="btnReset">Restablecer demo</button>
+</footer>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div id="toasts"></div>
+
+<script>
+'use strict';
+/* =========================================================
+   PREVIUNT · Prototipo · Todo el estado vive en memoria.
+   Ajusta CENTER y las coordenadas de LUGARES si deseas
+   afinar la ubicación exacta de los pabellones.
+   ========================================================= */
+const CENTER = [-8.1132, -79.0373];
+const ZOOM = 17;
+const MIN = 60000;
+const TICK_MS = 1500;
+const now = () => Date.now();
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fmt = v => (Math.round(v * 10) / 10).toFixed(1);
+
+/* ---------- Iconos ---------- */
+const P = {
+  phone:'<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+  monitor:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  radio:'<circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19.1 4.9a10 10 0 0 1 0 14.2M4.9 19.1a10 10 0 0 1 0-14.2"/>',
+  rain:'<path d="M20 16.6A5 5 0 0 0 18 7h-1.3A8 8 0 1 0 4 15.3"/><path d="M8 19v2M8 13v2M16 19v2M16 13v2M12 21v2M12 15v2"/>',
+  home:'<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  map:'<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  alert:'<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3z"/><path d="M12 9v4M12 17h.01"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  pin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  clipboard:'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  volume:'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  camera:'<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/>',
+  crosshair:'<circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="2"/>',
+  send:'<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+  layers:'<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+  play:'<circle cx="12" cy="12" r="10"/><path d="m10 8 6 4-6 4z"/>',
+  chart:'<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>',
+  sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  zone:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>',
+  timer:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',
+  inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>',
+  wifi:'<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1"/>',
+  bulb:'<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>'
+};
+const ic = (n, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
+function hydrateIcons(root = document) { $$('i[data-ic]', root).forEach(el => { el.outerHTML = ic(el.dataset.ic); }); }
+
+/* ---------- Catálogos ---------- */
+const RIESGO = {
+  bajo:  { label:'Bajo',  sem:'Verde',    color:'#16a34a', bg:'#e6f6ec', cls:'ok',   n:1 },
+  medio: { label:'Medio', sem:'Amarillo', color:'#eab308', bg:'#fff5d1', cls:'warn', n:2 },
+  alto:  { label:'Alto',  sem:'Rojo',     color:'#dc2626', bg:'#fde6e6', cls:'bad',  n:3 }
+};
+const SENS_LBL = { bajo:'Normal', medio:'Precaución', alto:'Crítico' };
+const TIPOS = {
+  filtracion: { label:'Filtración',                 icon:'💧', riesgo:'medio', grad:'linear-gradient(135deg,#dbeafe,#93c5fd)' },
+  azotea:     { label:'Azotea con agua acumulada',  icon:'🏢', riesgo:'medio', grad:'linear-gradient(135deg,#ccfbf1,#5eead4)' },
+  inundacion: { label:'Inundación en acceso',       icon:'🌊', riesgo:'alto',  grad:'linear-gradient(135deg,#e0e7ff,#7dd3fc)' },
+  tablero:    { label:'Tablero eléctrico en riesgo',icon:'⚡', riesgo:'alto',  grad:'linear-gradient(135deg,#fef3c7,#fcd34d)' }
+};
+const ESTADOS = ['Pendiente', 'Validado', 'En atención', 'Resuelto'];
+const EST_CLS = { 'Pendiente':'st-pend', 'Validado':'st-val', 'En atención':'st-aten', 'Resuelto':'st-res' };
+const BRIGADAS = ['Sin asignar', 'Brigada de Mantenimiento', 'Servicios Eléctricos', 'Defensa Civil UNT', 'Seguridad y Vigilancia', 'Brigada de Laboratorios'];
+
+/* Ubicaciones referenciales dentro de la Ciudad Universitaria (aprox.) */
+const LUGARES = {
+  jesusNazaret:   { n:'Acceso Av. Jesús de Nazaret',            lat:-8.1106, lng:-79.0356, z:'Z1' },
+  puertaJP2:      { n:'Puerta principal · Av. Juan Pablo II',   lat:-8.1159, lng:-79.0381, z:'Z5' },
+  biblioteca:     { n:'Biblioteca Central',                     lat:-8.1131, lng:-79.0369, z:'Z2' },
+  quimica:        { n:'Fac. de Ing. Química · Laboratorios',    lat:-8.1117, lng:-79.0380, z:'Z3' },
+  ingenieria:     { n:'Pabellón de Ingeniería',                 lat:-8.1122, lng:-79.0395, z:'Z4' },
+  estacionamiento:{ n:'Estacionamiento de Ingeniería',          lat:-8.1132, lng:-79.0405, z:'Z4' },
+  fisicas:        { n:'Pab. de Cs. Físicas y Matemáticas',      lat:-8.1140, lng:-79.0392, z:'Z6' },
+  biologicas:     { n:'Fac. de Ciencias Biológicas',            lat:-8.1143, lng:-79.0357, z:'Z7' },
+  subestacion:    { n:'Subestación eléctrica',                  lat:-8.1151, lng:-79.0347, z:'Z7' },
+  farmacia:       { n:'Fac. de Farmacia y Bioquímica',          lat:-8.1123, lng:-79.0351, z:null },
+  medicina:       { n:'Fac. de Medicina',                       lat:-8.1111, lng:-79.0368, z:null },
+  derecho:        { n:'Fac. de Derecho y Cs. Políticas',        lat:-8.1144, lng:-79.0376, z:null },
+  educacion:      { n:'Fac. de Educación y Cs. de la Comunicación', lat:-8.1153, lng:-79.0364, z:null },
+  comedor:        { n:'Comedor Universitario',                  lat:-8.1152, lng:-79.0393, z:null }
+};
+const ZONAS = [
+  { id:'Z1', n:'Acceso Av. Jesús de Nazaret',      lat:-8.1106, lng:-79.0356, r:75, vuln:'alto',  d:'Punto bajo de la vía: se anega con lluvias intensas y bloquea el ingreso peatonal y vehicular.' },
+  { id:'Z2', n:'Biblioteca Central',               lat:-8.1131, lng:-79.0369, r:48, vuln:'alto',  d:'Azotea plana de gran área sobre el acervo bibliográfico; tableros en sótano.' },
+  { id:'Z3', n:'Laboratorios de Ing. Química',     lat:-8.1117, lng:-79.0380, r:45, vuln:'alto',  d:'Reactivos y equipos sensibles al agua; antecedentes de filtración.' },
+  { id:'Z4', n:'Pabellón de Ingeniería',           lat:-8.1127, lng:-79.0400, r:80, vuln:'medio', d:'Azoteas planas con sumideros pequeños y estacionamiento sin drenaje pluvial.' },
+  { id:'Z5', n:'Puerta principal Av. Juan Pablo II', lat:-8.1159, lng:-79.0381, r:60, vuln:'medio', d:'Acumulación de agua en vereda y paradero; alto tránsito de estudiantes.' },
+  { id:'Z6', n:'Pab. de Cs. Físicas y Matemáticas', lat:-8.1140, lng:-79.0392, r:40, vuln:'medio', d:'Tableros eléctricos en pasadizos expuestos a goteo.' },
+  { id:'Z7', n:'Biológicas y Subestación eléctrica', lat:-8.1147, lng:-79.0352, r:65, vuln:'medio', d:'Subestación cercana a zonas de escorrentía superficial.' }
+];
+
+/* Umbrales por categoría de sensor */
+const THR_DEFAULT = {
+  nivel:  { warn:5,  crit:10, unit:'cm',   label:'Nivel de agua en azoteas e interiores' },
+  acceso: { warn:10, crit:20, unit:'cm',   label:'Nivel de agua en accesos y vías' },
+  lluvia: { warn:10, crit:25, unit:'mm/h', label:'Intensidad de lluvia (pluviómetros)' }
+};
+const THR = JSON.parse(JSON.stringify(THR_DEFAULT));
+const CAT_LBL = { nivel:'Nivel de agua', acceso:'Nivel en vía', lluvia:'Pluviómetro' };
+
+const SENSORES = [
+  { id:'S01', code:'ESP32-AZ-01', n:'Azotea Biblioteca Central',            cat:'nivel',  at:'biblioteca',  base:0.6, peak:16,  inc:'azotea' },
+  { id:'S02', code:'ESP32-AZ-02', n:'Azotea Pabellón de Ingeniería',        cat:'nivel',  at:'ingenieria',  base:0.8, peak:13,  inc:'azotea' },
+  { id:'S03', code:'ESP32-AZ-03', n:'Azotea Laboratorios Ing. Química',     cat:'nivel',  at:'quimica',     base:0.4, peak:8,   inc:'filtracion' },
+  { id:'S04', code:'ESP32-PL-01', n:'Pluviómetro · Azotea Biblioteca',      cat:'lluvia', at:'biblioteca',  base:0.3, peak:44,  inc:null },
+  { id:'S05', code:'ESP32-AC-01', n:'Acceso Av. Jesús de Nazaret',          cat:'acceso', at:'jesusNazaret',base:2.4, peak:32,  inc:'inundacion' },
+  { id:'S06', code:'ESP32-AC-02', n:'Puerta principal Av. Juan Pablo II',   cat:'acceso', at:'puertaJP2',   base:1.4, peak:15,  inc:'inundacion' },
+  { id:'S07', code:'ESP32-TB-01', n:'Cuarto de tableros · Pab. Cs. Físicas', cat:'nivel', at:'fisicas',     base:0.2, peak:6.5, inc:'tablero' },
+  { id:'S08', code:'ESP32-PL-02', n:'Pluviómetro · Pabellón de Ingeniería', cat:'lluvia', at:'ingenieria',  base:0.2, peak:38,  inc:null }
+];
+SENSORES.forEach((s, k) => {
+  const L0 = LUGARES[s.at];
+  s.lat = L0.lat + (k % 2 ? 0.00016 : -0.00014);
+  s.lng = L0.lng + (k % 3 ? 0.00017 : -0.00015);
+  s.z = L0.z; s.v = s.base; s.st = 'bajo'; s.since = now();
+  s.bat = 78 + Math.round(Math.random() * 21); s.rssi = -55 - Math.round(Math.random() * 18); s.upd = now();
+  s.hist = [];
+  for (let j = 40; j > 0; j--) s.hist.push({ t: now() - j * TICK_MS, v: Math.max(0, s.base + (Math.random() - .5) * (s.cat === 'lluvia' ? .4 : .25)) });
+});
+
+/* ---------- Incidencias de ejemplo ---------- */
+function mkInc(o) {
+  const L0 = LUGARES[o.lugar];
+  const t = now();
+  const inc = Object.assign({
+    lat: L0.lat + (Math.random() - .5) * 0.00022, lng: L0.lng + (Math.random() - .5) * 0.00022,
+    origen:'App', asignado:'Sin asignar', foto:null, mine:false, nuevo:false, sensor:null, atencion:null, resuelto:null
+  }, o);
+  inc.creado = t - o.creado * MIN;
+  if (o.atencion != null) inc.atencion = t - o.atencion * MIN;
+  if (o.resuelto != null) inc.resuelto = t - o.resuelto * MIN;
+  const ix = ESTADOS.indexOf(inc.estado);
+  inc.hist = [{ t: inc.creado, txt: 'Reporte registrado desde la App PREVIUNT' }];
+  if (ix >= 1) inc.hist.push({ t: inc.creado + 6 * MIN, txt: 'Validado por el Centro de Control' });
+  if (ix >= 2 && inc.atencion) inc.hist.push({ t: inc.atencion, txt: `En atención · ${inc.asignado}` });
+  if (ix >= 3 && inc.resuelto) inc.hist.push({ t: inc.resuelto, txt: 'Incidencia resuelta y cerrada' });
+  return inc;
+}
+const INC = [
+  mkInc({ id:'INC-0001', tipo:'filtracion', lugar:'quimica',  riesgo:'alto',  estado:'Resuelto', creado:1500, atencion:1463, resuelto:1300, asignado:'Brigada de Laboratorios', reportante:'Docente · Fac. de Ing. Química', desc:'Filtración en el techo del Laboratorio de Química Orgánica; cae agua cerca de la campana extractora y de frascos de reactivos.' }),
+  mkInc({ id:'INC-0002', tipo:'azotea',     lugar:'ingenieria', riesgo:'medio', estado:'Validado', creado:70, reportante:'Personal de mantenimiento', desc:'Azotea del Pabellón de Ingeniería con aprox. 8 cm de agua; sumideros obstruidos con hojas y tierra.' }),
+  mkInc({ id:'INC-0003', tipo:'inundacion', lugar:'jesusNazaret', riesgo:'alto', estado:'Pendiente', creado:12, nuevo:true, reportante:'Estudiante · Derecho', desc:'Av. Jesús de Nazaret anegada frente al acceso; el agua llega a la vereda y los estudiantes no pueden ingresar.' }),
+  mkInc({ id:'INC-0004', tipo:'tablero',    lugar:'fisicas',  riesgo:'medio', estado:'Validado', creado:34, asignado:'Servicios Eléctricos', reportante:'Docente · Cs. Físicas y Matemáticas', desc:'Humedad y goteo leve sobre la caja del tablero eléctrico del 2.º piso, pasadizo norte.' }),
+  mkInc({ id:'INC-0005', tipo:'filtracion', lugar:'biblioteca', riesgo:'medio', estado:'En atención', creado:140, atencion:115, asignado:'Brigada de Mantenimiento', reportante:'Bibliotecaria · Hemeroteca', desc:'Filtración en sala de lectura del 2.º piso, sobre estantes de hemeroteca. Se colocaron baldes y se cubrieron libros.' }),
+  mkInc({ id:'INC-0006', tipo:'azotea',     lugar:'comedor',  riesgo:'medio', estado:'Resuelto', creado:1560, atencion:1508, resuelto:1380, asignado:'Brigada de Mantenimiento', reportante:'Personal del comedor', desc:'Canaleta colapsada en la azotea del comedor; agua estancada sobre la losa de la cocina.' }),
+  mkInc({ id:'INC-0007', tipo:'filtracion', lugar:'farmacia', riesgo:'medio', estado:'Pendiente', creado:25, reportante:'Estudiante · Farmacia y Bioquímica', desc:'Mancha de humedad creciente en muro del laboratorio de microbiología, cerca de la incubadora.' }),
+  mkInc({ id:'INC-0008', tipo:'inundacion', lugar:'puertaJP2', riesgo:'medio', estado:'Validado', creado:48, mine:true, reportante:'Tú · Estudiante de Ing. de Sistemas', desc:'Charco amplio en la puerta principal; los estudiantes rodean por la pista y hay riesgo con los vehículos.' }),
+  mkInc({ id:'INC-0009', tipo:'tablero',    lugar:'subestacion', riesgo:'medio', estado:'Resuelto', creado:2900, atencion:2859, resuelto:2700, asignado:'Servicios Eléctricos', reportante:'Seguridad y Vigilancia', desc:'Ingreso de agua por la puerta del cuarto de la subestación tras la lluvia de la madrugada.' }),
+  mkInc({ id:'INC-0010', tipo:'azotea',     lugar:'derecho',  riesgo:'bajo',  estado:'Resuelto', creado:4300, atencion:4270, resuelto:4100, asignado:'Brigada de Mantenimiento', reportante:'Personal administrativo', desc:'Agua estancada en un sector del techo plano de la facultad, sin filtración al interior.' }),
+  mkInc({ id:'INC-0011', tipo:'filtracion', lugar:'educacion', riesgo:'bajo', estado:'Pendiente', creado:8, nuevo:true, reportante:'Estudiante · Educación', desc:'Filtración leve por el marco de la ventana del aula 204.' }),
+  mkInc({ id:'INC-0012', tipo:'inundacion', lugar:'estacionamiento', riesgo:'bajo', estado:'En atención', creado:64, atencion:20, asignado:'Seguridad y Vigilancia', reportante:'Seguridad y Vigilancia', desc:'Encharcamiento en el estacionamiento de Ingeniería; se señalizó el área con conos.' }),
+  mkInc({ id:'INC-0013', tipo:'azotea',     lugar:'medicina', riesgo:'medio', estado:'Pendiente', creado:18, reportante:'Personal de mantenimiento', desc:'Agua acumulada sobre la losa del 3.er piso; el sumidero principal está tapado.' }),
+  mkInc({ id:'INC-0014', tipo:'tablero',    lugar:'biblioteca', riesgo:'alto', estado:'Pendiente', creado:5, nuevo:true, reportante:'Personal de la Biblioteca', desc:'Goteo en el sótano junto al tablero eléctrico general; se percibe olor a humedad. Hay personal trabajando cerca.' })
+];
+
+const EVENTS = [];
+const rain = { on:false, k:0 };
+let soundOn = true, actx = null;
+let incSeq = 14;
+
+/* ---------- Utilidades ---------- */
+function ago(t) {
+  const s = Math.max(0, Math.round((now() - t) / 1000));
+  if (s < 10) return 'ahora';
+  if (s < 60) return `hace ${s} s`;
+  const m = Math.round(s / 60); if (m < 60) return `hace ${m} min`;
+  const h = Math.round(m / 60); if (h < 24) return `hace ${h} h`;
+  return `hace ${Math.round(h / 24)} d`;
+}
+const hhmm = t => new Date(t).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' });
+const hhmmss = t => new Date(t).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+const dt = t => new Date(t).toLocaleString('es-PE', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+const byId = id => INC.find(i => i.id === id);
+const lugarName = i => (LUGARES[i.lugar] || {}).n || 'Ciudad Universitaria';
+const badge = lvl => `<span class="badge b-${RIESGO[lvl].cls}">${RIESGO[lvl].label}</span>`;
+const sensBadge = s => `<span class="badge b-${RIESGO[s.st].cls}">${SENS_LBL[s.st]}</span>`;
+const estChip = e => `<span class="chip ${EST_CLS[e]}">${e}</span>`;
+function distM(a, b, c, d) { const R = 6371000, toR = Math.PI / 180; const x = (d - b) * toR * Math.cos((a + c) / 2 * toR), y = (c - a) * toR; return Math.sqrt(x * x + y * y) * R; }
+function nearestLugar(lat, lng) { let best = null, bd = 1e9; for (const k in LUGARES) { const d = distM(lat, lng, LUGARES[k].lat, LUGARES[k].lng); if (d < bd) { bd = d; best = k; } } return { id: best, d: Math.round(bd) }; }
+function nextId() { incSeq++; return 'INC-' + String(incSeq).padStart(4, '0'); }
+const isActive = i => i.estado !== 'Resuelto';
+const isAlertInc = i => i.estado === 'Validado' || i.estado === 'En atención';
+
+function zoneLevel(z) {
+  let n = 0;
+  INC.forEach(i => { if (isAlertInc(i) && (LUGARES[i.lugar] || {}).z === z.id) n = Math.max(n, RIESGO[i.riesgo].n); });
+  SENSORES.forEach(s => { if (s.z === z.id && s.cat !== 'lluvia') n = Math.max(n, RIESGO[s.st].n); });
+  return n === 3 ? 'alto' : n === 2 ? 'medio' : 'bajo';
+}
+function activeAlerts() {
+  const a = [];
+  SENSORES.forEach(s => { if (s.st !== 'bajo') a.push({ k:'iot', lvl:s.st, icon:s.cat === 'lluvia' ? '🌧️' : '📡', title:(s.st === 'alto' ? 'Nivel crítico · ' : 'Precaución · ') + s.n, sub:`${s.code}: ${fmt(s.v)} ${THR[s.cat].unit}`, t:s.since, lat:s.lat, lng:s.lng }); });
+  INC.forEach(i => { if (isAlertInc(i)) a.push({ k:'inc', lvl:i.riesgo, icon:TIPOS[i.tipo].icon, title:TIPOS[i.tipo].label, sub:`${lugarName(i)} · ${i.estado}`, t:i.creado, lat:i.lat, lng:i.lng, id:i.id }); });
+  return a.sort((x, y) => RIESGO[y.lvl].n - RIESGO[x.lvl].n || y.t - x.t);
+}
+function globalLevel() {
+  let n = 1; activeAlerts().forEach(a => { n = Math.max(n, RIESGO[a.lvl].n); });
+  return n === 3 ? 'alto' : n === 2 ? 'medio' : 'bajo';
+}
+const maxRain = () => Math.max(...SENSORES.filter(s => s.cat === 'lluvia').map(s => s.v));
+function avgAttention() {
+  const xs = INC.filter(i => i.atencion).map(i => (i.atencion - i.creado) / MIN);
+  return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
+}
+
+/* ---------- Eventos, toasts, notificaciones ---------- */
+function logEvent(e) {
+  EVENTS.unshift(Object.assign({ t: now() }, e));
+  if (EVENTS.length > 80) EVENTS.pop();
+  renderFeeds();
+}
+function toast(title, sub, lvl) {
+  const R = RIESGO[lvl];
+  const c = R ? R.color : '#1273b8', cb = R ? R.bg : '#e3effa';
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.style.setProperty('--c', c); el.style.setProperty('--cb', cb);
+  el.innerHTML = `<div class="t-ic">${ic(lvl === 'alto' ? 'alert' : lvl ? 'bell' : 'inbox')}</div><div><b>${esc(title)}</b><p>${esc(sub)}</p></div>`;
+  const box = $('#toasts'); box.prepend(el);
+  while (box.children.length > 4) box.lastChild.remove();
+  setTimeout(() => el.classList.add('out'), 5200);
+  setTimeout(() => el.remove(), 5700);
+}
+let pnTimer = null;
+function phoneNotify(title, sub, lvl) {
+  const el = $('#pNotif');
+  el.style.setProperty('--c', RIESGO[lvl] ? RIESGO[lvl].color : '#1273b8');
+  $('#pnT').textContent = title; $('#pnS').textContent = sub;
+  el.classList.add('show');
+  clearTimeout(pnTimer); pnTimer = setTimeout(() => el.classList.remove('show'), 4200);
+}
+function beep(crit) {
+  if (!soundOn || !actx) return;
+  try {
+    const t0 = actx.currentTime;
+    [0, crit ? .22 : null].forEach(off => {
+      if (off === null) return;
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine'; o.frequency.value = crit ? 880 : 660;
+      g.gain.setValueAtTime(0.0001, t0 + off);
+      g.gain.exponentialRampToValueAtTime(0.12, t0 + off + .02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + off + .2);
+      o.connect(g); g.connect(actx.destination); o.start(t0 + off); o.stop(t0 + off + .22);
+    });
+  } catch (e) { /* audio no disponible */ }
+}
+document.addEventListener('pointerdown', () => {
+  if (actx) return;
+  try { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); } catch (e) { actx = null; }
+}, { once:true });
+
+/* =========================================================
+   MAPAS (Leaflet + OpenStreetMap)
+   ========================================================= */
+const MAPS = {};
+function addTiles(map) {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+  }).addTo(map);
+}
+function incIcon(i) {
+  const res = i.estado === 'Resuelto';
+  const c = res ? '#94a3b8' : RIESGO[i.riesgo].color;
+  return L.divIcon({ className:'', iconSize:[30, 30], iconAnchor:[15, 15], popupAnchor:[0, -14],
+    html:`<div class="imk ${res ? 'res' : ''} ${i.riesgo === 'alto' && !res ? 'pulse' : ''}" style="--c:${c}">${TIPOS[i.tipo].icon}</div>` });
+}
+function sensIcon(s) {
+  return L.divIcon({ className:'', iconSize:[30, 30], iconAnchor:[15, 15], popupAnchor:[0, -14],
+    html:`<div class="smk ${s.st === 'alto' ? 'pulse' : ''}" style="--c:${RIESGO[s.st].color}">${ic(s.cat === 'lluvia' ? 'rain' : 'wifi')}</div>` });
+}
+function incPopup(i, admin) {
+  return `<div class="pp-h">${TIPOS[i.tipo].icon} ${esc(TIPOS[i.tipo].label)}</div><div>${esc(lugarName(i))}</div>
+    <div class="pp-b">${badge(i.riesgo)} ${estChip(i.estado)}</div>
+    <div class="pp-s">${i.id} · ${ago(i.creado)} · ${i.origen === 'IoT' ? 'Sensor IoT' : 'App'}</div>
+    ${admin ? `<button class="pp-btn" data-open="${i.id}">Ver detalle y gestionar</button>` : ''}`;
+}
+function sensPopup(s) {
+  const t = THR[s.cat];
+  return `<div class="pp-h">📡 ${esc(s.n)}</div><div>${s.code} · ${CAT_LBL[s.cat]}</div>
+    <div class="pp-b">${sensBadge(s)}</div>
+    <div><b style="font-size:16px">${fmt(s.v)} ${t.unit}</b> <span class="pp-s">(precaución ${t.warn} · crítico ${t.crit})</span></div>
+    <div class="pp-s">Batería ${s.bat}% · Señal ${s.rssi} dBm</div>`;
+}
+function zonePopup(z) {
+  const lv = zoneLevel(z);
+  return `<div class="pp-h">Zona vulnerable · ${esc(z.n)}</div><div class="pp-b"><span class="pp-s">Vulnerabilidad:</span> ${badge(z.vuln)} <span class="pp-s">Estado actual:</span> ${badge(lv)}</div><div class="pp-s">${esc(z.d)}</div>`;
+}
+function legendCtl() {
+  const c = L.control({ position:'bottomleft' });
+  c.onAdd = () => { const d = L.DomUtil.create('div', 'legend');
+    d.innerHTML = '<b>Semáforo de riesgo</b><i style="background:#dc2626"></i>Alto<br><i style="background:#eab308"></i>Medio<br><i style="background:#16a34a"></i>Bajo<br><i style="background:#94a3b8"></i>Resuelto<br><i class="sq" style="background:#0e5a8a"></i>Sensor IoT';
+    L.DomEvent.disableClickPropagation(d); return d; };
+  return c;
+}
+function createMap(key, elId, opts) {
+  opts = opts || {};
+  const map = L.map(elId, { zoomControl:true, scrollWheelZoom: opts.wheel !== false }).setView(CENTER, opts.zoom || ZOOM);
+  addTiles(map);
+  const m = { map, admin: !!opts.admin, layers:{ zones:L.layerGroup().addTo(map), inc:L.layerGroup().addTo(map), sens:L.layerGroup().addTo(map) }, zc:{}, sm:{}, im:{} };
+  if (opts.legend) legendCtl().addTo(map);
+  MAPS[key] = m;
+  drawZones(m); drawInc(m); drawSens(m);
+  setTimeout(() => map.invalidateSize(), 80);
+  return m;
+}
+function drawZones(m) {
+  m.layers.zones.clearLayers(); m.zc = {};
+  ZONAS.forEach(z => {
+    const c = RIESGO[zoneLevel(z)].color;
+    const circ = L.circle([z.lat, z.lng], { radius:z.r, color:c, weight:2, dashArray:'5 5', fillColor:c, fillOpacity:.14 })
+      .bindTooltip(z.n, { direction:'top' }).bindPopup(() => zonePopup(z));
+    circ.addTo(m.layers.zones); m.zc[z.id] = circ;
+  });
+}
+function refreshZones() {
+  Object.values(MAPS).forEach(m => ZONAS.forEach(z => { const c = RIESGO[zoneLevel(z)].color; if (m.zc[z.id]) m.zc[z.id].setStyle({ color:c, fillColor:c, fillOpacity: zoneLevel(z) === 'alto' ? .22 : .14 }); }));
+}
+function drawInc(m) {
+  m.layers.inc.clearLayers(); m.im = {};
+  INC.forEach(i => {
+    if (!m.admin && i.estado === 'Resuelto' && now() - i.resuelto > 24 * 60 * MIN) return;
+    const mk = L.marker([i.lat, i.lng], { icon:incIcon(i), zIndexOffset: i.riesgo === 'alto' ? 500 : 0 }).bindPopup(() => incPopup(i, m.admin));
+    mk.addTo(m.layers.inc); m.im[i.id] = mk;
+  });
+}
+function drawSens(m) {
+  m.layers.sens.clearLayers(); m.sm = {};
+  SENSORES.forEach(s => {
+    const mk = L.marker([s.lat, s.lng], { icon:sensIcon(s), zIndexOffset:800 }).bindPopup(() => sensPopup(s));
+    mk.addTo(m.layers.sens); m.sm[s.id] = mk;
+  });
+}
+function updateSensorMarker(s) { Object.values(MAPS).forEach(m => { if (m.sm[s.id]) m.sm[s.id].setIcon(sensIcon(s)); }); }
+function refreshMapsInc() { Object.values(MAPS).forEach(m => drawInc(m)); refreshZones(); }
+function toggleLayer(m, key, on) { if (!m) return; const lg = m.layers[key]; if (on) lg.addTo(m.map); else m.map.removeLayer(lg); }
+document.addEventListener('click', e => { const b = e.target.closest('[data-open]'); if (b) openInc(b.dataset.open); });
+
+/* =========================================================
+   NAVEGACIÓN
+   ========================================================= */
+let curView = 'app';
+function showView(v) {
+  if (!['app', 'panel', 'iot'].includes(v)) v = 'app';
+  curView = v;
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
+  $$('.view').forEach(s => s.classList.toggle('active', s.id === 'v-' + v));
+  if (location.hash !== '#' + v) history.replaceState(null, '', '#' + v);
+  if (v === 'panel') initPanel();
+  if (v === 'iot') initIot();
+  if (v === 'app' && curAs === 'mapa') initAppMap();
+  if (v === 'app' && curAs === 'reportar') initPickMap();
+  setTimeout(() => Object.values(MAPS).forEach(m => m.map.invalidateSize()), 60);
+  window.scrollTo({ top:0 });
+}
+$$('.tab').forEach(t => t.addEventListener('click', () => showView(t.dataset.view)));
+document.addEventListener('click', e => { const b = e.target.closest('[data-goview]'); if (b) showView(b.dataset.goview); });
+window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
+
+let curAs = 'inicio';
+function showAs(a) {
+  curAs = a;
+  $$('.tbtn').forEach(b => b.classList.toggle('active', b.dataset.as === a));
+  $$('.ascreen').forEach(s => s.classList.toggle('active', s.id === 'as-' + a));
+  $('#pSuccess').classList.remove('show');
+  if (a === 'mapa') initAppMap();
+  if (a === 'reportar') initPickMap();
+  setTimeout(() => { if (MAPS.app) MAPS.app.map.invalidateSize(); if (pick.map) pick.map.invalidateSize(); }, 60);
+}
+$$('.tbtn').forEach(b => b.addEventListener('click', () => showAs(b.dataset.as)));
+$('#pBell').addEventListener('click', () => { showAs('inicio'); const el = $('#homeAlerts'); if (el) el.scrollIntoView({ behavior:'smooth', block:'start' }); });
+
+/* =========================================================
+   VISTA 1 · APP MÓVIL
+   ========================================================= */
+function adviceText(lvl) {
+  const extra = [];
+  const s5 = SENSORES.find(s => s.id === 'S05');
+  if (s5.st === 'alto' || INC.some(i => i.lugar === 'jesusNazaret' && isAlertInc(i) && i.riesgo === 'alto')) extra.push('El acceso por Av. Jesús de Nazaret está anegado: ingresa por la puerta principal de Av. Juan Pablo II.');
+  if (SENSORES.some(s => ['S01', 'S04'].includes(s.id) && s.st === 'alto')) extra.push('Biblioteca Central: posible filtración desde la azotea; protege el material bibliográfico.');
+  const base = lvl === 'alto' ? 'Evita las zonas en rojo y sigue las indicaciones de la brigada. Si estás en un laboratorio, aleja equipos y reactivos del agua y no manipules tableros eléctricos.'
+    : lvl === 'medio' ? 'Precaución: hay zonas con agua acumulada o filtraciones. Si ves una nueva, repórtala con foto.'
+    : 'Sin riesgos significativos en el campus. Mantén activas las notificaciones de PREVIUNT.';
+  return [base].concat(extra).join(' ');
+}
+function renderHome() {
+  const lvl = globalLevel(), R = RIESGO[lvl];
+  const al = activeAlerts();
+  const mine = INC.filter(i => i.mine);
+  const title = lvl === 'alto' ? 'ROJO · Riesgo alto' : lvl === 'medio' ? 'AMARILLO · Riesgo moderado' : 'VERDE · Riesgo bajo';
+  $('#homeBox').innerHTML = `
+    <div class="hero h-${R.cls}">
+      <div class="hero-top"><span>Riesgo actual · Ciudad Universitaria</span><span class="lv">En vivo</span></div>
+      <div class="hero-main">
+        <div class="semaforo"><i class="r ${lvl === 'alto' ? 'on' : ''}"></i><i class="y ${lvl === 'medio' ? 'on' : ''}"></i><i class="g ${lvl === 'bajo' ? 'on' : ''}"></i></div>
+        <div><div class="hero-lvl">${title}</div><div class="hero-sub">${al.length} alertas activas · Lluvia ${fmt(maxRain())} mm/h · ${SENSORES.length} sensores en línea</div></div>
+      </div>
+    </div>
+    <div class="advice">${ic('bulb')}<span>${esc(adviceText(lvl))}</span></div>
+    <div class="quick">
+      <button data-go="reportar"><span class="qi">${ic('plus')}</span>Reportar incidencia</button>
+      <button data-go="mapa"><span class="qi">${ic('map')}</span>Ver mapa de riesgos</button>
+    </div>
+    <h3 class="sec" id="homeAlerts">Alertas activas <span>${al.length} en total</span></h3>
+    <div class="alist">${al.length ? al.slice(0, 12).map(a => `
+      <button class="al" style="--c:${RIESGO[a.lvl].color};--cb:${RIESGO[a.lvl].bg}" data-fly="${a.lat},${a.lng}">
+        <span class="al-ic">${a.icon}</span>
+        <span style="min-width:0"><span class="al-t">${a.k === 'iot' ? '<span class="src">IoT</span>' : ''}${esc(a.title)}</span><span class="al-s" style="display:block">${esc(a.sub)}</span></span>
+        <span class="al-r">${badge(a.lvl)}<small>${ago(a.t)}</small></span>
+      </button>`).join('') : '<div class="empty">No hay alertas activas. ¡Todo en orden!</div>'}
+    </div>
+    <h3 class="sec" id="homeMine">Mis reportes <span>${mine.length}</span></h3>
+    ${mine.length ? mine.map(i => {
+      const ix = ESTADOS.indexOf(i.estado);
+      return `<div class="mine"><div class="mine-h"><b>${TIPOS[i.tipo].icon} ${esc(TIPOS[i.tipo].label)}</b>${estChip(i.estado)}</div>
+        <small>${i.id} · ${esc(lugarName(i))} · ${ago(i.creado)}</small>
+        <div class="prog">${ESTADOS.map((e, k) => `<div class="st ${k <= ix ? 'done' : ''}"><i></i>${e}</div>`).join('')}</div></div>`;
+    }).join('') : '<div class="empty">Aún no has enviado reportes.</div>'}`;
+  $('#pBellN').textContent = al.length;
+  $('#pBellN').style.display = al.length ? 'grid' : 'none';
+}
+$('#homeBox').addEventListener('click', e => {
+  const g = e.target.closest('[data-go]'); if (g) { showAs(g.dataset.go); return; }
+  const f = e.target.closest('[data-fly]');
+  if (f) { const [la, ln] = f.dataset.fly.split(',').map(Number); showAs('mapa'); setTimeout(() => { if (MAPS.app) MAPS.app.map.setView([la, ln], 18); }, 120); }
+});
+
+function initAppMap() {
+  if (MAPS.app) return;
+  createMap('app', 'mapApp', { zoom:16, legend:true });
+  renderRecent();
+}
+$$('.mchip').forEach(b => b.addEventListener('click', () => { b.classList.toggle('on'); toggleLayer(MAPS.app, b.dataset.layer, b.classList.contains('on')); }));
+function renderRecent() {
+  const xs = INC.filter(isActive).sort((a, b) => b.creado - a.creado).slice(0, 6);
+  $('#mRecent').innerHTML = xs.map(i => `<button class="mrow" data-inc="${i.id}" style="--c:${RIESGO[i.riesgo].color}"><span class="dot"></span><span style="min-width:0"><b>${TIPOS[i.tipo].icon} ${esc(TIPOS[i.tipo].label)}</b><small>${esc(lugarName(i))} · ${i.estado}</small></span><span class="ago">${ago(i.creado)}</span></button>`).join('');
+}
+$('#mRecent').addEventListener('click', e => {
+  const r = e.target.closest('[data-inc]'); if (!r || !MAPS.app) return;
+  const i = byId(r.dataset.inc); MAPS.app.map.setView([i.lat, i.lng], 18);
+  const mk = MAPS.app.im[i.id]; if (mk) mk.openPopup();
+});
+
+/* ----- Formulario de reporte ----- */
+const form = { tipo:null, foto:null, lat:null, lng:null, lugar:null };
+const pick = { map:null, marker:null };
+$('#tiposBox').innerHTML = Object.entries(TIPOS).map(([k, t]) => `<label class="tipo"><input type="radio" name="tipo" value="${k}"><span><em>${t.icon}</em>${t.label}</span></label>`).join('');
+$('#fLugar').innerHTML = '<option value="">— o elige un edificio / acceso —</option>' + Object.entries(LUGARES).map(([k, l]) => `<option value="${k}">${esc(l.n)}</option>`).join('');
+$('#fTipo').innerHTML = '<option value="">Tipo: todos</option>' + Object.entries(TIPOS).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('');
+
+$('#tiposBox').addEventListener('change', e => { form.tipo = e.target.value; updateRiskPrev(); });
+$('#fDesc').addEventListener('input', e => { $('#descCnt').textContent = e.target.value.length; updateRiskPrev(); });
+$('#fUrg').addEventListener('change', updateRiskPrev);
+$('#fFoto').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  if (!f.type.startsWith('image/')) { $('#fErr').textContent = 'El archivo debe ser una imagen.'; return; }
+  if (form.foto) URL.revokeObjectURL(form.foto);
+  form.foto = URL.createObjectURL(f);
+  $('#phPrev').src = form.foto; $('#photoBox').classList.add('has'); $('#phDel').classList.add('show');
+});
+$('#phDel').addEventListener('click', () => { form.foto = null; $('#fFoto').value = ''; $('#phPrev').removeAttribute('src'); $('#photoBox').classList.remove('has'); $('#phDel').classList.remove('show'); });
+
+function estimateRisk() {
+  if (!form.tipo) return null;
+  let r = TIPOS[form.tipo].riesgo;
+  const d = $('#fDesc').value.toLowerCase();
+  if ($('#fUrg').checked) return 'alto';
+  if (/(laborator|reactiv|bibliotec|libro|tablero|cable|chispa|corto|enchufe|tomacorriente|equipo|servidor|personas)/.test(d)) r = 'alto';
+  else if (r === 'medio' && /(leve|poco|pequeñ|ligera)/.test(d)) r = 'bajo';
+  if (form.lugar && LUGARES[form.lugar].z && ZONAS.find(z => z.id === LUGARES[form.lugar].z).vuln === 'alto' && r === 'medio') r = 'alto';
+  return r;
+}
+function updateRiskPrev() {
+  const r = estimateRisk();
+  $('#riskPrev').innerHTML = `<span>Riesgo estimado automáticamente</span>${r ? badge(r) : '<span class="badge b-info">Selecciona un tipo</span>'}`;
+}
+function pinIcon() { return L.divIcon({ className:'', iconSize:[26, 26], iconAnchor:[13, 30], html:'<div class="pin"></div>' }); }
+function initPickMap() {
+  if (pick.map) return;
+  pick.map = L.map('mapPick', { zoomControl:true, attributionControl:true }).setView(CENTER, 16);
+  addTiles(pick.map);
+  ZONAS.forEach(z => L.circle([z.lat, z.lng], { radius:z.r, color:RIESGO[z.vuln].color, weight:1, fillOpacity:.08, dashArray:'4 4', interactive:false }).addTo(pick.map));
+  pick.map.on('click', e => setPick(e.latlng.lat, e.latlng.lng, 'map'));
+  setTimeout(() => pick.map.invalidateSize(), 80);
+}
+function setPick(lat, lng, src, lugarKey) {
+  form.lat = lat; form.lng = lng;
+  const nl = nearestLugar(lat, lng);
+  form.lugar = lugarKey || nl.id;
+  if (pick.map) {
+    if (!pick.marker) {
+      pick.marker = L.marker([lat, lng], { icon:pinIcon(), draggable:true }).addTo(pick.map);
+      pick.marker.on('dragend', () => { const p = pick.marker.getLatLng(); setPick(p.lat, p.lng, 'map'); });
+    } else pick.marker.setLatLng([lat, lng]);
+    pick.map.setView([lat, lng], Math.max(pick.map.getZoom(), 17));
+  }
+  if (src !== 'select') $('#fLugar').value = '';
+  const srcTxt = src === 'gps' ? 'GPS del dispositivo' : src === 'demo' ? 'ubicación de demostración' : src === 'select' ? 'edificio seleccionado' : 'punto marcado en el mapa';
+  const near = src === 'select' ? '' : ` · cerca de ${LUGARES[form.lugar].n} (${nl.d} m)`;
+  $('#locInfo').className = 'locinfo ok';
+  $('#locInfo').innerHTML = `${ic('pin')}<span>${lat.toFixed(5)}, ${lng.toFixed(5)} — ${srcTxt}${esc(near)}</span>`;
+  updateRiskPrev();
+}
+$('#fLugar').addEventListener('change', e => { const k = e.target.value; if (!k) return; initPickMap(); setPick(LUGARES[k].lat, LUGARES[k].lng, 'select', k); });
+$('#btnPickMap').addEventListener('click', () => {
+  initPickMap();
+  const el = $('#mapPick'); el.scrollIntoView({ behavior:'smooth', block:'center' });
+  el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1300);
+  $('#locInfo').className = 'locinfo'; $('#locInfo').innerHTML = `${ic('pin')}<span>Toca el mapa para marcar el punto exacto (puedes arrastrar el marcador).</span>`;
+});
+$('#btnGeo').addEventListener('click', () => {
+  initPickMap();
+  const b = $('#btnGeo'); b.classList.add('busy');
+  const fallback = msg => {
+    b.classList.remove('busy');
+    const lat = CENTER[0] + (Math.random() - .5) * 0.002, lng = CENTER[1] + (Math.random() - .5) * 0.002;
+    setPick(lat, lng, 'demo');
+    toast('Ubicación de demostración', msg, null);
+  };
+  if (!('geolocation' in navigator)) { fallback('Tu navegador no ofrece geolocalización; se usó un punto dentro del campus.'); return; }
+  navigator.geolocation.getCurrentPosition(p => {
+    b.classList.remove('busy');
+    const { latitude:la, longitude:ln } = p.coords;
+    if (distM(la, ln, CENTER[0], CENTER[1]) < 900) setPick(la, ln, 'gps');
+    else fallback('Estás fuera de la Ciudad Universitaria; para la demo se usó un punto dentro del campus.');
+  }, () => fallback('No se obtuvo permiso de ubicación; se usó un punto dentro del campus.'), { enableHighAccuracy:true, timeout:7000, maximumAge:30000 });
+});
+
+$('#frm').addEventListener('submit', e => {
+  e.preventDefault();
+  const desc = $('#fDesc').value.trim();
+  const errs = [];
+  if (!form.tipo) errs.push('elige el tipo de incidencia');
+  if (desc.length < 10) errs.push('describe la incidencia (mín. 10 caracteres)');
+  if (form.lat == null) errs.push('indica la ubicación');
+  if (errs.length) { $('#fErr').textContent = 'Para enviar: ' + errs.join(', ') + '.'; return; }
+  $('#fErr').textContent = '';
+  const riesgo = estimateRisk();
+  const id = nextId();
+  const inc = { id, tipo:form.tipo, lugar:form.lugar, lat:form.lat, lng:form.lng, desc, riesgo, estado:'Pendiente', creado:now(), atencion:null, resuelto:null,
+    origen:'App', asignado:'Sin asignar', reportante:'Tú · Estudiante de Ing. de Sistemas', foto:form.foto, mine:true, nuevo:true, sensor:null,
+    hist:[{ t:now(), txt:`Reporte enviado desde la App PREVIUNT${form.foto ? ' con foto' : ''}` }] };
+  INC.unshift(inc);
+  logEvent({ lvl:riesgo, kind:'app', title:`Nuevo reporte ${id} · ${TIPOS[inc.tipo].label}`, sub:`${lugarName(inc)} · riesgo ${RIESGO[riesgo].label.toLowerCase()} · pendiente de validación` });
+  toast(`Nuevo reporte ${id} recibido en el Panel`, `${TIPOS[inc.tipo].label} · ${lugarName(inc)}`, riesgo);
+  beep(false);
+  onIncidentsChanged();
+  $('#psCode').textContent = id;
+  $('#pSuccess').classList.add('show');
+  resetForm(true);
+});
+function resetForm(keepPhotoUrl) {
+  $('#frm').reset(); $('#descCnt').textContent = '0';
+  form.tipo = null; form.lat = null; form.lng = null; form.lugar = null;
+  if (!keepPhotoUrl && form.foto) URL.revokeObjectURL(form.foto);
+  form.foto = null; $('#phPrev').removeAttribute('src'); $('#photoBox').classList.remove('has'); $('#phDel').classList.remove('show');
+  if (pick.marker) { pick.map.removeLayer(pick.marker); pick.marker = null; }
+  $('#locInfo').className = 'locinfo'; $('#locInfo').innerHTML = `${ic('pin')}<span>Toca el mapa, usa tu ubicación o elige un edificio.</span>`;
+  updateRiskPrev();
+}
+$('#psMine').addEventListener('click', () => { showAs('inicio'); setTimeout(() => { const el = $('#homeMine'); if (el) el.scrollIntoView({ behavior:'smooth' }); }, 60); });
+$('#psNew').addEventListener('click', () => { $('#pSuccess').classList.remove('show'); $('#as-reportar').scrollTop = 0; });
+
+function renderSideStats() {
+  $('#sideStats').innerHTML = `<div><b>${INC.filter(isActive).length}</b><span>incidencias activas</span></div><div><b>${SENSORES.length}</b><span>sensores ESP32</span></div><div><b>${avgAttention()}<small style="font-size:12px"> min</small></b><span>atención promedio</span></div>`;
+}
+
+/* =========================================================
+   VISTA 2 · PANEL DE ADMINISTRACIÓN
+   ========================================================= */
+let panelReady = false, chTipo = null;
+const F = { q:'', riesgo:'', estado:'', tipo:'' };
+function initPanel() {
+  if (panelReady) { setTimeout(() => MAPS.admin && MAPS.admin.map.invalidateSize(), 60); return; }
+  panelReady = true;
+  createMap('admin', 'mapAdmin', { admin:true, legend:true, wheel:false, zoom: window.innerWidth < 700 ? 16 : ZOOM });
+  if (window.Chart) {
+    chTipo = new Chart($('#chTipo'), {
+      type:'doughnut',
+      data:{ labels:Object.values(TIPOS).map(t => t.label), datasets:[{ data:[0, 0, 0, 0], backgroundColor:['#1273b8', '#0fb5a6', '#0b2e4f', '#f59e0b'], borderWidth:2, borderColor:'#fff' }] },
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', animation:{ duration:400 },
+        plugins:{ legend:{ position:'right', labels:{ boxWidth:12, boxHeight:12, font:{ family:"'Plus Jakarta Sans', sans-serif", size:11.5 }, color:'#3a4f64' } } } }
+    });
+  }
+  renderPanel();
+}
+function renderKPIs() {
+  const act = INC.filter(isActive);
+  const zc = ZONAS.filter(z => zoneLevel(z) === 'alto').length;
+  const pend = INC.filter(i => i.estado === 'Pendiente').length;
+  const sa = SENSORES.filter(s => s.st !== 'bajo').length;
+  const avg = avgAttention();
+  const k = [
+    { ic:'inbox', kb:'#e3effa', kc:'#1273b8', v:act.length, l:'Incidencias activas', s:`${act.filter(i => i.riesgo === 'alto').length} de riesgo alto` },
+    { ic:'zone', kb:'#fde6e6', kc:'#dc2626', v:`${zc}<small>/ ${ZONAS.length}</small>`, l:'Zonas críticas', s:'Zonas vulnerables en rojo' },
+    { ic:'timer', kb:'#e3f6f4', kc:'#0f9488', v:`${avg}<small>min</small>`, l:'Tiempo prom. de atención', s:`Del reporte a la atención · meta ≤ 30 min` },
+    { ic:'clipboard', kb:'#fff1e6', kc:'#c2410c', v:pend, l:'Por validar', s:'Reportes pendientes' },
+    { ic:'radio', kb:sa ? '#fff5d1' : '#e6f6ec', kc:sa ? '#a16207' : '#15803d', v:`${sa}<small>/ ${SENSORES.length}</small>`, l:'Sensores en alerta', s:sa ? 'Superan umbrales' : 'Todos en rango normal' }
+  ];
+  $('#kpis').innerHTML = k.map(x => `<div class="card kpi"><div class="kpi-ic" style="--kb:${x.kb};--kc:${x.kc}">${ic(x.ic)}</div><div><div class="kpi-v">${x.v}</div><div class="kpi-l">${x.l}</div><div class="kpi-s">${x.s}</div></div></div>`).join('');
+}
+function renderCritBar() {
+  const crit = activeAlerts().filter(a => a.lvl === 'alto');
+  const bar = $('#critBar');
+  bar.classList.toggle('show', crit.length > 0);
+  if (crit.length) {
+    $('#cbT').textContent = `${crit.length} alerta${crit.length > 1 ? 's' : ''} crítica${crit.length > 1 ? 's' : ''} activa${crit.length > 1 ? 's' : ''}`;
+    $('#cbS').textContent = crit.map(a => a.title.replace('Nivel crítico · ', '')).join(' · ');
+    bar.dataset.fly = `${crit[0].lat},${crit[0].lng}`;
+  }
+}
+$('#cbBtn').addEventListener('click', () => {
+  const [la, ln] = ($('#critBar').dataset.fly || '').split(',').map(Number);
+  if (!MAPS.admin || isNaN(la)) return;
+  $('#mapAdmin').scrollIntoView({ behavior:'smooth', block:'center' });
+  MAPS.admin.map.setView([la, ln], 18);
+});
+function renderChart() {
+  if (!chTipo) return;
+  const act = INC.filter(isActive);
+  chTipo.data.datasets[0].data = Object.keys(TIPOS).map(k => act.filter(i => i.tipo === k).length);
+  chTipo.update();
+}
+function photoHTML(i, big) {
+  const T = TIPOS[i.tipo];
+  if (big) {
+    return `<div class="photo-big" style="--tg:${T.grad}">${i.foto ? `<img src="${i.foto}" alt="Foto del reporte">` : `<span class="pe">${i.origen === 'IoT' ? '📡' : T.icon}</span>`}<span class="cap">${i.foto ? 'Foto enviada por el usuario' : i.origen === 'IoT' ? 'Lectura automática del sensor' : 'Foto referencial (demo)'}</span></div>`;
+  }
+  return `<div class="thumb" style="--tg:${T.grad}">${i.foto ? `<img src="${i.foto}" alt="">` : (i.origen === 'IoT' ? '📡' : T.icon)}</div>`;
+}
+function filteredInc() {
+  const q = F.q.trim().toLowerCase();
+  return INC.filter(i => (!F.riesgo || i.riesgo === F.riesgo) && (!F.estado || i.estado === F.estado) && (!F.tipo || i.tipo === F.tipo) &&
+    (!q || (i.id + ' ' + lugarName(i) + ' ' + i.desc + ' ' + TIPOS[i.tipo].label + ' ' + i.reportante).toLowerCase().includes(q)))
+    .sort((a, b) => (a.estado === 'Resuelto') - (b.estado === 'Resuelto') || RIESGO[b.riesgo].n - RIESGO[a.riesgo].n || b.creado - a.creado);
+}
+function renderTable() {
+  if (!panelReady) return;
+  const xs = filteredInc();
+  $('#tblCount').textContent = xs.length;
+  $('#tbody').innerHTML = xs.length ? xs.map(i => `
+    <tr class="${i.nuevo ? 'row-new' : ''}">
+      <td class="tc">${i.id} ${i.nuevo ? '<span class="tag-new">NUEVO</span>' : ''}</td>
+      <td><div class="tinc">${photoHTML(i)}<div><b>${esc(TIPOS[i.tipo].label)}</b><small>${esc(i.desc)}</small></div></div></td>
+      <td>${esc(lugarName(i))}</td>
+      <td>${badge(i.riesgo)}</td>
+      <td><select class="sel-est" data-est="${i.id}" aria-label="Cambiar estado de ${i.id}">${ESTADOS.map(e => `<option ${e === i.estado ? 'selected' : ''}>${e}</option>`).join('')}</select></td>
+      <td class="origin">${i.origen === 'IoT' ? '📡 Sensor IoT' : '📱 App'}</td>
+      <td style="white-space:nowrap">${ago(i.creado)}<br><small style="color:var(--muted)">${hhmm(i.creado)}</small></td>
+      <td><div class="acts">
+        ${i.estado === 'Pendiente' ? `<button class="btn-sm b-validate" data-act="validar" data-id="${i.id}">${ic('check')}Validar</button>` : ''}
+        <button class="btn-sm b-plain" data-act="ver" data-id="${i.id}" title="Ver detalle">${ic('eye')}Ver</button>
+        <button class="btn-sm b-plain" data-act="mapa" data-id="${i.id}" title="Ubicar en el mapa">${ic('pin')}</button>
+      </div></td>
+    </tr>`).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">No hay incidencias con esos filtros.</td></tr>';
+  const c = ESTADOS.map(e => `${e}: <b>${INC.filter(i => i.estado === e).length}</b>`).join(' · ');
+  $('#tfoot').innerHTML = `Total: <b>${INC.length}</b> · ${c}`;
+}
+$('#tbody').addEventListener('change', e => { const s = e.target.closest('[data-est]'); if (s) setEstado(s.dataset.est, s.value); });
+$('#tbody').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const id = b.dataset.id;
+  if (b.dataset.act === 'validar') setEstado(id, 'Validado');
+  if (b.dataset.act === 'ver') openInc(id);
+  if (b.dataset.act === 'mapa') locateInc(id);
+});
+$('#fq').addEventListener('input', e => { F.q = e.target.value; renderTable(); });
+$('#fRiesgo').addEventListener('change', e => { F.riesgo = e.target.value; renderTable(); });
+$('#fEstado').addEventListener('change', e => { F.estado = e.target.value; renderTable(); });
+$('#fTipo').addEventListener('change', e => { F.tipo = e.target.value; renderTable(); });
+$('#fClear').addEventListener('click', () => { F.q = F.riesgo = F.estado = F.tipo = ''; $('#fq').value = ''; $('#fRiesgo').value = ''; $('#fEstado').value = ''; $('#fTipo').value = ''; renderTable(); });
+$$('[data-admlayer]').forEach(cb => cb.addEventListener('change', () => toggleLayer(MAPS.admin, cb.dataset.admlayer, cb.checked)));
+
+function locateInc(id) {
+  const i = byId(id); if (!i) return;
+  closeModal();
+  if (curView !== 'panel') showView('panel');
+  setTimeout(() => {
+    $('#mapAdmin').scrollIntoView({ behavior:'smooth', block:'center' });
+    const m = MAPS.admin; if (!m) return;
+    m.map.setView([i.lat, i.lng], 18);
+    const mk = m.im[i.id]; if (mk) setTimeout(() => mk.openPopup(), 250);
+  }, 80);
+}
+
+function setEstado(id, est, silent) {
+  const i = byId(id); if (!i || i.estado === est) return;
+  const prev = i.estado; i.estado = est; i.nuevo = false;
+  if ((est === 'En atención' || est === 'Resuelto') && !i.atencion) i.atencion = now();
+  if (est === 'Resuelto') i.resuelto = now();
+  if (est === 'En atención' && i.asignado === 'Sin asignar') i.asignado = i.tipo === 'tablero' ? 'Servicios Eléctricos' : i.tipo === 'inundacion' ? 'Defensa Civil UNT' : 'Brigada de Mantenimiento';
+  i.hist.push({ t:now(), txt: est === 'Validado' ? 'Validado por el Centro de Control' : est === 'En atención' ? `En atención · ${i.asignado}` : est === 'Resuelto' ? 'Incidencia resuelta y cerrada' : `Estado cambiado a ${est}` });
+  logEvent({ lvl:i.riesgo, kind:'sys', title:`${i.id}: ${prev} → ${est}`, sub:`${TIPOS[i.tipo].label} · ${lugarName(i)}` });
+  if (!silent) toast(`${i.id} actualizado`, `Nuevo estado: ${est}`, null);
+  if (i.mine) phoneNotify(`Tu reporte ${i.id}: ${est}`, est === 'Validado' ? 'El Centro de Control validó tu reporte. ¡Gracias por avisar!' : est === 'En atención' ? `${i.asignado} está atendiendo la incidencia.` : est === 'Resuelto' ? 'La incidencia fue resuelta.' : 'Estado actualizado.', i.riesgo);
+  else if (est === 'Validado' && i.riesgo !== 'bajo') phoneNotify(`Nueva alerta · ${TIPOS[i.tipo].label}`, `${lugarName(i)} · riesgo ${RIESGO[i.riesgo].label.toLowerCase()}`, i.riesgo);
+  onIncidentsChanged();
+}
+function setRiesgo(id, r) {
+  const i = byId(id); if (!i || i.riesgo === r) return;
+  i.hist.push({ t:now(), txt:`Riesgo reclasificado: ${RIESGO[i.riesgo].label} → ${RIESGO[r].label}` });
+  i.riesgo = r; onIncidentsChanged();
+}
+
+/* ----- Modal de detalle ----- */
+let modalId = null;
+function openInc(id) {
+  const i = byId(id); if (!i) return;
+  if (i.nuevo) { i.nuevo = false; renderTable(); }
+  modalId = id;
+  const T = TIPOS[i.tipo], ix = ESTADOS.indexOf(i.estado);
+  $('#modal').innerHTML = `
+    <div class="md-h"><div><div class="md-code">${i.id} · ${i.origen === 'IoT' ? 'Generada automáticamente por sensor IoT' : 'Reportada desde la App'}</div>
+      <h3>${T.icon} ${esc(T.label)}</h3><div class="md-loc">${ic('pin')}${esc(lugarName(i))} · ${i.lat.toFixed(5)}, ${i.lng.toFixed(5)}</div></div>
+      <button class="md-x" data-close aria-label="Cerrar">${ic('x')}</button></div>
+    <div class="md-grid">
+      <div>${photoHTML(i, true)}<p class="md-desc">${esc(i.desc)}</p>
+        <div class="md-meta"><div><span>Reportado por</span><b>${esc(i.reportante)}</b></div><div><span>Fecha y hora</span><b>${dt(i.creado)}</b></div>
+        <div><span>Zona</span><b>${esc((ZONAS.find(z => z.id === (LUGARES[i.lugar] || {}).z) || { n:'Fuera de zonas vulnerables' }).n)}</b></div>
+        <div><span>Tiempo a atención</span><b>${i.atencion ? Math.round((i.atencion - i.creado) / MIN) + ' min' : '—'}</b></div></div>
+      </div>
+      <div>
+        <div class="md-sec"><span class="lbl">Nivel de riesgo (semáforo)</span><div class="seg">${Object.keys(RIESGO).map(k => `<button class="${i.riesgo === k ? 'on' : ''} s-${RIESGO[k].cls}" data-riesgo="${k}">${RIESGO[k].sem} · ${RIESGO[k].label}</button>`).join('')}</div></div>
+        <div class="md-sec"><span class="lbl">Estado de la incidencia</span><div class="stepper">${ESTADOS.map((e, k) => `<button class="${k < ix ? 'done' : k === ix ? 'cur' : ''}" data-estado="${e}">${e}</button>`).join('')}</div></div>
+        <div class="md-sec"><span class="lbl">Asignado a</span><select class="inp" data-asig>${BRIGADAS.map(b => `<option ${b === i.asignado ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
+        <div class="md-sec"><span class="lbl">Historial</span><ul class="tl">${i.hist.slice().reverse().map(h => `<li><b>${hhmm(h.t)}</b>${esc(h.txt)}</li>`).join('')}</ul></div>
+      </div>
+    </div>
+    <div class="md-f">
+      <button class="btn-ghost" data-locate>${ic('pin')}Ubicar en el mapa</button>
+      ${i.estado === 'Pendiente' ? `<button class="btn-primary" data-quick="Validado">${ic('check')}Validar reporte</button>` : i.estado === 'Validado' ? `<button class="btn-primary" data-quick="En atención">${ic('play')}Iniciar atención</button>` : i.estado === 'En atención' ? `<button class="btn-primary" data-quick="Resuelto">${ic('check')}Marcar como resuelto</button>` : ''}
+    </div>`;
+  $('#modalBg').classList.add('show');
+}
+function closeModal() { modalId = null; $('#modalBg').classList.remove('show'); }
+$('#modalBg').addEventListener('click', e => {
+  if (e.target.id === 'modalBg' || e.target.closest('[data-close]')) { closeModal(); return; }
+  const id = modalId; if (!id) return;
+  const r = e.target.closest('[data-riesgo]'); if (r) { setRiesgo(id, r.dataset.riesgo); return; }
+  const s = e.target.closest('[data-estado]'); if (s) { setEstado(id, s.dataset.estado); return; }
+  const q = e.target.closest('[data-quick]'); if (q) { setEstado(id, q.dataset.quick); return; }
+  if (e.target.closest('[data-locate]')) locateInc(id);
+});
+$('#modalBg').addEventListener('change', e => {
+  const s = e.target.closest('[data-asig]'); if (!s || !modalId) return;
+  const i = byId(modalId); i.asignado = s.value; i.hist.push({ t:now(), txt:`Asignado a ${s.value}` }); openInc(modalId);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function renderFeeds() {
+  const item = e => `<div class="fi" style="--c:${RIESGO[e.lvl] ? RIESGO[e.lvl].color : '#1273b8'}"><span class="fd"></span><div><b><span class="k k-${e.kind}">${e.kind === 'iot' ? 'IoT' : e.kind === 'app' ? 'APP' : 'PANEL'}</span>${esc(e.title)}</b><p>${esc(e.sub)}</p></div><time>${hhmmss(e.t)}</time></div>`;
+  const all = EVENTS.slice(0, 30);
+  $('#feedAdmin').innerHTML = all.length ? all.map(item).join('') : '<div class="empty" style="margin:8px 0">Sin eventos recientes.</div>';
+  $('#feedN').textContent = EVENTS.length;
+  const iot = EVENTS.filter(e => e.kind === 'iot').slice(0, 30);
+  $('#feedIot').innerHTML = iot.length ? iot.map(item).join('') : '<div class="empty" style="margin:8px 0">Aún no se han generado alertas automáticas. Pulsa «Simular lluvia intensa».</div>';
+}
+function renderPanel() { if (!panelReady) return; renderKPIs(); renderCritBar(); renderTable(); renderChart(); }
+
+/* =========================================================
+   VISTA 3 · MONITOREO IoT
+   ========================================================= */
+let iotReady = false, chSensor = null, selSensor = 'S01';
+function initIot() {
+  if (iotReady) return;
+  iotReady = true;
+  renderThr();
+  $('#selSensor').innerHTML = SENSORES.map(s => `<option value="${s.id}">${s.code} · ${esc(s.n)}</option>`).join('');
+  $('#selSensor').value = selSensor;
+  $('#selSensor').addEventListener('change', e => { selSensor = e.target.value; renderSensors(); updateSensorChart(true); });
+  if (window.Chart) {
+    chSensor = new Chart($('#chSensor'), {
+      type:'line',
+      data:{ labels:[], datasets:[
+        { label:'Lectura', data:[], borderColor:'#1273b8', backgroundColor:'rgba(18,115,184,.12)', fill:true, tension:.35, pointRadius:0, borderWidth:2.5 },
+        { label:'Umbral de precaución', data:[], borderColor:'#eab308', borderDash:[6, 5], pointRadius:0, borderWidth:2, fill:false },
+        { label:'Umbral crítico', data:[], borderColor:'#dc2626', borderDash:[6, 5], pointRadius:0, borderWidth:2, fill:false }
+      ] },
+      options:{ responsive:true, maintainAspectRatio:false, animation:false, interaction:{ intersect:false, mode:'index' },
+        scales:{ x:{ ticks:{ maxTicksLimit:8, color:'#607489', font:{ size:11 } }, grid:{ display:false } },
+                 y:{ beginAtZero:true, ticks:{ color:'#607489', font:{ size:11 } }, grid:{ color:'#edf2f6' }, title:{ display:true, text:'', color:'#607489' } } },
+        plugins:{ legend:{ labels:{ boxWidth:12, boxHeight:3, font:{ family:"'Plus Jakarta Sans', sans-serif", size:11.5 }, color:'#3a4f64' } } } }
+    });
+  }
+  renderSensors(); updateSensorChart(true);
+}
+function renderThr() {
+  $('#thrBox').innerHTML = Object.entries(THR).map(([k, t]) => `
+    <div class="thr-row"><h4>${t.label}<small>${SENSORES.filter(s => s.cat === k).length} sensores</small></h4>
+      <div class="thr-in">
+        <label><span style="--c:#eab308">Precaución (amarillo)</span><div class="wrap"><input type="number" min="0" step="0.5" value="${t.warn}" data-thr="${k}" data-lv="warn"><em>${t.unit}</em></div></label>
+        <label><span style="--c:#dc2626">Crítico (rojo)</span><div class="wrap"><input type="number" min="0" step="0.5" value="${t.crit}" data-thr="${k}" data-lv="crit"><em>${t.unit}</em></div></label>
+      </div></div>`).join('') +
+    `<div class="thr-f"><span class="thr-msg" id="thrMsg">Los cambios se aplican al instante a todos los sensores.</span><button class="btn-sm b-plain" id="thrReset">Restaurar valores</button></div>`;
+}
+$('#thrBox').addEventListener('change', e => {
+  const inp = e.target.closest('[data-thr]'); if (!inp) return;
+  const k = inp.dataset.thr, lv = inp.dataset.lv, v = parseFloat(inp.value);
+  const msg = $('#thrMsg');
+  const other = lv === 'warn' ? THR[k].crit : THR[k].warn;
+  if (isNaN(v) || v <= 0 || (lv === 'warn' && v >= other) || (lv === 'crit' && v <= other)) {
+    msg.className = 'thr-msg err'; msg.textContent = 'Valor inválido: el umbral de precaución debe ser mayor que 0 y menor que el crítico.';
+    inp.value = THR[k][lv]; return;
+  }
+  THR[k][lv] = v;
+  msg.className = 'thr-msg'; msg.textContent = `✓ Umbral actualizado: ${THR[k].label.toLowerCase()} · ${lv === 'warn' ? 'precaución' : 'crítico'} = ${v} ${THR[k].unit}`;
+  logEvent({ lvl:null, kind:'sys', title:'Umbrales actualizados', sub:`${THR[k].label}: precaución ${THR[k].warn} · crítico ${THR[k].crit} ${THR[k].unit}` });
+  evaluate(); refreshLive();
+});
+$('#thrBox').addEventListener('click', e => {
+  if (!e.target.closest('#thrReset')) return;
+  Object.keys(THR_DEFAULT).forEach(k => { THR[k].warn = THR_DEFAULT[k].warn; THR[k].crit = THR_DEFAULT[k].crit; });
+  renderThr(); $('#thrMsg').textContent = '✓ Umbrales restaurados a los valores por defecto.';
+  evaluate(); refreshLive();
+});
+function spark(s) {
+  const t = THR[s.cat], w = 240, h = 38;
+  const max = Math.max(t.crit * 1.25, ...s.hist.map(p => p.v)) || 1;
+  const pts = s.hist.map((p, k) => `${(k / (s.hist.length - 1) * w).toFixed(1)},${(h - 2 - p.v / max * (h - 4)).toFixed(1)}`).join(' ');
+  const yc = (h - 2 - t.crit / max * (h - 4)).toFixed(1), yw = (h - 2 - t.warn / max * (h - 4)).toFixed(1);
+  const c = RIESGO[s.st].color;
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" x2="${w}" y1="${yw}" y2="${yw}" stroke="#eab308" stroke-dasharray="4 4" stroke-width="1"/>
+    <line x1="0" x2="${w}" y1="${yc}" y2="${yc}" stroke="#dc2626" stroke-dasharray="4 4" stroke-width="1"/>
+    <polyline points="0,${h} ${pts} ${w},${h}" fill="${c}" fill-opacity=".1" stroke="none"/>
+    <polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function renderSensors() {
+  if (!iotReady) return;
+  $('#sgrid').innerHTML = SENSORES.map(s => {
+    const t = THR[s.cat], R = RIESGO[s.st], scale = t.crit * 1.5;
+    return `<button class="card scard ${s.id === selSensor ? 'sel' : ''} ${s.st === 'alto' ? 'crit' : ''}" style="--c:${R.color}" data-sid="${s.id}">
+      <div class="sc-top"><div><div class="sc-code">${s.code}</div><div class="sc-name">${esc(s.n)}</div></div>${sensBadge(s)}</div>
+      <div class="sc-val"><b>${fmt(s.v)}</b><span>${t.unit}</span><small>${CAT_LBL[s.cat]}<br>${esc(LUGARES[s.at].n)}</small></div>
+      <div class="sc-bar"><i style="width:${clamp(s.v / scale * 100, 1, 100)}%"></i><em style="left:${t.warn / scale * 100}%;background:#eab308"></em><em style="left:${t.crit / scale * 100}%;background:#dc2626"></em></div>
+      ${spark(s)}
+      <div class="sc-foot"><span>🔋 ${s.bat}%</span><span>📶 ${s.rssi} dBm</span><span>${ago(s.upd)}</span></div>
+    </button>`;
+  }).join('');
+}
+$('#sgrid').addEventListener('click', e => {
+  const c = e.target.closest('[data-sid]'); if (!c) return;
+  selSensor = c.dataset.sid; $('#selSensor').value = selSensor; renderSensors(); updateSensorChart(true);
+});
+function updateSensorChart() {
+  if (!chSensor) return;
+  const s = SENSORES.find(x => x.id === selSensor), t = THR[s.cat];
+  chSensor.data.labels = s.hist.map(p => hhmmss(p.t));
+  chSensor.data.datasets[0].data = s.hist.map(p => p.v);
+  chSensor.data.datasets[0].label = `${s.code} · ${CAT_LBL[s.cat]} (${t.unit})`;
+  chSensor.data.datasets[0].borderColor = RIESGO[s.st].color === '#16a34a' ? '#1273b8' : RIESGO[s.st].color;
+  chSensor.data.datasets[1].data = s.hist.map(() => t.warn);
+  chSensor.data.datasets[2].data = s.hist.map(() => t.crit);
+  chSensor.options.scales.y.suggestedMax = t.crit * 1.4;
+  chSensor.options.scales.y.title.text = t.unit;
+  chSensor.update('none');
+}
+function renderRainCard() {
+  const mr = maxRain(), sa = SENSORES.filter(s => s.st !== 'bajo').length;
+  $('#rcRain').textContent = fmt(mr);
+  $('#rcAlert').textContent = sa;
+  $('#rcPct').textContent = Math.round(rain.k * 100) + '%';
+  $('#rcBar').style.width = (rain.k * 100) + '%';
+  $('#rcCond').textContent = rain.on ? '🌧️ Lluvia intensa en curso' : rain.k > 0.02 ? '🌦️ Lluvia disminuyendo · drenando' : '☀️ Condición normal';
+}
+
+/* =========================================================
+   SIMULACIÓN IoT + MOTOR DE ALERTAS
+   ========================================================= */
+function levelOf(s) {
+  const t = THR[s.cat];
+  const crit = s.st === 'alto' ? t.crit * 0.94 : t.crit;
+  const warn = s.st !== 'bajo' ? t.warn * 0.9 : t.warn;
+  return s.v >= crit ? 'alto' : s.v >= warn ? 'medio' : 'bajo';
+}
+function createIotIncident(s) {
+  const t = THR[s.cat], id = nextId();
+  INC.unshift({ id, tipo:s.inc, lugar:s.at, lat:s.lat + 0.00005, lng:s.lng + 0.00005, riesgo:'alto', estado:'Validado', creado:now(), atencion:null, resuelto:null,
+    origen:'IoT', sensor:s.id, asignado:'Sin asignar', reportante:`Sensor ${s.code}`, foto:null, mine:false, nuevo:true,
+    desc:`Alerta automática: el sensor ${s.code} (${s.n}) registró ${fmt(s.v)} ${t.unit}, superando el umbral crítico de ${t.crit} ${t.unit}.`,
+    hist:[{ t:now(), txt:'Incidencia creada automáticamente por superación de umbral' }, { t:now(), txt:'Validada automáticamente (fuente IoT)' }] });
+  logEvent({ lvl:'alto', kind:'sys', title:`Incidencia ${id} creada automáticamente`, sub:`${TIPOS[s.inc].label} · ${LUGARES[s.at].n}` });
+}
+function evaluate() {
+  let incChanged = false;
+  SENSORES.forEach(s => {
+    const nl = levelOf(s);
+    if (nl === s.st) return;
+    const up = RIESGO[nl].n > RIESGO[s.st].n;
+    s.st = nl; s.since = now();
+    const t = THR[s.cat];
+    if (up) {
+      const title = nl === 'alto' ? `Alerta crítica · ${s.n}` : `Precaución · ${s.n}`;
+      const sub = `${s.code} registró ${fmt(s.v)} ${t.unit} (umbral ${nl === 'alto' ? 'crítico ' + t.crit : 'de precaución ' + t.warn} ${t.unit})`;
+      logEvent({ lvl:nl, kind:'iot', title, sub });
+      toast(title, sub, nl);
+      phoneNotify(nl === 'alto' ? `⚠️ ${s.n}` : `Precaución · ${s.n}`, nl === 'alto' ? `Nivel crítico: ${fmt(s.v)} ${t.unit}. Evita la zona.` : `Nivel en aumento: ${fmt(s.v)} ${t.unit}.`, nl);
+      beep(nl === 'alto');
+      if (nl === 'alto' && s.inc && !INC.some(i => i.sensor === s.id && i.estado !== 'Resuelto')) { createIotIncident(s); incChanged = true; }
+    } else {
+      logEvent({ lvl:nl, kind:'iot', title:`${s.n}: ${nl === 'bajo' ? 'nivel normalizado' : 'nivel en descenso'}`, sub:`Lectura actual ${fmt(s.v)} ${t.unit}` });
+    }
+    updateSensorMarker(s);
+  });
+  if (incChanged) onIncidentsChanged(); else refreshZones();
+}
+function tick() {
+  rain.k = rain.on ? Math.min(1, rain.k + 0.09) : Math.max(0, rain.k - 0.03);
+  SENSORES.forEach(s => {
+    const alpha = s.cat === 'lluvia' ? 0.4 : s.cat === 'acceso' ? 0.13 : 0.16;
+    const target = s.base + rain.k * s.peak;
+    const amp = s.cat === 'lluvia' ? 0.25 + rain.k * 3 : 0.12 + rain.k * 0.6;
+    const v = s.v + (target - s.v) * alpha + (Math.random() - .5) * amp;
+    s.v = Math.max(0, Math.round(v * 10) / 10);
+    s.hist.push({ t:now(), v:s.v }); if (s.hist.length > 40) s.hist.shift();
+    s.upd = now();
+    if (Math.random() < 0.015) s.bat = Math.max(15, s.bat - 1);
+    s.rssi = clamp(s.rssi + Math.round((Math.random() - .5) * 4), -84, -48);
+  });
+  evaluate();
+  refreshLive();
+}
+function setRain(on) {
+  rain.on = on;
+  document.body.classList.toggle('raining', on);
+  $$('.js-rain').forEach(b => { b.classList.toggle('on', on); b.querySelector('.txt').textContent = on ? 'Detener lluvia' : 'Simular lluvia intensa'; });
+  logEvent({ lvl: on ? 'alto' : null, kind:'sys', title: on ? 'Simulación: inicia lluvia intensa (El Niño costero)' : 'Simulación: la lluvia se detiene', sub: on ? 'Los sensores registrarán aumento de nivel y precipitación' : 'Los niveles bajarán gradualmente por drenaje' });
+  if (on) toast('Lluvia intensa simulada', 'Observa cómo suben los sensores y se disparan las alertas automáticas.', 'medio');
+  renderRainCard();
+}
+$$('.js-rain').forEach(b => b.addEventListener('click', () => setRain(!rain.on)));
+$('#btnSound').addEventListener('click', () => { soundOn = !soundOn; $('#btnSound').classList.toggle('off', !soundOn); toast(soundOn ? 'Sonido de alertas activado' : 'Sonido de alertas desactivado', 'Puedes cambiarlo cuando quieras.', null); });
+$('#btnReset').addEventListener('click', () => { location.hash = ''; location.reload(); });
+
+/* ---------- Refrescos ---------- */
+function refreshHeader() {
+  const lvl = globalLevel(), R = RIESGO[lvl];
+  const p = $('#hRisk'); p.querySelector('.dot').style.setProperty('--c', R.color);
+  p.querySelector('.txt').textContent = `Riesgo campus: ${R.sem} · ${fmt(maxRain())} mm/h`;
+  const tm = hhmm(now());
+  $('#pClock').textContent = tm;
+  $('#panelClock').textContent = 'En vivo · ' + hhmmss(now());
+  $('#iotClock').textContent = 'Gateway en línea · ' + hhmmss(now());
+}
+function refreshLive() {
+  refreshHeader();
+  renderHome();
+  renderRainCard();
+  if (panelReady) { renderKPIs(); renderCritBar(); }
+  if (iotReady) { renderSensors(); updateSensorChart(); }
+}
+function onIncidentsChanged() {
+  refreshMapsInc();
+  renderPanel();
+  renderHome();
+  renderSideStats();
+  if (MAPS.app) renderRecent();
+  if (modalId) openInc(modalId);
+  refreshHeader();
+}
+
+/* ---------- Arranque ---------- */
+function setHdr() { document.documentElement.style.setProperty('--hdr', $('#topbar').offsetHeight + 'px'); }
+window.addEventListener('resize', () => { setHdr(); Object.values(MAPS).forEach(m => m.map.invalidateSize()); if (pick.map) pick.map.invalidateSize(); });
+hydrateIcons();
+setHdr();
+if (!window.L) {
+  document.body.insertAdjacentHTML('afterbegin', '<div style="background:#fde6e6;color:#b91c1c;padding:10px 16px;font-weight:700;text-align:center">No se pudo cargar el mapa (Leaflet). Verifica tu conexión a Internet y recarga la página.</div>');
+}
+logEvent({ lvl:'bajo', kind:'sys', title:'Red IoT conectada', sub:`${SENSORES.length} sensores ESP32 en línea · gateway Wi-Fi/MQTT operativo` });
+logEvent({ lvl:'alto', kind:'app', title:'Nuevo reporte INC-0014 · Tablero eléctrico en riesgo', sub:'Biblioteca Central · pendiente de validación' });
+renderHome(); renderSideStats(); renderFeeds(); updateRiskPrev(); refreshHeader();
+showView(location.hash.slice(1) || 'app');
+setInterval(tick, TICK_MS);
+setInterval(() => {
+  const a = document.activeElement;
+  if (!(a && a.closest && a.closest('#tbody'))) renderTable();
+  if (MAPS.app) renderRecent();
+}, 30000);
+</script>
+</body>
+</html>
