@@ -37,7 +37,7 @@ h1,h2,h3,h4{line-height:1.2}
 body.raining .topbar::after{opacity:1}
 @keyframes rain{from{background-position:0 0}to{background-position:-60px 300px}}
 .topbar-in{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 20px;position:relative;z-index:1}
-.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:none}
 .brand svg{width:38px;height:38px;flex:none}
 .brand h1{font-size:19px;font-weight:800;letter-spacing:.07em}
 .brand small{display:block;font-size:11px;opacity:.8;font-weight:500;letter-spacing:0;white-space:nowrap}
@@ -434,6 +434,10 @@ footer button{color:var(--blue);font-weight:700;text-decoration:underline}
 
 /* ---------- Responsive ---------- */
 @media (max-width:1180px){
+  .topbar-in{flex-wrap:wrap;row-gap:8px}
+  .tabs{order:3;width:100%;margin:0}
+  .tab{flex:1;justify-content:center}
+  .top-actions{margin-left:auto}
   .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
   .admin-grid,.iot-bottom,.iot-top{grid-template-columns:minmax(0,1fr)}
   .app-wrap{grid-template-columns:410px minmax(0,1fr)}
@@ -712,7 +716,7 @@ footer button{color:var(--blue);font-weight:700;text-decoration:underline}
    Ajusta CENTER y las coordenadas de LUGARES si deseas
    afinar la ubicación exacta de los pabellones.
    ========================================================= */
-const CENTER = [-8.1132, -79.0373];
+const CENTER = [-8.1140, -79.0382];
 const ZOOM = 17;
 const MIN = 60000;
 const TICK_MS = 1500;
@@ -776,29 +780,29 @@ const BRIGADAS = ['Sin asignar', 'Brigada de Mantenimiento', 'Servicios Eléctri
 
 /* Ubicaciones referenciales dentro de la Ciudad Universitaria (aprox.) */
 const LUGARES = {
-  jesusNazaret:   { n:'Acceso Av. Jesús de Nazaret',            lat:-8.1106, lng:-79.0356, z:'Z1' },
-  puertaJP2:      { n:'Puerta principal · Av. Juan Pablo II',   lat:-8.1159, lng:-79.0381, z:'Z5' },
-  biblioteca:     { n:'Biblioteca Central',                     lat:-8.1131, lng:-79.0369, z:'Z2' },
-  quimica:        { n:'Fac. de Ing. Química · Laboratorios',    lat:-8.1117, lng:-79.0380, z:'Z3' },
-  ingenieria:     { n:'Pabellón de Ingeniería',                 lat:-8.1122, lng:-79.0395, z:'Z4' },
-  estacionamiento:{ n:'Estacionamiento de Ingeniería',          lat:-8.1132, lng:-79.0405, z:'Z4' },
-  fisicas:        { n:'Pab. de Cs. Físicas y Matemáticas',      lat:-8.1140, lng:-79.0392, z:'Z6' },
-  biologicas:     { n:'Fac. de Ciencias Biológicas',            lat:-8.1143, lng:-79.0357, z:'Z7' },
-  subestacion:    { n:'Subestación eléctrica',                  lat:-8.1151, lng:-79.0347, z:'Z7' },
-  farmacia:       { n:'Fac. de Farmacia y Bioquímica',          lat:-8.1123, lng:-79.0351, z:null },
-  medicina:       { n:'Fac. de Medicina',                       lat:-8.1111, lng:-79.0368, z:null },
-  derecho:        { n:'Fac. de Derecho y Cs. Políticas',        lat:-8.1144, lng:-79.0376, z:null },
-  educacion:      { n:'Fac. de Educación y Cs. de la Comunicación', lat:-8.1153, lng:-79.0364, z:null },
-  comedor:        { n:'Comedor Universitario',                  lat:-8.1152, lng:-79.0393, z:null }
+  jesusNazaret:   { n:'Acceso Av. Jesús de Nazaret',            lat:-8.11130, lng:-79.03630, z:'Z1' },
+  puertaJP2:      { n:'Puerta principal · Av. Juan Pablo II',   lat:-8.11585, lng:-79.03735, z:'Z5' },
+  biblioteca:     { n:'Biblioteca Central',                     lat:-8.11548, lng:-79.03868, z:'Z2' },
+  quimica:        { n:'Laboratorios de Química',                lat:-8.11289, lng:-79.03929, z:'Z3' },
+  ingenieria:     { n:'Pabellón de Ingeniería',                 lat:-8.11480, lng:-79.03960, z:'Z4' },
+  estacionamiento:{ n:'Estacionamiento de Ingeniería',          lat:-8.11555, lng:-79.04075, z:'Z4' },
+  fisicas:        { n:'Fac. de Cs. Físicas y Matemáticas',      lat:-8.11300, lng:-79.03815, z:'Z6' },
+  biologicas:     { n:'Escuela de Ciencias Biológicas',         lat:-8.11232, lng:-79.03861, z:null },
+  subestacion:    { n:'Subestación eléctrica (área de servicios)', lat:-8.11650, lng:-79.04110, z:'Z7' },
+  farmacia:       { n:'Escuela de Microbiología y Parasitología', lat:-8.11219, lng:-79.03817, z:null },
+  medicina:       { n:'Fac. de Ciencias Agropecuarias',         lat:-8.11475, lng:-79.03684, z:null },
+  derecho:        { n:'Fac. de Derecho y Cs. Políticas',        lat:-8.11467, lng:-79.03719, z:null },
+  educacion:      { n:'Fac. de Educación y Cs. de la Comunicación', lat:-8.11300, lng:-79.03613, z:null },
+  comedor:        { n:'Comedor Universitario',                  lat:-8.11611, lng:-79.03929, z:null }
 };
 const ZONAS = [
-  { id:'Z1', n:'Acceso Av. Jesús de Nazaret',      lat:-8.1106, lng:-79.0356, r:75, vuln:'alto',  d:'Punto bajo de la vía: se anega con lluvias intensas y bloquea el ingreso peatonal y vehicular.' },
-  { id:'Z2', n:'Biblioteca Central',               lat:-8.1131, lng:-79.0369, r:48, vuln:'alto',  d:'Azotea plana de gran área sobre el acervo bibliográfico; tableros en sótano.' },
-  { id:'Z3', n:'Laboratorios de Ing. Química',     lat:-8.1117, lng:-79.0380, r:45, vuln:'alto',  d:'Reactivos y equipos sensibles al agua; antecedentes de filtración.' },
-  { id:'Z4', n:'Pabellón de Ingeniería',           lat:-8.1127, lng:-79.0400, r:80, vuln:'medio', d:'Azoteas planas con sumideros pequeños y estacionamiento sin drenaje pluvial.' },
-  { id:'Z5', n:'Puerta principal Av. Juan Pablo II', lat:-8.1159, lng:-79.0381, r:60, vuln:'medio', d:'Acumulación de agua en vereda y paradero; alto tránsito de estudiantes.' },
-  { id:'Z6', n:'Pab. de Cs. Físicas y Matemáticas', lat:-8.1140, lng:-79.0392, r:40, vuln:'medio', d:'Tableros eléctricos en pasadizos expuestos a goteo.' },
-  { id:'Z7', n:'Biológicas y Subestación eléctrica', lat:-8.1147, lng:-79.0352, r:65, vuln:'medio', d:'Subestación cercana a zonas de escorrentía superficial.' }
+  { id:'Z1', n:'Acceso Av. Jesús de Nazaret',      lat:-8.11130, lng:-79.03630, r:60, vuln:'alto',  d:'Punto bajo de la vía: se anega con lluvias intensas y bloquea el ingreso peatonal y vehicular.' },
+  { id:'Z2', n:'Biblioteca Central',               lat:-8.11548, lng:-79.03868, r:42, vuln:'alto',  d:'Azotea plana de gran área sobre el acervo bibliográfico; tableros en sótano.' },
+  { id:'Z3', n:'Laboratorios de Química',          lat:-8.11289, lng:-79.03929, r:38, vuln:'alto',  d:'Reactivos y equipos sensibles al agua; antecedentes de filtración.' },
+  { id:'Z4', n:'Pabellón de Ingeniería',           lat:-8.11505, lng:-79.04000, r:75, vuln:'medio', d:'Azoteas planas con sumideros pequeños y estacionamiento sin drenaje pluvial.' },
+  { id:'Z5', n:'Puerta principal Av. Juan Pablo II', lat:-8.11585, lng:-79.03735, r:50, vuln:'medio', d:'Acumulación de agua en vereda y paradero; alto tránsito de estudiantes.' },
+  { id:'Z6', n:'Fac. de Cs. Físicas y Matemáticas', lat:-8.11300, lng:-79.03815, r:36, vuln:'medio', d:'Tableros eléctricos en pasadizos expuestos a goteo.' },
+  { id:'Z7', n:'Subestación y área de servicios', lat:-8.11650, lng:-79.04110, r:55, vuln:'medio', d:'Subestación cercana a zonas de escorrentía superficial.' }
 ];
 
 /* Umbrales por categoría de sensor */
@@ -813,17 +817,17 @@ const CAT_LBL = { nivel:'Nivel de agua', acceso:'Nivel en vía', lluvia:'Pluvió
 const SENSORES = [
   { id:'S01', code:'ESP32-AZ-01', n:'Azotea Biblioteca Central',            cat:'nivel',  at:'biblioteca',  base:0.6, peak:16,  inc:'azotea' },
   { id:'S02', code:'ESP32-AZ-02', n:'Azotea Pabellón de Ingeniería',        cat:'nivel',  at:'ingenieria',  base:0.8, peak:13,  inc:'azotea' },
-  { id:'S03', code:'ESP32-AZ-03', n:'Azotea Laboratorios Ing. Química',     cat:'nivel',  at:'quimica',     base:0.4, peak:8,   inc:'filtracion' },
+  { id:'S03', code:'ESP32-AZ-03', n:'Azotea Laboratorios de Química',     cat:'nivel',  at:'quimica',     base:0.4, peak:8,   inc:'filtracion' },
   { id:'S04', code:'ESP32-PL-01', n:'Pluviómetro · Azotea Biblioteca',      cat:'lluvia', at:'biblioteca',  base:0.3, peak:44,  inc:null },
   { id:'S05', code:'ESP32-AC-01', n:'Acceso Av. Jesús de Nazaret',          cat:'acceso', at:'jesusNazaret',base:2.4, peak:32,  inc:'inundacion' },
   { id:'S06', code:'ESP32-AC-02', n:'Puerta principal Av. Juan Pablo II',   cat:'acceso', at:'puertaJP2',   base:1.4, peak:15,  inc:'inundacion' },
-  { id:'S07', code:'ESP32-TB-01', n:'Cuarto de tableros · Pab. Cs. Físicas', cat:'nivel', at:'fisicas',     base:0.2, peak:6.5, inc:'tablero' },
+  { id:'S07', code:'ESP32-TB-01', n:'Cuarto de tableros · Fac. Cs. Físicas', cat:'nivel', at:'fisicas',     base:0.2, peak:6.5, inc:'tablero' },
   { id:'S08', code:'ESP32-PL-02', n:'Pluviómetro · Pabellón de Ingeniería', cat:'lluvia', at:'ingenieria',  base:0.2, peak:38,  inc:null }
 ];
 SENSORES.forEach((s, k) => {
   const L0 = LUGARES[s.at];
-  s.lat = L0.lat + (k % 2 ? 0.00016 : -0.00014);
-  s.lng = L0.lng + (k % 3 ? 0.00017 : -0.00015);
+  s.lat = L0.lat + (k % 2 ? 0.00011 : -0.0001);
+  s.lng = L0.lng + (k % 3 ? 0.00012 : -0.0001);
   s.z = L0.z; s.v = s.base; s.st = 'bajo'; s.since = now();
   s.bat = 78 + Math.round(Math.random() * 21); s.rssi = -55 - Math.round(Math.random() * 18); s.upd = now();
   s.hist = [];
@@ -835,7 +839,7 @@ function mkInc(o) {
   const L0 = LUGARES[o.lugar];
   const t = now();
   const inc = Object.assign({
-    lat: L0.lat + (Math.random() - .5) * 0.00022, lng: L0.lng + (Math.random() - .5) * 0.00022,
+    lat: L0.lat + (Math.random() - .5) * 0.00014, lng: L0.lng + (Math.random() - .5) * 0.00014,
     origen:'App', asignado:'Sin asignar', foto:null, mine:false, nuevo:false, sensor:null, atencion:null, resuelto:null
   }, o);
   inc.creado = t - o.creado * MIN;
@@ -849,19 +853,19 @@ function mkInc(o) {
   return inc;
 }
 const INC = [
-  mkInc({ id:'INC-0001', tipo:'filtracion', lugar:'quimica',  riesgo:'alto',  estado:'Resuelto', creado:1500, atencion:1463, resuelto:1300, asignado:'Brigada de Laboratorios', reportante:'Docente · Fac. de Ing. Química', desc:'Filtración en el techo del Laboratorio de Química Orgánica; cae agua cerca de la campana extractora y de frascos de reactivos.' }),
+  mkInc({ id:'INC-0001', tipo:'filtracion', lugar:'quimica',  riesgo:'alto',  estado:'Resuelto', creado:1500, atencion:1463, resuelto:1300, asignado:'Brigada de Laboratorios', reportante:'Docente · Laboratorios de Química', desc:'Filtración en el techo del Laboratorio de Química Orgánica; cae agua cerca de la campana extractora y de frascos de reactivos.' }),
   mkInc({ id:'INC-0002', tipo:'azotea',     lugar:'ingenieria', riesgo:'medio', estado:'Validado', creado:70, reportante:'Personal de mantenimiento', desc:'Azotea del Pabellón de Ingeniería con aprox. 8 cm de agua; sumideros obstruidos con hojas y tierra.' }),
   mkInc({ id:'INC-0003', tipo:'inundacion', lugar:'jesusNazaret', riesgo:'alto', estado:'Pendiente', creado:12, nuevo:true, reportante:'Estudiante · Derecho', desc:'Av. Jesús de Nazaret anegada frente al acceso; el agua llega a la vereda y los estudiantes no pueden ingresar.' }),
-  mkInc({ id:'INC-0004', tipo:'tablero',    lugar:'fisicas',  riesgo:'medio', estado:'Validado', creado:34, asignado:'Servicios Eléctricos', reportante:'Docente · Cs. Físicas y Matemáticas', desc:'Humedad y goteo leve sobre la caja del tablero eléctrico del 2.º piso, pasadizo norte.' }),
+  mkInc({ id:'INC-0004', tipo:'tablero',    lugar:'fisicas',  riesgo:'medio', estado:'Validado', creado:34, asignado:'Servicios Eléctricos', reportante:'Docente · Cs. Físicas y Matemáticas', desc:'Humedad y goteo leve sobre la caja del tablero eléctrico del 2.º piso de Físicas, pasadizo norte.' }),
   mkInc({ id:'INC-0005', tipo:'filtracion', lugar:'biblioteca', riesgo:'medio', estado:'En atención', creado:140, atencion:115, asignado:'Brigada de Mantenimiento', reportante:'Bibliotecaria · Hemeroteca', desc:'Filtración en sala de lectura del 2.º piso, sobre estantes de hemeroteca. Se colocaron baldes y se cubrieron libros.' }),
   mkInc({ id:'INC-0006', tipo:'azotea',     lugar:'comedor',  riesgo:'medio', estado:'Resuelto', creado:1560, atencion:1508, resuelto:1380, asignado:'Brigada de Mantenimiento', reportante:'Personal del comedor', desc:'Canaleta colapsada en la azotea del comedor; agua estancada sobre la losa de la cocina.' }),
-  mkInc({ id:'INC-0007', tipo:'filtracion', lugar:'farmacia', riesgo:'medio', estado:'Pendiente', creado:25, reportante:'Estudiante · Farmacia y Bioquímica', desc:'Mancha de humedad creciente en muro del laboratorio de microbiología, cerca de la incubadora.' }),
+  mkInc({ id:'INC-0007', tipo:'filtracion', lugar:'farmacia', riesgo:'medio', estado:'Pendiente', creado:25, reportante:'Estudiante · Microbiología y Parasitología', desc:'Mancha de humedad creciente en muro del laboratorio de microbiología, cerca de la incubadora.' }),
   mkInc({ id:'INC-0008', tipo:'inundacion', lugar:'puertaJP2', riesgo:'medio', estado:'Validado', creado:48, mine:true, reportante:'Tú · Estudiante de Ing. de Sistemas', desc:'Charco amplio en la puerta principal; los estudiantes rodean por la pista y hay riesgo con los vehículos.' }),
-  mkInc({ id:'INC-0009', tipo:'tablero',    lugar:'subestacion', riesgo:'medio', estado:'Resuelto', creado:2900, atencion:2859, resuelto:2700, asignado:'Servicios Eléctricos', reportante:'Seguridad y Vigilancia', desc:'Ingreso de agua por la puerta del cuarto de la subestación tras la lluvia de la madrugada.' }),
+  mkInc({ id:'INC-0009', tipo:'tablero',    lugar:'subestacion', riesgo:'medio', estado:'Resuelto', creado:2900, atencion:2859, resuelto:2700, asignado:'Servicios Eléctricos', reportante:'Seguridad y Vigilancia', desc:'Ingreso de agua por la puerta del cuarto de la subestación del área de servicios tras la lluvia de la madrugada.' }),
   mkInc({ id:'INC-0010', tipo:'azotea',     lugar:'derecho',  riesgo:'bajo',  estado:'Resuelto', creado:4300, atencion:4270, resuelto:4100, asignado:'Brigada de Mantenimiento', reportante:'Personal administrativo', desc:'Agua estancada en un sector del techo plano de la facultad, sin filtración al interior.' }),
   mkInc({ id:'INC-0011', tipo:'filtracion', lugar:'educacion', riesgo:'bajo', estado:'Pendiente', creado:8, nuevo:true, reportante:'Estudiante · Educación', desc:'Filtración leve por el marco de la ventana del aula 204.' }),
   mkInc({ id:'INC-0012', tipo:'inundacion', lugar:'estacionamiento', riesgo:'bajo', estado:'En atención', creado:64, atencion:20, asignado:'Seguridad y Vigilancia', reportante:'Seguridad y Vigilancia', desc:'Encharcamiento en el estacionamiento de Ingeniería; se señalizó el área con conos.' }),
-  mkInc({ id:'INC-0013', tipo:'azotea',     lugar:'medicina', riesgo:'medio', estado:'Pendiente', creado:18, reportante:'Personal de mantenimiento', desc:'Agua acumulada sobre la losa del 3.er piso; el sumidero principal está tapado.' }),
+  mkInc({ id:'INC-0013', tipo:'azotea',     lugar:'medicina', riesgo:'medio', estado:'Pendiente', creado:18, reportante:'Personal de mantenimiento', desc:'Agua acumulada sobre la losa del 2.º piso; el sumidero principal está tapado.' }),
   mkInc({ id:'INC-0014', tipo:'tablero',    lugar:'biblioteca', riesgo:'alto', estado:'Pendiente', creado:5, nuevo:true, reportante:'Personal de la Biblioteca', desc:'Goteo en el sótano junto al tablero eléctrico general; se percibe olor a humedad. Hay personal trabajando cerca.' })
 ];
 
