@@ -1,0 +1,17 @@
+{
+  "name": "PREVIUNT – Alerta quebrada San Ildefonso",
+  "short_name": "PREVIUNT",
+  "description": "Prevención y alerta temprana ante huaicos y lluvias intensas en Trujillo.",
+  "lang": "es-PE",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F7F5",
+  "theme_color": "#1565C0",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

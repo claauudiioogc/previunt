@@ -1,0 +1,25 @@
+{
+  "rules": {
+    "quebrada_san_ildefonso": {
+      ".read": true,
+      ".write": true
+    },
+    "demo": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "reportes": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null",
+        "descripcion": { ".validate": "newData.isString() && newData.val().length <= 200" },
+        "tipo": { ".validate": "newData.val() === 'bloqueo' || newData.val() === 'inundacion' || newData.val() === 'huaico' || newData.val() === 'afectados' || newData.val() === 'otro'" }
+      }
+    },
+    "historial_nivel": {
+      ".read": true,
+      ".indexOn": ["fecha"],
+      "$id": { ".write": "auth != null" }
+    }
+  }
+}
