@@ -36,7 +36,7 @@ const RADIO_CERCANOS_M = 1000;
 /* Mapa base más limpio (CARTO Voyager). Clave gratuita, sin cuenta: https://carto.com/basemaps/apikey
    (uso no comercial gratis hasta 5 millones de teselas al mes; hay que mantener visible "© OpenStreetMap, © CARTO").
    Vacía = se usa OpenStreetMap estándar. */
-const CARTO_KEY = "";               // Inicio solo muestra reportes a menos de 1 km                    // un tramo reportado no puede medir más de 2 km
+const CARTO_KEY = "cb1_5fmm_1_22186419f51462a8001d1885";               // Inicio solo muestra reportes a menos de 1 km                    // un tramo reportado no puede medir más de 2 km
 /* Modo cercanía (se activa en el centro de control; apagado por defecto para la demo) */
 const RADIO_REPORTE_M = 500;                 // solo se puede reportar a menos de 500 m de donde estás
 const RADIO_VOTO_M = 1000;                   // solo validan quienes están a menos de 1 km del reporte
@@ -844,8 +844,13 @@ function iniciarMapa() {
   });
   // Tocar la foto del reporte la abre en grande, centrada
   mapa.on("popupopen", (ev) => {
-    const img = ev.popup.getElement()?.querySelector(".popup-rep img");
-    if (img) img.onclick = () => { if (img.src && img.src.startsWith("data:")) abrirVisor(img.src, img.dataset.pie || ""); };
+    const b = ev.popup.getElement()?.querySelector(".popup-mini");
+    if (!b) return;
+    b.onclick = () => {
+      const img = b.querySelector("img");
+      if (img.src && img.src.startsWith("data:")) { mapa.closePopup(); abrirVisor(img.src, img.dataset.pie || ""); }
+      else toast("La foto aún se está cargando");
+    };
   });
 
   // Votos desde el popup (delegación de eventos)
@@ -933,13 +938,13 @@ function pintarReportes(forzar = true) {
       L.polyline(tramo, { color: "#fff", weight: 11, opacity: 0.9 }).addTo(capas.bloqueos);
       L.polyline(tramo, { color: colorT, weight: 7, opacity: 0.95, dashArray: conf ? null : "8 8" })
         .bindTooltip(`${T.nombre} · tramo de ~${Math.round(r.largo || 0)} m · ${NOMBRE_ESTADO[est]}`)
-        .bindPopup(() => htmlPopup(id, r, est), { maxWidth: 280 })
+        .bindPopup(() => htmlPopup(id, r, est), { maxWidth: 270, autoPanPaddingTopLeft: [12, 70], autoPanPaddingBottomRight: [12, 150] })
         .addTo(capas.bloqueos);
     } else if (conf && r.tipo === "bloqueo") {
       L.circle([r.lat, r.lng], { radius: 70, color: "#C62828", weight: 3, fillColor: "#C62828", fillOpacity: 0.35 })
         .bindTooltip("Calle bloqueada (confirmada)").addTo(capas.bloqueos);
     }
-    marcadoresReporte[id] = L.marker([r.lat, r.lng], { icon: icono, title: T.nombre }).bindPopup(() => htmlPopup(id, r, est), { maxWidth: 280 }).addTo(capas.reportes);
+    marcadoresReporte[id] = L.marker([r.lat, r.lng], { icon: icono, title: T.nombre }).bindPopup(() => htmlPopup(id, r, est), { maxWidth: 270, autoPanPaddingTopLeft: [12, 70], autoPanPaddingBottomRight: [12, 150] }).addTo(capas.reportes);
   });
 }
 
@@ -1016,10 +1021,13 @@ function htmlPopup(id, r, est) {
   const dis = esMio || yaVote || lejos ? "disabled" : "";
   const estado = r.verificadoAutoridad ? "Verificado por la autoridad" : NOMBRE_ESTADO[est];
   return `<div class="popup-rep">
-    <h4>${ic(T.icono)} ${esc(T.nombre)}</h4>
-    <span class="cuenta">${estado} · ${hace(r.creado)}${trazoDe(r) ? ` · tramo de ${Math.round(r.largo || 0)} m` : ""}</span>
-    ${r.foto ? `<img src="${esc(r.foto)}" alt="Foto del reporte" data-pie="${esc(T.nombre)} · ${hace(r.creado)}">` : r.tieneFoto ? `<img data-foto-id="${esc(id)}" alt="Foto del reporte (cargando)" data-pie="${esc(T.nombre)} · ${hace(r.creado)}">` : ""}
-    ${r.descripcion ? `<p>${esc(r.descripcion)}</p>` : ""}
+    <div class="popup-cab">
+      ${r.foto || r.tieneFoto ? `<button type="button" class="popup-mini" aria-label="Ver foto en grande">
+        <img ${r.foto ? `src="${esc(r.foto)}"` : `data-foto-id="${esc(id)}"`} alt="" data-pie="${esc(T.nombre)} · ${hace(r.creado)}">${ic("maximize")}</button>` : ""}
+      <div><h4>${ic(T.icono)} ${esc(T.nombre)}</h4>
+      <span class="cuenta">${estado} · ${hace(r.creado)}${trazoDe(r) ? ` · tramo de ${Math.round(r.largo || 0)} m` : ""}</span></div>
+    </div>
+    ${r.descripcion ? `<p class="popup-desc">${esc(r.descripcion)}</p>` : ""}
     <p class="pregunta">¿Sigue este problema?</p>
     <div class="votos">
       <button class="si" data-voto="1" data-id="${esc(id)}" ${dis}>${ic("check")}Confirmar</button>

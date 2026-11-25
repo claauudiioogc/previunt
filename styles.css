@@ -462,3 +462,15 @@ textarea:focus { outline: none; border-color: var(--azul); }
 
 /* Mapa base OSM un poco más sobrio (si no hay clave de CARTO) */
 .teselas-osm { filter: saturate(.65) brightness(1.03); }
+
+/* Popup compacto: miniatura a la izquierda; al tocarla se abre el visor */
+.popup-rep img { cursor: default; }
+.popup-cab { display: flex; gap: 10px; align-items: center; }
+.popup-cab h4 { margin: 0 0 2px; }
+.popup-mini { position: relative; flex: none; width: 64px; height: 64px; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: var(--fondo); cursor: zoom-in; }
+.popup-rep .popup-mini img { width: 64px; height: 64px; max-height: none; margin: 0; border-radius: 0; object-fit: cover; display: block; }
+.popup-mini .ic { position: absolute; right: 3px; bottom: 3px; width: 18px; height: 18px; padding: 2px; border-radius: 5px; background: rgba(14,40,70,.75); color: #fff; }
+.popup-desc { margin: 8px 0 0; }
+.leaflet-popup-content { margin: 12px 14px; }
+.popup-rep { min-width: 236px; }
+.popup-rep .votos button { white-space: nowrap; padding: 0 8px; font-size: .88rem; }
