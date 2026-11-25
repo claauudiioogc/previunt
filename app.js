@@ -32,7 +32,11 @@ const REPORTE_CADUCA_MS = 6 * 60 * 60 * 1000; // 6 h sin nuevas confirmaciones
 const VOTOS_MIN = 3;
 const RADIO_ALERTA_HUAICO_M = 1000;
 const TRAMO_MAX_M = 2000;
-const RADIO_CERCANOS_M = 1000;               // Inicio solo muestra reportes a menos de 1 km                    // un tramo reportado no puede medir más de 2 km
+const RADIO_CERCANOS_M = 1000;
+/* Mapa base más limpio (CARTO Voyager). Clave gratuita, sin cuenta: https://carto.com/basemaps/apikey
+   (uso no comercial gratis hasta 5 millones de teselas al mes; hay que mantener visible "© OpenStreetMap, © CARTO").
+   Vacía = se usa OpenStreetMap estándar. */
+const CARTO_KEY = "";               // Inicio solo muestra reportes a menos de 1 km                    // un tramo reportado no puede medir más de 2 km
 /* Modo cercanía (se activa en el centro de control; apagado por defecto para la demo) */
 const RADIO_REPORTE_M = 500;                 // solo se puede reportar a menos de 500 m de donde estás
 const RADIO_VOTO_M = 1000;                   // solo validan quienes están a menos de 1 km del reporte
@@ -127,20 +131,20 @@ const NUMEROS_EMERGENCIA = [
 /* Mochila para emergencias – "Combo de Supervivencia" de INDECI (cartilla OGRD del Congreso, 2025).
    Máximo 8 kg; una mochila por cada dos personas. */
 const MOCHILA = [
-  "Agua: 1 litro por persona",
-  "Alimentos no perecibles: enlatados, barras energéticas, galletas, frutos secos",
-  "Botiquín: alcohol, gasas, vendas, curitas, mascarillas, guantes y tus medicinas",
-  "Higiene: gel antibacterial, papel higiénico, toallas higiénicas, paños húmedos, jabón",
-  "Una manta y una muda de ropa",
-  "Radio a pilas, linterna y pilas de repuesto",
-  "Silbato",
-  "Cargador portátil para el celular",
-  "Dinero en efectivo (de preferencia monedas)",
-  "Copias del DNI y documentos de la casa en bolsa plástica",
-  "Mapa de tu zona segura y punto de reunión + plan familiar de emergencia",
-  "Directorio de teléfonos de emergencia y un lapicero",
-  "Llaves de repuesto (casa, auto o moto)",
-  "Bolsas plásticas, cinta adhesiva, soga y guantes de trabajo"
+  { corto: "Agua", icono: "glass-water", color: "#1E88E5", detalle: "1 litro de agua por persona" },
+  { corto: "Comida", icono: "sandwich", color: "#EF8F00", detalle: "Alimentos no perecibles: enlatados, barras energéticas, galletas, frutos secos" },
+  { corto: "Botiquín", icono: "briefcase-medical", color: "#D32F2F", detalle: "Alcohol, gasas, vendas, curitas, mascarillas, guantes y tus medicinas" },
+  { corto: "Higiene", icono: "soap", color: "#00897B", detalle: "Gel antibacterial, papel higiénico, toallas higiénicas, paños húmedos, jabón" },
+  { corto: "Ropa y manta", icono: "shirt", color: "#6D4C41", detalle: "Una manta y una muda de ropa" },
+  { corto: "Radio y linterna", icono: "flashlight", color: "#F9A825", detalle: "Radio a pilas, linterna y pilas de repuesto" },
+  { corto: "Silbato", icono: "whistle", color: "#5E35B1", detalle: "Silbato para pedir ayuda" },
+  { corto: "Cargador", icono: "battery-charging", color: "#2E7D32", detalle: "Cargador portátil para el celular" },
+  { corto: "Dinero", icono: "banknote", color: "#388E3C", detalle: "Dinero en efectivo, de preferencia monedas" },
+  { corto: "Documentos", icono: "id-card", color: "#1565C0", detalle: "Copias del DNI y documentos de la casa en bolsa plástica" },
+  { corto: "Plan familiar", icono: "map", color: "#00838F", detalle: "Mapa de tu zona segura, punto de reunión y plan familiar de emergencia" },
+  { corto: "Teléfonos", icono: "notebook-pen", color: "#455A64", detalle: "Directorio de teléfonos de emergencia y un lapicero" },
+  { corto: "Llaves", icono: "key-round", color: "#8D6E63", detalle: "Llaves de repuesto de la casa, auto o moto" },
+  { corto: "Bolsas y soga", icono: "package", color: "#795548", detalle: "Bolsas plásticas, cinta adhesiva, soga y guantes de trabajo" }
 ];
 const FUENTE_MOCHILA = "https://www.congreso.gob.pe/Docs/riesgodesastres/files/ogrd-combo-superviviencia_2025.pdf";
 const FUENTE_GUIA = "https://www.congreso.gob.pe/Docs/riesgodesastres/files/ogrd-huaicos-aluviones_2025.pdf";
@@ -804,9 +808,16 @@ function iniciarMapa() {
     return;
   }
   mapa = L.map("mapa", { zoomControl: true, attributionControl: true, zoomSnap: 0.5 }).setView([-8.100, -79.020], 13);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-  }).addTo(mapa);
+  if (CARTO_KEY) {
+    L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_KEY)}`, {
+      maxNativeZoom: 18, maxZoom: 20,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attribution/">CARTO</a>'
+    }).addTo(mapa);
+  } else {
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, className: "teselas-osm", attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(mapa);
+  }
   // Cauce y zonas de sirena: ocultos por defecto (se muestran con los botones del mapa)
   capas.zonas = L.layerGroup();
   capas.cauce = L.layerGroup();
@@ -830,6 +841,11 @@ function iniciarMapa() {
       const f = await Datos.getFoto(id, S.reportes[id]);
       if (f) img.src = f; else img.alt = "Foto no disponible";
     } catch (e) { console.warn("Foto:", e); img.alt = "Foto no disponible"; }
+  });
+  // Tocar la foto del reporte la abre en grande, centrada
+  mapa.on("popupopen", (ev) => {
+    const img = ev.popup.getElement()?.querySelector(".popup-rep img");
+    if (img) img.onclick = () => { if (img.src && img.src.startsWith("data:")) abrirVisor(img.src, img.dataset.pie || ""); };
   });
 
   // Votos desde el popup (delegación de eventos)
@@ -1002,7 +1018,7 @@ function htmlPopup(id, r, est) {
   return `<div class="popup-rep">
     <h4>${ic(T.icono)} ${esc(T.nombre)}</h4>
     <span class="cuenta">${estado} · ${hace(r.creado)}${trazoDe(r) ? ` · tramo de ${Math.round(r.largo || 0)} m` : ""}</span>
-    ${r.foto ? `<img src="${esc(r.foto)}" alt="Foto del reporte">` : r.tieneFoto ? `<img data-foto-id="${esc(id)}" alt="Foto del reporte (cargando)">` : ""}
+    ${r.foto ? `<img src="${esc(r.foto)}" alt="Foto del reporte" data-pie="${esc(T.nombre)} · ${hace(r.creado)}">` : r.tieneFoto ? `<img data-foto-id="${esc(id)}" alt="Foto del reporte (cargando)" data-pie="${esc(T.nombre)} · ${hace(r.creado)}">` : ""}
     ${r.descripcion ? `<p>${esc(r.descripcion)}</p>` : ""}
     <p class="pregunta">¿Sigue este problema?</p>
     <div class="votos">
@@ -1136,6 +1152,14 @@ async function mostrarEvacuacion() {
   mapa.fitBounds(L.latLngBounds([p, fin].concat(ruta.trazo)), { paddingTopLeft: [30, 230], paddingBottomRight: [30, 170], animate: false });
 }
 
+function abrirVisor(src, pie) {
+  $("#visorImg").src = src;
+  $("#visorPie").textContent = pie;
+  $("#visorFoto").hidden = false;
+  $("#btnCerrarVisor").focus();
+}
+function cerrarVisor() { $("#visorFoto").hidden = true; $("#visorImg").removeAttribute("src"); }
+
 /* ---------------------------------------------------------------------
    NUEVO REPORTE
 --------------------------------------------------------------------- */
@@ -1147,7 +1171,31 @@ function abrirReporte() {
   // Reporte nuevo: empezar desde arriba (si no, la cabecera fija tapa los primeros botones)
   if (!R.tipo && R.lat === null && !R.trazo) $("#formReporte").scrollTop = 0;
   $("#avisoProximidad").hidden = !proximidadActiva();
+  actualizarBotonesUbicacion();
+  if (R.forma === "punto" && R.lat === null) usarGPSReporte();
   validarFormReporte();
+}
+/* Punto: por defecto es tu ubicación (GPS). "Elegir otro lugar" solo aparece cuando la app
+   permite reportar desde cualquier lugar (modo cercanía apagado). */
+function actualizarBotonesUbicacion() {
+  const porGPS = typeof R.origenUbic === "string" && R.origenUbic.startsWith("GPS");
+  $("#btnElegirMapa").hidden = proximidadActiva();
+  $("#btnGPS").hidden = porGPS || buscandoGPS;
+}
+let buscandoGPS = false;
+async function usarGPSReporte() {
+  if (buscandoGPS) return;
+  buscandoGPS = true; actualizarBotonesUbicacion();
+  $("#textoUbicacion").textContent = "Buscando tu ubicación…";
+  const u = await pedirUbicacion();
+  buscandoGPS = false;
+  // Si mientras tanto eligió otro lugar en el mapa o cambió a tramo, no se pisa su elección
+  if (R.forma !== "punto" || R.origenUbic === "elegida en el mapa") { actualizarBotonesUbicacion(); return; }
+  if (u) { fijarUbicacionReporte(u.lat, u.lng, `GPS ±${u.precision} m`); mapa?.setView([u.lat, u.lng], 16, { animate: false }); }
+  else $("#textoUbicacion").textContent = proximidadActiva()
+    ? "Activa la ubicación de tu celular para reportar."
+    : "No se pudo usar tu ubicación. Elige el lugar en el mapa.";
+  actualizarBotonesUbicacion();
 }
 function cerrarReporte(limpiar = true) {
   $("#hojaReporte").hidden = true;
@@ -1169,7 +1217,8 @@ function validarFormReporte() {
 }
 function fijarUbicacionReporte(lat, lng, origen) {
   R.lat = lat; R.lng = lng; R.origenUbic = origen;
-  $("#textoUbicacion").textContent = `Ubicación ${origen === "elegida en el mapa" ? "elegida en el mapa" : "por " + origen}.`;
+  $("#textoUbicacion").textContent = origen === "elegida en el mapa" ? "Lugar elegido en el mapa." : `Tu ubicación actual (${origen}).`;
+  actualizarBotonesUbicacion();
   if (mapa) {
     if (marcadorTemp) marcadorTemp.setLatLng([lat, lng]);
     else marcadorTemp = L.marker([lat, lng], { icon: L.divIcon({ className: "", html: '<div class="mk-temp"></div>', iconSize: [26, 26], iconAnchor: [13, 13] }) }).addTo(mapa);
@@ -1223,9 +1272,12 @@ function elegirForma(forma) {
   R.lat = R.lng = null; R.trazo = null; R.metodoTrazo = null; R.largo = null;
   if (marcadorTemp) { marcadorTemp.remove(); marcadorTemp = null; }
   if (capaTemp) { capaTemp.remove(); capaTemp = null; }
+  R.origenUbic = null;
   $("#textoUbicacion").textContent = forma === "tramo"
     ? "Marca dónde empieza y dónde termina el problema en la calle."
     : "Sin ubicación todavía.";
+  actualizarBotonesUbicacion();
+  if (forma === "punto" && !$("#hojaReporte").hidden) usarGPSReporte();
   validarFormReporte();
 }
 
@@ -1339,12 +1391,10 @@ function prepararFormReporte() {
   });
   $("#btnQuitarFoto").onclick = () => { R.foto = null; $("#inputFoto").value = ""; $("#previewFoto").hidden = true; };
   $("#inputDesc").addEventListener("input", (e) => ($("#contadorDesc").textContent = e.target.value.length));
-  $("#btnGPS").onclick = async () => {
-    $("#textoUbicacion").textContent = "Buscando tu ubicación…";
-    const u = await pedirUbicacion();
-    if (u) { fijarUbicacionReporte(u.lat, u.lng, `GPS ±${u.precision} m`); mapa?.setView([u.lat, u.lng], 16, { animate: false }); }
-    else $("#textoUbicacion").textContent = "No se pudo usar el GPS. Toca el mapa para ubicarlo.";
-  };
+  $("#btnGPS").onclick = () => usarGPSReporte();
+  $("#btnCerrarVisor").onclick = cerrarVisor;
+  $("#visorFoto").addEventListener("click", (e) => { if (e.target.id === "visorFoto") cerrarVisor(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#visorFoto").hidden) cerrarVisor(); });
   $("#btnElegirMapa").onclick = () => {
     cerrarReporte(false);
     irATab("mapa");
@@ -1410,24 +1460,44 @@ function renderGuia() {
 function renderPreparate() {
   renderGuia();
 
-  const marcados = lsGet("previunt_mochila", {});
-  $("#listaMochila").innerHTML = MOCHILA.map((m, i) =>
-    `<li><label><input type="checkbox" data-i="${i}" ${marcados[i] ? "checked" : ""}><span>${esc(m)}</span></label></li>`).join("");
-  const progreso = () => {
-    const m = lsGet("previunt_mochila", {});
-    $("#mochilaProgreso").textContent = `${Object.values(m).filter(Boolean).length}/${MOCHILA.length}`;
+  renderMochila();
+  $("#listaMochila").onclick = (ev) => {
+    const b = ev.target.closest(".objeto"); if (!b) return;
+    const i = Number(b.dataset.i), m = lsGet("previunt_mochila", {});
+    m[i] = !m[i]; lsSet("previunt_mochila", m);
+    const O = MOCHILA[i];
+    $("#mochilaDetalle").innerHTML = `<strong>${esc(O.corto)}</strong>: ${esc(O.detalle)}${m[i] ? "" : " (lo sacaste)"}`;
+    renderMochila(i);
   };
-  $("#listaMochila").onchange = (e) => {
-    const m = lsGet("previunt_mochila", {}); m[e.target.dataset.i] = e.target.checked; lsSet("previunt_mochila", m); progreso();
+  $("#btnReiniciarMochila").onclick = () => {
+    lsSet("previunt_mochila", {});
+    $("#mochilaDetalle").textContent = "Toca cada cosa cuando ya la tengas.";
+    renderMochila();
   };
-  $("#btnReiniciarMochila").onclick = () => { lsSet("previunt_mochila", {}); renderPreparate(); };
-  progreso();
 
   $("#listaNumeros").innerHTML = NUMEROS_EMERGENCIA.map((n) =>
     `<li class="${n.mostrar ? "ancho" : ""}"><a href="tel:${n.numero}">${ic("phone")}<span><span class="num">${esc(n.mostrar || n.numero)}</span><span class="nombre">${esc(n.nombre)}</span></span></a></li>`).join("");
   $("#numerosFuente").innerHTML = '<a href="https://www.gob.pe/547" target="_blank" rel="noopener">gob.pe</a>, Gob. Regional La Libertad. Lluvia: ERA5 (Open-Meteo). Mapa: © OpenStreetMap.';
   $("#fuenteGuia").href = FUENTE_GUIA;
   $("#fuenteMochila").href = FUENTE_MOCHILA;
+}
+
+/* Mochila: cada objeto se enciende al tocarlo; con los 14, "Mochila lista" */
+function renderMochila(recien = null) {
+  const m = lsGet("previunt_mochila", {});
+  const total = MOCHILA.length, n = MOCHILA.filter((_, i) => m[i]).length;
+  $("#listaMochila").innerHTML = MOCHILA.map((O, i) =>
+    `<button type="button" class="objeto${i === recien && m[i] ? " encendido" : ""}" data-i="${i}" aria-pressed="${!!m[i]}" style="--oc:${O.color}">${ic(O.icono)}<span>${esc(O.corto)}</span></button>`).join("");
+  const completa = n === total;
+  const mo = $("#mochila");
+  const antes = mo.classList.contains("completa");
+  mo.classList.toggle("completa", completa);
+  mo.classList.toggle("recien", completa && !antes && recien !== null);
+  mo.style.setProperty("--p", `${Math.round((n / total) * 100)}%`);
+  $("#mochilaLista").hidden = !completa;
+  const pill = $("#mochilaProgreso");
+  pill.textContent = completa ? "Lista" : `${n} de ${total}`;
+  pill.classList.toggle("lista", completa);
 }
 
 /* ---------------------------------------------------------------------
