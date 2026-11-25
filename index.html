@@ -54,14 +54,20 @@
           <p id="estadoMensaje" class="estado-mensaje"></p>
           <p id="estadoMeta" class="estado-meta"></p>
         </div>
-        <!-- Escalera de estados: seco, en aumento, huaico (vecinos), desborde (autoridad) -->
+        <!-- Escalera de estados de la quebrada (los publica la autoridad) -->
         <div id="medidorNivel" class="regla" data-nivel="x" role="img" aria-label="Nivel de la quebrada">
           <span class="regla-marca" data-n="3">Desborde</span>
-          <span class="regla-marca" data-n="2">Huaico</span>
           <span class="regla-marca" data-n="1">Aumento</span>
           <span class="regla-marca regla-base" data-n="0">Seco</span>
         </div>
       </article>
+
+      <!-- Aviso vecinal: huaico confirmado cerca (sin alarma) -->
+      <button id="avisoVecinal" class="aviso-vecinal" hidden>
+        <svg class="ic" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
+        <span><strong>Cuidado al salir</strong><span id="avisoVecinalTexto"></span></span>
+        <svg class="ic ic-flecha" aria-hidden="true"><use href="#i-map"/></svg>
+      </button>
 
       <!-- Clima, justo debajo del estado -->
       <section id="tarjetaClima" class="clima-tira" aria-label="Clima">
@@ -110,7 +116,6 @@
           <button class="chip" data-capa="reportes" aria-pressed="true">Reportes</button>
           <button class="chip" data-capa="cauce" aria-pressed="false">Cauce</button>
           <button class="chip" data-capa="zonas" aria-pressed="false">Zonas de sirena</button>
-          <button class="chip" data-capa="satelite" aria-pressed="false">Satélite</button>
           <button class="chip chip-ico" id="btnCentrarme" aria-label="Mi ubicación">
             <svg class="ic" aria-hidden="true"><use href="#i-locate-fixed"/></svg></button>
         </div>

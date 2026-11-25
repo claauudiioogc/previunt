@@ -60,7 +60,7 @@ const NIVELES = [
   },
   {
     n: 2, estado: "HUAICO", corto: "Huaico", color: "#EF6C00", titulo: "Huaico reportado", icono: "triangle-alert",
-    mensaje: "Vecinos confirmaron un huaico cerca. Prepárate para evacuar.",
+    mensaje: "Vecinos reportaron un huaico cerca. Cuidado al salir.",
     acciones: ["Prepárate para evacuar", "Ubica a tu familia", "No cruces agua ni lodo"]
   },
   {
@@ -511,18 +511,10 @@ function alertaPorReportes() {
   return mejor;
 }
 
-/* Nivel efectivo que muestra la app: el mayor entre la quebrada y la alerta por reportes */
+/* El estado (y la alarma) es solo el de la quebrada, publicado por la autoridad.
+   Un huaico reportado por vecinos NO activa la alarma: se muestra como aviso de "Cuidado al salir". */
 function estadoEfectivo() {
-  const b = estadoBase();
-  const a = alertaPorReportes();
-  if (a && (b.nivel === null || a.nivel > b.nivel)) {
-    return {
-      nivel: a.nivel, fuente: a.nivel === 3 ? "reporteAutoridad" : "reporteVecinos",
-      ts: Math.max(a.r.verificadoEn || 0, a.r.ultimaConfirmacion || 0, a.r.creado || 0),
-      reporteId: a.id, reporte: a.r, dist: a.dist, base: b
-    };
-  }
-  return b;
+  return estadoBase();
 }
 const esPorReporte = (e) => e.fuente === "reporteAutoridad" || e.fuente === "reporteVecinos";
 
@@ -820,7 +812,6 @@ function iniciarMapa() {
   }
   // Cauce y zonas de sirena: ocultos por defecto (se muestran con los botones del mapa)
   capas.zonas = L.layerGroup();
-  capas.satelite = crearCapaSatelite();
   capas.cauce = L.layerGroup();
   capas.bloqueos = L.layerGroup().addTo(mapa);
   capas.reportes = L.layerGroup().addTo(mapa);
@@ -880,36 +871,6 @@ function iniciarMapa() {
 function colorNivelActual() {
   const n = estadoBase().nivel;
   return n === null ? "#9E9E9E" : NIVELES[n].color;
-}
-
-/* Imagen satelital del día anterior: NASA GIBS, VIIRS (Suomi NPP) color real, 250 m por píxel.
-   Sirve para ver nubes y sistemas de lluvia sobre Trujillo; no tiene detalle para ver el cauce.
-   Si la imagen no carga, no se muestra nada (no se inventa). */
-let fechaSatelite = "";
-function crearCapaSatelite() {
-  fechaSatelite = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
-  const capa = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${fechaSatelite}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`, {
-    maxNativeZoom: 9, maxZoom: 20, opacity: 0.85,
-    attribution: `Imagen satelital: NASA GIBS / VIIRS, ${fechaSatelite}`
-  });
-  let errores = 0, cargadas = 0;
-  capa.on("tileload", () => { cargadas++; });
-  capa.on("tileerror", () => {
-    errores++;
-    if (errores >= 2 && cargadas === 0 && mapa?.hasLayer(capa)) {
-      capa.remove();
-      $('.chip[data-capa="satelite"]')?.setAttribute("aria-pressed", "false");
-      toast("Sin imagen satelital disponible para ayer.");
-    }
-  });
-  return capa;
-}
-function alternarSatelite(on) {
-  if (!mapa) return;
-  if (on) {
-    capas.satelite.addTo(mapa); capas.satelite.bringToFront();
-    toast(`Satélite VIIRS (NASA), ${fechaSatelite}. Muestra nubes y lluvia, no el cauce.`);
-  } else capas.satelite.remove();
 }
 
 function pintarCauceYZonas() {
@@ -1647,7 +1608,7 @@ function renderAdmin() {
   const al = alertaPorReportes();
   $("#btnDemoOff").hidden = !S.demo?.activo;
   $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Simulación activa: ${NIVELES[S.demo.nivel]?.corto || S.demo.nivel}` : eb.fuente === "autoridad" ? `Estado oficial: ${NIVELES[eb.nivel].corto} · ${eb.cita || "sin fuente"}` : "Sin estado oficial publicado.")
-    + (al ? ` · Alerta por reporte de huaico: ${al.nivel === 3 ? "ROJO (verificado por autoridad)" : "NARANJA (3 vecinos)"}` : "");
+    + (al ? ` · Aviso "Cuidado al salir" activo por un huaico reportado` : "");
   $("#adminConexion").innerHTML = Datos.modo === "firebase"
     ? `Conectado a Firebase · usuario anónimo <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`
     : `Modo LOCAL (sin Firebase): datos solo en este navegador · usuario <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`;
@@ -1744,8 +1705,34 @@ function irATab(nombre) {
 /* ---------------------------------------------------------------------
    ARRANQUE
 --------------------------------------------------------------------- */
+/* "Cuidado al salir": huaico confirmado por 3 vecinos (o verificado por la autoridad) a menos de 1 km */
+function renderAvisoVecinal() {
+  const a = alertaPorReportes();
+  const caja = $("#avisoVecinal");
+  if (!a) { caja.hidden = true; return; }
+  caja.hidden = false;
+  caja.dataset.rep = a.id;
+  const donde = a.dist !== null && a.dist !== undefined ? `a ${Math.round(a.dist / 10) * 10} m de ti` : "en la ciudad";
+  const quien = a.r.verificadoAutoridad ? "Verificado por la autoridad" : `Confirmado por ${a.r.confirmaciones || 0} vecinos`;
+  $("#avisoVecinalTexto").textContent = `Tránsito de huaico reportado ${donde}. ${quien} · ${hace(Math.max(a.r.ultimaConfirmacion || 0, a.r.creado || 0))}.`;
+  notificarVecinal(a, donde);
+}
+async function notificarVecinal(a, donde) {
+  const ya = lsGet("previunt_vecinalNotificados", []);
+  if (ya.includes(a.id)) return;
+  lsSet("previunt_vecinalNotificados", ya.concat(a.id).slice(-50));
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const titulo = "Cuidado al salir";
+  const opts = { body: `Tránsito de huaico reportado por vecinos ${donde}.`, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "huaico-" + a.id, vibrate: [200] };
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg) await reg.showNotification(titulo, opts); else new Notification(titulo, opts);
+  } catch (e) { try { new Notification(titulo, opts); } catch {} }
+}
+
 function renderTodo() {
   renderInicio();
+  renderAvisoVecinal();
   renderCintaDemo();
   alCambiarNivel();
   renderAdmin();
@@ -1757,6 +1744,7 @@ async function iniciar() {
   $("#btnRutaEmergencia").onclick = mostrarEvacuacion;
   $("#btnCerrarAlarma").onclick = cerrarAlarma;
   $("#bannerEmergencia").onclick = abrirAlarma;
+  $("#avisoVecinal").onclick = () => { const id = $("#avisoVecinal").dataset.rep; if (id) verReporteEnMapa(id); };
   $("#btnReportarInicio").onclick = abrirReporte;
   $$("[data-ir]").forEach((b) => b.addEventListener("click", () => irATab(b.dataset.ir)));
   const listaClick = (ev) => { const b = ev.target.closest("[data-rep]"); if (b) verReporteEnMapa(b.dataset.rep); };
@@ -1775,7 +1763,6 @@ async function iniciar() {
     const on = b.getAttribute("aria-pressed") !== "true";
     b.setAttribute("aria-pressed", String(on));
     if (!mapa) return;
-    if (b.dataset.capa === "satelite") { alternarSatelite(on, b); return; }
     const grupos = b.dataset.capa === "reportes" ? [capas.reportes, capas.bloqueos] : b.dataset.capa === "cauce" ? [capas.cauce] : [capas.zonas];
     grupos.forEach((g) => on ? g.addTo(mapa) : g.remove());
   }));
