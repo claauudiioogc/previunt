@@ -3,7 +3,7 @@
    - Leaflet (unpkg): caché primero.
    - Open-Meteo, Firebase y teselas del mapa: NO se cachean (siempre datos reales o "Sin datos disponibles").
    Sube VERSION cuando cambies la lista de archivos. */
-const VERSION = "previunt-v6";
+const VERSION = "previunt-v7";
 const APP = [
   "./",
   "./index.html",

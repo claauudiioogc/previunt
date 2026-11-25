@@ -31,7 +31,8 @@ const SENSOR_MAX_EDAD_MS = 30_000;          // > 30 s ⇒ "Sensor sin conexión"
 const REPORTE_CADUCA_MS = 6 * 60 * 60 * 1000; // 6 h sin nuevas confirmaciones
 const VOTOS_MIN = 3;
 const RADIO_ALERTA_HUAICO_M = 1000;
-const TRAMO_MAX_M = 2000;                    // un tramo reportado no puede medir más de 2 km
+const TRAMO_MAX_M = 2000;
+const RADIO_CERCANOS_M = 1000;               // Inicio solo muestra reportes a menos de 1 km                    // un tramo reportado no puede medir más de 2 km
 /* Modo cercanía (se activa en el centro de control; apagado por defecto para la demo) */
 const RADIO_REPORTE_M = 500;                 // solo se puede reportar a menos de 500 m de donde estás
 const RADIO_VOTO_M = 1000;                   // solo validan quienes están a menos de 1 km del reporte
@@ -40,40 +41,25 @@ const proximidadActiva = () => !!(S.demo && S.demo.proximidad);          // un h
 // Sistema de colores normado (igual en toda la app)
 const NIVELES = [
   {
-    n: 0, estado: "SECA", color: "#2E7D32", titulo: "Normal", icono: "✅",
-    mensaje: "Quebrada seca, sin riesgo",
-    acciones: [
-      "Revisa que tu mochila de emergencia esté completa",
-      "Conoce tu dirección de evacuación (pestaña Prepárate)",
-      "No arrojes basura ni desmonte al cauce de la quebrada"
-    ]
+    n: 0, estado: "SECA", corto: "Seca", color: "#2E7D32", titulo: "Normal", icono: "circle-check",
+    mensaje: "Quebrada seca. Sin riesgo.",
+    acciones: ["Ten lista tu mochila de emergencia", "Conoce tu ruta a zona alta", "No arrojes basura al cauce"]
   },
   {
-    n: 1, estado: "NORMAL", color: "#F9A825", titulo: "Vigilancia", icono: "👁️",
-    mensaje: "Quebrada activa con caudal bajo. Mantente atento",
-    acciones: [
-      "Mantente atento a esta app y a la radio local",
-      "Ten lista tu mochila de emergencia cerca de la puerta",
-      "No te acerques ni cruces el cauce de la quebrada"
-    ]
+    // Caudal bajo: también verde (decisión del equipo: no debe alarmar a la población)
+    n: 1, estado: "NORMAL", corto: "Caudal bajo", color: "#2E7D32", titulo: "Normal", icono: "circle-check",
+    mensaje: "Caudal bajo. Sin riesgo por ahora.",
+    acciones: ["Ten lista tu mochila de emergencia", "No te acerques al cauce", "Revisa la app si llueve fuerte"]
   },
   {
-    n: 2, estado: "ALERTA", color: "#EF6C00", titulo: "Alerta", icono: "⚠️",
-    mensaje: "Próxima a rebalsar. Prepárate para evacuar",
-    acciones: [
-      "Prepara tu mochila de emergencia",
-      "Revisa tu ruta de evacuación hacia zona alta",
-      "Aléjate del cauce y ubica a tu familia"
-    ]
+    n: 2, estado: "ALERTA", corto: "Alerta", color: "#EF6C00", titulo: "Alerta", icono: "triangle-alert",
+    mensaje: "Próxima a rebalsar. Prepárate para evacuar.",
+    acciones: ["Prepara tu mochila", "Ubica a tu familia", "Aléjate del cauce"]
   },
   {
-    n: 3, estado: "DESBORDE", color: "#C62828", titulo: "Emergencia", icono: "🚨",
-    mensaje: "Desborde: evacúa ahora a zona alta. Sirenas activas",
-    acciones: [
-      "Evacúa ahora hacia zona alta, alejándote del cauce",
-      "Si no puedes salir, sube a la parte más alta de tu vivienda",
-      "No cruces calles con corriente de agua o lodo, ni te detengas a grabar"
-    ]
+    n: 3, estado: "DESBORDE", corto: "Desborde", color: "#C62828", titulo: "Emergencia", icono: "siren",
+    mensaje: "Desborde. Evacúa ahora a zona alta.",
+    acciones: ["Evacúa ahora a zona alta", "Si no puedes salir, sube al piso más alto", "No cruces agua ni lodo"]
   }
 ];
 
@@ -119,11 +105,11 @@ const ZONAS_ANA_2015 = [
 ];
 
 const TIPOS_REPORTE = {
-  bloqueo:    { nombre: "Calle bloqueada",               icono: "⛔", color: "#B71C1C" },
-  inundacion: { nombre: "Inundación / aniego",           icono: "🌊", color: "#00838F" },
-  huaico:     { nombre: "Huaico / lodo",                 icono: "🪨", color: "#6D4C41" },
-  afectados:  { nombre: "Persona o vivienda afectada",   icono: "🏚️", color: "#AD1457" },
-  otro:       { nombre: "Otro",                          icono: "❗", color: "#455A64" }
+  bloqueo:    { nombre: "Calle bloqueada",     icono: "construction", color: "#B71C1C" },
+  inundacion: { nombre: "Inundación",          icono: "waves",        color: "#00838F" },
+  huaico:     { nombre: "Huaico o lodo",       icono: "mountain",     color: "#6D4C41" },
+  afectados:  { nombre: "Vivienda afectada",   icono: "house-ic",     color: "#AD1457" },
+  otro:       { nombre: "Otro",                icono: "circle-alert", color: "#455A64" }
 };
 
 /* Números de emergencia – verificados en gob.pe/547 (Defensa Civil 115, Bomberos 116, SAMU)
@@ -133,7 +119,7 @@ const NUMEROS_EMERGENCIA = [
   { nombre: "Bomberos",               numero: "116" },
   { nombre: "SAMU (ambulancia)",      numero: "106" },
   { nombre: "Policía Nacional",       numero: "105" },
-  { nombre: "Municipalidad Provincial de Trujillo (central)", numero: "044484240", mostrar: "(044) 484240" }
+  { nombre: "Municipalidad de Trujillo", numero: "044484240", mostrar: "(044) 484240" }
   // Central de la MPT: Plan de Contingencia ante Lluvias Intensas, Región La Libertad 2025-2026 (Anexo 5).
   // TODO: verificar con fuente oficial el teléfono público del COER La Libertad (no figura en el directorio del plan regional).
 ];
@@ -233,6 +219,8 @@ const HISTORIA = [
    UTILIDADES
 --------------------------------------------------------------------- */
 const $ = (sel) => document.querySelector(sel);
+// Icono del sprite Lucide incrustado en index.html
+const ic = (nombre, clase = "") => `<svg class="ic ${clase}" aria-hidden="true"><use href="#i-${nombre}"/></svg>`;
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hora = (ts) => ts ? new Date(ts).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" }) : "--:--";
@@ -586,7 +574,7 @@ function afectaMiZona() {
 async function notificar(nivel) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const N = NIVELES[nivel];
-  const titulo = nivel === 3 ? "🚨 DESBORDE – Evacúa ahora" : "⚠️ ALERTA – Quebrada San Ildefonso";
+  const titulo = nivel === 3 ? "Desborde: evacúa ahora" : "Alerta: quebrada San Ildefonso";
   const opts = { body: N.mensaje, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "nivel-quebrada", renotify: true, requireInteraction: nivel === 3, vibrate: nivel === 3 ? [600, 250, 600] : [300] };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
@@ -632,68 +620,56 @@ function renderInicio() {
   card.className = "estado " + (e.nivel === null ? "nivel-x" : "nivel-" + e.nivel);
   // La regla muestra lo que mide el sensor (o el demo): el nivel de la quebrada, no los reportes
   const nRegla = esPorReporte(e) ? e.base.nivel : e.nivel;
-  $("#medidorNivel").dataset.nivel = nRegla === null || nRegla === undefined ? "x" : String(nRegla);
-  $("#medidorNivel").setAttribute("aria-label", nRegla === null || nRegla === undefined ? "Nivel de la quebrada: sin datos" : `Nivel de la quebrada: ${nRegla} de 3 (${NIVELES[nRegla].estado})`);
+  const sinRegla = nRegla === null || nRegla === undefined;
+  $("#medidorNivel").dataset.nivel = sinRegla ? "x" : String(nRegla);
+  $("#medidorNivel").setAttribute("aria-label", sinRegla ? "Nivel de la quebrada: sin datos" : `Nivel de la quebrada: ${NIVELES[nRegla].corto}`);
   $("#estadoEtiqueta").textContent = "Quebrada San Ildefonso";
 
   if (e.nivel !== null) {
     const N = NIVELES[e.nivel];
-    $("#estadoIcono").textContent = N.icono;
-    $("#estadoTitulo").textContent = N.titulo.toUpperCase();
-    $("#estadoEtiqueta").textContent = `Quebrada San Ildefonso · nivel ${N.n} (${N.estado})`;
+    $("#estadoIcono").innerHTML = ic(N.icono);
+    $("#estadoTitulo").textContent = N.titulo;
     $("#estadoMensaje").textContent = N.mensaje;
-    $("#estadoMeta").innerHTML = e.fuente === "demo"
-      ? `<span class="tag-sim">SIMULADO</span> Nivel forzado en modo demo · ${hora(e.ts)}`
-      : `Fuente: sensor de la estación San Ildefonso · última lectura ${hora(e.ts)}`;
+    $("#estadoMeta").innerHTML = e.fuente === "demo" ? `<span class="tag-sim">SIMULADO</span> ${hora(e.ts)}` : `Sensor · ${hora(e.ts)}`;
     renderAcciones(N.acciones);
     if (esPorReporte(e)) {
-      const donde = e.dist !== null && e.dist !== undefined ? ` a unos ${Math.round(e.dist)} m de ti` : " en la ciudad";
+      const donde = e.dist !== null && e.dist !== undefined ? ` a ${Math.round(e.dist / 10) * 10} m` : "";
       $("#estadoEtiqueta").textContent = "Huaico reportado" + donde;
-      $("#estadoMensaje").textContent = e.nivel === 3
-        ? "Huaico verificado por la autoridad. Evacúa ahora a zona alta"
-        : "Huaico confirmado por vecinos cerca de ti. Prepárate para evacuar";
-      const base = e.base.nivel !== null ? NIVELES[e.base.nivel].estado : "sin datos";
-      $("#estadoMeta").innerHTML = (e.nivel === 3
-        ? `Fuente: reporte ciudadano <strong>verificado por la autoridad</strong> · ${hora(e.ts)}`
-        : `Fuente: reporte ciudadano confirmado por ${e.reporte.confirmaciones || 0} vecinos · ${hora(e.ts)}`)
-        + ` · No es lectura del sensor (quebrada: ${base}).`;
+      $("#estadoMensaje").textContent = e.nivel === 3 ? "Verificado por la autoridad. Evacúa a zona alta." : "Confirmado por vecinos. Prepárate.";
+      const base = e.base.nivel !== null ? NIVELES[e.base.nivel].corto.toLowerCase() : "sin datos";
+      $("#estadoMeta").textContent = `Reporte ciudadano · ${hora(e.ts)} · Quebrada: ${base}`;
     }
   } else if (e.fuente === "sensorOffline") {
-    const ult = NIVELES[e.ultimoNivel];
-    $("#estadoIcono").textContent = "📡";
-    $("#estadoTitulo").textContent = "Sensor sin conexión";
+    $("#estadoIcono").innerHTML = ic("radio-tower");
+    $("#estadoTitulo").textContent = "Sin conexión";
     $("#estadoMensaje").innerHTML = `<span class="aviso-offline">Sensor sin conexión – último dato: ${hora(e.ts)}</span>`;
-    $("#estadoMeta").textContent = `Último nivel registrado: ${ult.estado} (${ult.titulo}). No se muestra como dato actual.`;
-    renderAcciones(["Sigue las indicaciones de Defensa Civil y la radio local", "Si llueve fuerte, aléjate del cauce de la quebrada", "Ten lista tu mochila de emergencia"]);
+    $("#estadoMeta").textContent = "";
+    renderAcciones(["Sigue a Defensa Civil y la radio local", "Si llueve fuerte, aléjate del cauce", "Ten lista tu mochila"]);
   } else {
-    $("#estadoIcono").textContent = "📡";
-    $("#estadoTitulo").textContent = "Sin datos del sensor";
-    $("#estadoMensaje").textContent = Datos.modo === "local"
-      ? "Sin datos disponibles: la app está en modo local (sin Firebase)."
-      : "Sin datos disponibles: la estación aún no ha enviado lecturas.";
-    $("#estadoMeta").textContent = "No se muestra ningún nivel para no dar información falsa.";
-    renderAcciones(["Sigue las indicaciones de Defensa Civil y la radio local", "Si llueve fuerte, aléjate del cauce de la quebrada", "Ten lista tu mochila de emergencia"]);
+    $("#estadoIcono").innerHTML = ic("radio-tower");
+    $("#estadoTitulo").textContent = "Sin datos";
+    $("#estadoMensaje").textContent = "La estación aún no envía lecturas.";
+    $("#estadoMeta").textContent = "";
+    renderAcciones(["Sigue a Defensa Civil y la radio local", "Si llueve fuerte, aléjate del cauce", "Ten lista tu mochila"]);
   }
 
-  // Modo emergencia (rojo)
+  // Emergencia (rojo)
   const rojo = e.nivel === 3;
   document.body.classList.toggle("emergencia", rojo);
   $("#bannerEmergencia").hidden = !rojo;
   if (!rojo) cerrarAlarma();
   if (rojo && esPorReporte(e)) {
-    // Emergencia por huaico verificado: las sirenas de la quebrada NO están activas, no se dice que lo estén
-    $("#emergenciaTitulo").textContent = "HUAICO: EVACÚA AHORA";
-    $("#bannerEmergenciaTitulo").textContent = "Huaico verificado cerca: evacúa";
-    $("#emergenciaSub").textContent = "Dónde";
-    const donde = e.dist !== null && e.dist !== undefined ? `a unos ${Math.round(e.dist)} m de ti` : "en la ciudad (activa tu ubicación para ver la distancia)";
-    $("#listaZonasSirena").innerHTML = `<li>🪨 Huaico verificado por la autoridad ${esc(donde)}${e.reporte.descripcion ? ": " + esc(e.reporte.descripcion) : ""}</li>`;
-    $("#emergenciaFuente").innerHTML = `Reporte ciudadano verificado por la autoridad · ${hora(e.ts)} · las sirenas de la quebrada solo suenan con el sensor`;
+    // Huaico verificado: las sirenas de la quebrada NO están activas; no se dice que lo estén
+    $("#emergenciaTitulo").textContent = "Huaico: evacúa ahora";
+    $("#bannerEmergenciaTitulo").textContent = "Huaico cerca: evacúa";
+    const donde = e.dist !== null && e.dist !== undefined ? `a ${Math.round(e.dist / 10) * 10} m de ti` : "en la ciudad";
+    $("#listaZonasSirena").innerHTML = `<li>Huaico verificado ${esc(donde)}${e.reporte.descripcion ? ": " + esc(e.reporte.descripcion) : ""}</li>`;
+    $("#emergenciaFuente").textContent = `Reporte verificado por la autoridad · ${hora(e.ts)}`;
   } else if (rojo) {
-    $("#emergenciaTitulo").textContent = "DESBORDE: EVACÚA AHORA";
+    $("#emergenciaTitulo").textContent = "Desborde: evacúa ahora";
     $("#bannerEmergenciaTitulo").textContent = "Desborde: evacúa ahora";
-    $("#emergenciaSub").textContent = "Zonas con sirena activa";
-    $("#listaZonasSirena").innerHTML = ZONAS_SIRENA.map((z) => `<li>🔊 ${esc(z.nombre)} – sirena activa</li>`).join("");
-    $("#emergenciaFuente").innerHTML = e.fuente === "demo" ? "SIMULADO · modo demo" : `Sensor San Ildefonso · ${hora(e.ts)}`;
+    $("#listaZonasSirena").innerHTML = `<li>Sirenas activas en ${ZONAS_SIRENA.map((z) => esc(z.nombre)).join(", ").replace(/, ([^,]*)$/, " y $1")}</li>`;
+    $("#emergenciaFuente").innerHTML = e.fuente === "demo" ? "SIMULADO" : `Sensor · ${hora(e.ts)}`;
   }
   actualizarBotonesSirena();
 }
@@ -736,13 +712,13 @@ function ultimoHistorial(origen) {
    CLIMA (Open-Meteo, gratis, sin API key)
 --------------------------------------------------------------------- */
 const CODIGOS_WMO = {
-  0: ["☀️", "Despejado"], 1: ["🌤️", "Mayormente despejado"], 2: ["⛅", "Parcialmente nublado"], 3: ["☁️", "Nublado"],
-  45: ["🌫️", "Niebla"], 48: ["🌫️", "Niebla"],
-  51: ["🌦️", "Llovizna ligera"], 53: ["🌦️", "Llovizna"], 55: ["🌧️", "Llovizna intensa"], 56: ["🌧️", "Llovizna helada"], 57: ["🌧️", "Llovizna helada"],
-  61: ["🌧️", "Lluvia ligera"], 63: ["🌧️", "Lluvia moderada"], 65: ["🌧️", "Lluvia fuerte"], 66: ["🌧️", "Lluvia helada"], 67: ["🌧️", "Lluvia helada"],
-  71: ["🌨️", "Nieve"], 73: ["🌨️", "Nieve"], 75: ["🌨️", "Nieve"], 77: ["🌨️", "Granizo fino"],
-  80: ["🌦️", "Chubascos ligeros"], 81: ["🌧️", "Chubascos"], 82: ["⛈️", "Chubascos violentos"],
-  95: ["⛈️", "Tormenta"], 96: ["⛈️", "Tormenta con granizo"], 99: ["⛈️", "Tormenta con granizo"]
+  0: ["sun", "Despejado"], 1: ["cloud-sun", "Poco nublado"], 2: ["cloud-sun", "Parcial"], 3: ["cloud", "Nublado"],
+  45: ["cloud-fog", "Niebla"], 48: ["cloud-fog", "Niebla"],
+  51: ["cloud-drizzle", "Llovizna"], 53: ["cloud-drizzle", "Llovizna"], 55: ["cloud-drizzle", "Llovizna"], 56: ["cloud-drizzle", "Llovizna"], 57: ["cloud-drizzle", "Llovizna"],
+  61: ["cloud-rain", "Lluvia"], 63: ["cloud-rain", "Lluvia"], 65: ["cloud-rain", "Lluvia fuerte"], 66: ["cloud-rain", "Lluvia"], 67: ["cloud-rain", "Lluvia"],
+  71: ["snowflake", "Nieve"], 73: ["snowflake", "Nieve"], 75: ["snowflake", "Nieve"], 77: ["snowflake", "Granizo"],
+  80: ["cloud-rain", "Chubascos"], 81: ["cloud-rain", "Chubascos"], 82: ["cloud-rain", "Chubascos"],
+  95: ["cloud-lightning", "Tormenta"], 96: ["cloud-lightning", "Tormenta"], 99: ["cloud-lightning", "Tormenta"]
 };
 async function fetchJSON(url, ms = 12000) {
   const ctl = new AbortController();
@@ -772,19 +748,18 @@ async function cargarClima() {
     const probMax = probs.length ? Math.max(...probs) : null;
     const suma6 = lluv6.length ? lluv6.reduce((a, b) => a + b, 0) : null;
     const hoy = d.daily?.precipitation_sum?.[0];
-    const [ico, desc] = CODIGOS_WMO[c.weather_code] || ["🌡️", "—"];
-    const v = (x, u, dec = 1) => (x === null || x === undefined ? "s/d" : `${Number(x).toFixed(dec)} ${u}`);
+    const [ico, desc] = CODIGOS_WMO[c.weather_code] || ["thermometer", "—"];
+    const v = (x, u, dec = 1) => (x === null || x === undefined ? "s/d" : `${Number(x).toFixed(dec)}${u}`);
     $("#climaCuerpo").innerHTML = `
-      <div class="clima-dato clima-principal"><span class="v">${ico} ${v(c.temperature_2m, "°C", 0)}</span><span>${esc(desc)}<br><span class="meta">Viento ${v(c.wind_speed_10m, "km/h", 0)}</span></span></div>
-      <div class="clima-dato"><div class="v">${v(c.precipitation, "mm")}</div><div class="k">Lluvia ahora (última hora)</div></div>
-      <div class="clima-dato"><div class="v">${v(hoy, "mm")}</div><div class="k">Acumulado de hoy (pronóstico)</div></div>
-      <div class="clima-dato"><div class="v">${probMax === null ? "s/d" : probMax + " %"}</div><div class="k">Prob. máx. de lluvia, próximas 6 h</div></div>
-      <div class="clima-dato"><div class="v">${v(suma6, "mm")}</div><div class="k">Lluvia esperada, próximas 6 h</div></div>`;
-    $("#climaFuente").textContent = `Fuente: Open-Meteo · dato de las ${c.time.slice(11, 16)} · consultado ${hora(Date.now())}`;
+      <div class="clima-dato">${ic(ico)}<span class="v">${v(c.temperature_2m, "°", 0)}</span><span class="k">${esc(desc)}</span></div>
+      <div class="clima-dato">${ic("droplets")}<span class="v">${v(c.precipitation, " mm")}</span><span class="k">Lluvia ahora</span></div>
+      <div class="clima-dato">${ic("umbrella")}<span class="v">${probMax === null ? "s/d" : probMax + "%"}</span><span class="k">Prob. 6 h</span></div>
+      <div class="clima-dato">${ic("cloud-rain")}<span class="v">${v(hoy, " mm")}</span><span class="k">Hoy</span></div>`;
+    $("#climaFuente").textContent = `Open-Meteo · ${c.time.slice(11, 16)}`;
   } catch (e) {
     console.warn("Clima:", e);
     $("#climaCuerpo").innerHTML = `<div class="sin-datos">Sin datos disponibles</div>`;
-    $("#climaFuente").textContent = `Open-Meteo no respondió · intento ${hora(Date.now())}. Se reintentará en unos minutos.`;
+    $("#climaFuente").textContent = `Open-Meteo no respondió · ${hora(Date.now())}`;
   }
 }
 
@@ -832,8 +807,9 @@ function iniciarMapa() {
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(mapa);
-  capas.zonas = L.layerGroup().addTo(mapa);
-  capas.cauce = L.layerGroup().addTo(mapa);
+  // Cauce y zonas de sirena: ocultos por defecto (se muestran con los botones del mapa)
+  capas.zonas = L.layerGroup();
+  capas.cauce = L.layerGroup();
   capas.bloqueos = L.layerGroup().addTo(mapa);
   capas.reportes = L.layerGroup().addTo(mapa);
   capas.evac = L.layerGroup().addTo(mapa);
@@ -888,26 +864,19 @@ function pintarCauceYZonas() {
   if (!mapa) return;
   const e = estadoBase();
   const color = colorNivelActual();
-  const txtNivel = e.nivel === null ? "Sin datos del sensor" : `${NIVELES[e.nivel].estado} · ${NIVELES[e.nivel].titulo}`;
+  const txtNivel = e.nivel === null ? "Sin datos del sensor" : NIVELES[e.nivel].corto;
   capas.cauce.clearLayers();
   capas.zonas.clearLayers();
-
   ZONAS_SIRENA.forEach((z) => {
     L.circle(z.centro, {
-      radius: z.radio, color, weight: 2, fillColor: color, fillOpacity: e.nivel === 3 ? 0.3 : 0.14,
-      dashArray: "6 6", className: e.nivel === 3 ? "zona-pulso" : ""
-    }).bindTooltip(`${esc(z.nombre)} · zona de sirena (referencial)${e.nivel === 3 ? " · 🔊 SIRENA ACTIVA" : ""}`)
-      .addTo(capas.zonas);
+      radius: z.radio, color, weight: 1.5, fillColor: color, fillOpacity: e.nivel === 3 ? 0.22 : 0.08,
+      dashArray: "4 6", className: e.nivel === 3 ? "zona-pulso" : ""
+    }).bindTooltip(`${esc(z.nombre)} · zona de sirena (referencial)`).addTo(capas.zonas);
   });
-
-  // Borde blanco + línea de color para que se vea sobre cualquier fondo
-  L.polyline(CAUCE_REFERENCIAL, { color: "#fff", weight: 11, opacity: 0.9 }).addTo(capas.cauce);
-  const linea = L.polyline(CAUCE_REFERENCIAL, { color, weight: 7, opacity: 1, dashArray: e.nivel === null ? "10 8" : null })
-    .bindPopup(`<strong>Quebrada San Ildefonso</strong><br>Estado: ${esc(txtNivel)}<br><em>Trazado referencial</em>`)
+  // Cauce: línea punteada fina con el color del nivel (trazado referencial)
+  L.polyline(CAUCE_REFERENCIAL, { color, weight: 4, opacity: 0.9, dashArray: "2 8", lineCap: "round" })
+    .bindPopup(`<strong>Quebrada San Ildefonso</strong><br>Nivel: ${esc(txtNivel)}<br><span class="cuenta">Trazado referencial</span>`)
     .addTo(capas.cauce);
-  L.tooltip({ permanent: true, direction: "left", className: "etiqueta-ref", offset: [-8, 0] })
-    .setLatLng(CAUCE_REFERENCIAL[4]).setContent("Quebrada San Ildefonso<br>trazado referencial").addTo(capas.cauce);
-  return linea;
 }
 
 function estadoReporte(r) {
@@ -938,8 +907,8 @@ function pintarReportes(forzar = true) {
     const conf = est === "confirmado";
     const icono = L.divIcon({
       className: "",
-      html: `<div class="mk ${conf ? "" : "sin-validar"} ${r.verificadoAutoridad ? "verificado" : ""}" style="background:${T.color};position:relative">${T.icono}</div>`,
-      iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -18]
+      html: `<div class="mk ${conf ? "" : "sin-validar"} ${r.verificadoAutoridad ? "verificado" : ""}" style="background:${T.color};position:relative">${ic(T.icono)}</div>`,
+      iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -16]
     });
     const tramo = trazoDe(r);
     if (tramo) {
@@ -972,11 +941,10 @@ function itemsReportes() {
 function htmlItemReporte(x) {
   const T = TIPOS_REPORTE[x.r.tipo] || TIPOS_REPORTE.otro;
   const badge = x.r.verificadoAutoridad ? ["autoridad", "Verificado"] : x.est === "confirmado" ? ["confirmado", "Confirmado"] : ["sinValidar", "Sin validar"];
-  const dist = x.dist === null ? "" : x.dist < 1000 ? ` · a ${Math.round(x.dist / 10) * 10} m` : ` · a ${(x.dist / 1000).toFixed(1)} km`;
+  const dist = x.dist === null ? "" : x.dist < 1000 ? ` · ${Math.round(x.dist / 10) * 10} m` : ` · ${(x.dist / 1000).toFixed(1)} km`;
   return `<li><button class="item-reporte" data-rep="${esc(x.id)}">
-    <span class="item-foto" data-foto-item="${esc(x.id)}" aria-hidden="true">${T.icono}</span>
+    <span class="item-foto" data-foto-item="${esc(x.id)}">${ic(T.icono)}</span>
     <span><span class="item-titulo">${esc(T.nombre)}${trazoDe(x.r) ? " (tramo)" : ""}</span>
-      ${x.r.descripcion ? `<span class="item-desc">${esc(x.r.descripcion)}</span>` : ""}
       <span class="item-meta">${hace(x.r.creado)}${dist}</span></span>
     <span class="estado-badge ${badge[0]}">${badge[1]}</span></button></li>`;
 }
@@ -993,10 +961,11 @@ async function cargarMiniaturas(cont, max = 10) {
 }
 function renderListas() {
   const items = itemsReportes();
+  // Inicio: solo lo que está cerca (si no hay ubicación o no hay nada cerca, la sección no aparece)
+  const cerca = S.ubicacion ? items.filter((x) => x.dist !== null && x.dist <= RADIO_CERCANOS_M) : [];
+  $("#seccionCercanos").hidden = cerca.length === 0;
   const ini = $("#listaReportesInicio");
-  ini.innerHTML = items.length
-    ? items.slice(0, 3).map(htmlItemReporte).join("")
-    : '<li class="lista-vacia">No hay reportes activos. Si ves un problema en tu calle, repórtalo.</li>';
+  ini.innerHTML = cerca.slice(0, 3).map(htmlItemReporte).join("");
   cargarMiniaturas(ini, 3);
   const conf = items.filter((x) => x.est === "confirmado").length;
   const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
@@ -1021,30 +990,27 @@ function htmlPopup(id, r, est) {
   const esMio = r.autor === Datos.uid;
   const yaVote = !!(r.votos && r.votos[Datos.uid]);
   let nota = "";
-  if (esMio) nota = "Es tu reporte: no puedes validarlo tú.";
-  else if (yaVote) nota = "Ya validaste este reporte.";
+  if (esMio) nota = "Es tu reporte: otros vecinos lo confirmarán.";
+  else if (yaVote) nota = "Ya respondiste a este reporte.";
   let lejos = false;
   if (proximidadActiva() && !esMio && !yaVote && S.ubicacion) {
     const d = distAReporte([S.ubicacion.lat, S.ubicacion.lng], r);
-    if (d > RADIO_VOTO_M) { lejos = true; nota = `Solo validan quienes están a menos de ${RADIO_VOTO_M / 1000} km (estás a ~${(d / 1000).toFixed(1)} km).`; }
-  } else if (proximidadActiva() && !esMio && !yaVote) {
-    nota = `Para validar se usará tu ubicación (solo vecinos a menos de ${RADIO_VOTO_M / 1000} km).`;
+    if (d > RADIO_VOTO_M) { lejos = true; nota = `Solo responden vecinos a menos de ${RADIO_VOTO_M / 1000} km (estás a ${(d / 1000).toFixed(1)} km).`; }
   }
   const dis = esMio || yaVote || lejos ? "disabled" : "";
+  const estado = r.verificadoAutoridad ? "Verificado por la autoridad" : NOMBRE_ESTADO[est];
   return `<div class="popup-rep">
-    <h4>${T.icono} ${esc(T.nombre)}</h4>
-    <span class="estado-rep ${est === "confirmado" ? "confirmado" : ""}">${NOMBRE_ESTADO[est]}</span>
-    ${r.verificadoAutoridad ? ' <span class="estado-rep confirmado">✔ Verificado por autoridad</span>' : ""}
-    ${r.foto ? `<img src="${esc(r.foto)}" alt="Foto del reporte">` : r.tieneFoto ? `<img data-foto-id="${esc(id)}" alt="Foto del reporte (cargando…)">` : ""}
+    <h4>${ic(T.icono)} ${esc(T.nombre)}</h4>
+    <span class="cuenta">${estado} · ${hace(r.creado)}${trazoDe(r) ? ` · tramo de ${Math.round(r.largo || 0)} m` : ""}</span>
+    ${r.foto ? `<img src="${esc(r.foto)}" alt="Foto del reporte">` : r.tieneFoto ? `<img data-foto-id="${esc(id)}" alt="Foto del reporte (cargando)">` : ""}
     ${r.descripcion ? `<p>${esc(r.descripcion)}</p>` : ""}
-    ${trazoDe(r) ? `<p class="meta">〰️ Tramo de calle de ~${Math.round(r.largo || 0)} m · trazo: ${esc(r.metodoTrazo || "—")}</p>` : ""}
-    <p class="meta">Reportado ${hace(r.creado)} (${hora(r.creado)}) · ✔ ${r.confirmaciones || 0} · ✖ ${r.negaciones || 0}</p>
-    <p class="meta"><strong>¿Sigue ahí?</strong></p>
+    <p class="pregunta">¿Sigue este problema?</p>
     <div class="votos">
-      <button class="si" data-voto="1" data-id="${esc(id)}" ${dis}>Sigue ahí ✔</button>
-      <button data-voto="-1" data-id="${esc(id)}" ${dis}>Ya no está ✖</button>
+      <button class="si" data-voto="1" data-id="${esc(id)}" ${dis}>${ic("check")}Confirmar</button>
+      <button data-voto="-1" data-id="${esc(id)}" ${dis}>${ic("x")}Ya no está</button>
     </div>
-    ${nota ? `<p class="meta">${nota}</p>` : ""}
+    <p class="cuenta">${r.confirmaciones || 0} confirman · ${r.negaciones || 0} dicen que ya no está</p>
+    ${nota ? `<p class="cuenta">${nota}</p>` : ""}
   </div>`;
 }
 
@@ -1074,6 +1040,38 @@ function puntoMasCercanoEnCauce(p) {
   return { ...mejor, cosLat };
 }
 
+/* Elevación del terreno: Open-Meteo Elevation API (Copernicus DEM GLO-90, 90 m). Hasta 100 puntos por consulta. */
+async function elevaciones(puntos) {
+  const url = `https://api.open-meteo.com/v1/elevation?latitude=${puntos.map((p) => p[0].toFixed(5)).join(",")}&longitude=${puntos.map((p) => p[1].toFixed(5)).join(",")}`;
+  const j = await fetchJSON(url, 8000);
+  if (!Array.isArray(j.elevation) || j.elevation.length !== puntos.length) throw new Error("Elevación incompleta");
+  return j.elevation;
+}
+
+/* Busca alrededor del usuario (300–1100 m, 16 direcciones) el punto más alto que además
+   quede más lejos del peligro que el usuario. Devuelve { destino, ganancia } o null si no hay datos. */
+async function buscarZonaAlta(p, distAlPeligro) {
+  const rad = Math.PI / 180, RT = 6371000, cosLat = Math.cos(p[0] * rad);
+  const dUsuario = distAlPeligro(p);
+  const cands = [];
+  for (const d of [300, 500, 800, 1100]) {
+    for (let k = 0; k < 16; k++) {
+      const a = (k * Math.PI) / 8;
+      const q = [p[0] + (Math.sin(a) * d) / (RT * rad), p[1] + (Math.cos(a) * d) / (RT * rad * cosLat)];
+      if (distAlPeligro(q) >= dUsuario + 150) cands.push({ q, d });
+    }
+  }
+  if (!cands.length) return null;
+  const elev = await elevaciones([p, ...cands.map((c) => c.q)]);
+  let mejor = null;
+  cands.forEach((c, i) => {
+    const ganancia = elev[i + 1] - elev[0];
+    const puntaje = ganancia - c.d / 250; // prefiere lo alto, pero también lo cercano
+    if (!mejor || puntaje > mejor.puntaje) mejor = { destino: { lat: c.q[0], lng: c.q[1] }, ganancia, puntaje };
+  });
+  return mejor;
+}
+
 async function mostrarEvacuacion() {
   cerrarAlarma();
   irATab("mapa");
@@ -1081,47 +1079,59 @@ async function mostrarEvacuacion() {
   $("#hojaMapa").dataset.abierta = "false";
   if (!S.ubicacion) await pedirUbicacion();
   capas.evac.clearLayers();
+  // Mostrar el cauce como referencia mientras se ve la ruta
+  capas.cauce.addTo(mapa);
+  $('.chip[data-capa="cauce"]')?.setAttribute("aria-pressed", "true");
   $("#panelEvac").hidden = false;
-  const ana = ` <a href="${MAPA_ANA_2015}" target="_blank" rel="noopener">Ver mapa oficial de evacuación (ANA, 2015)</a>.`;
+  const nota = (extra = "") => `<p class="evac-nota">Ruta referencial${extra}. Confirma con Defensa Civil y sigue a los brigadistas.</p>`;
   if (!S.ubicacion) {
-    $("#textoEvac").innerHTML = "<strong>Activa tu ubicación</strong> para trazar tu ruta. Regla general: muévete hacia los costados de la quebrada y hacia zonas altas; nunca a lo largo del cauce." + ana;
+    $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("locate-fixed")} Activa tu ubicación</p><p>Mientras tanto: aléjate hacia los costados de la quebrada, nunca a lo largo del cauce.</p>`;
     mapa.fitBounds(L.polyline(CAUCE_REFERENCIAL).getBounds(), { padding: [30, 30], animate: false });
     return;
   }
   const p = [S.ubicacion.lat, S.ubicacion.lng];
-  const rad = Math.PI / 180, RT = 6371000, cosLat = Math.cos(p[0] * rad);
   const e = estadoEfectivo();
-  let v, de;
-  if (esPorReporte(e) && e.reporte) {
-    // Huaico reportado: alejarse del punto del huaico
-    v = [(p[1] - e.reporte.lng) * rad * cosLat * RT, (p[0] - e.reporte.lat) * rad * RT];
-    de = "del huaico reportado";
-    if (Math.hypot(v[0], v[1]) < 25) { const pc = puntoMasCercanoEnCauce(p); v = [-pc.seg[1], pc.seg[0]]; }
-  } else {
-    const pc = puntoMasCercanoEnCauce(p);
-    if (pc.d > 2500) {
-      $("#textoEvac").innerHTML = `Estás a unos <strong>${(pc.d / 1000).toFixed(1)} km</strong> del cauce. Si no estás en zona de riesgo, quédate en un lugar seguro y sigue las indicaciones oficiales.` + ana;
-      mapa.setView(p, 14, { animate: false });
-      return;
-    }
-    v = pc.d > 25 ? [-pc.xy[0], -pc.xy[1]] : [-pc.seg[1], pc.seg[0]];
-    de = "del cauce";
+  const porHuaico = esPorReporte(e) && e.reporte;
+  const distAlPeligro = porHuaico
+    ? (q) => distM(q, [e.reporte.lat, e.reporte.lng])
+    : (q) => puntoMasCercanoEnCauce(q).d;
+  if (!porHuaico && distAlPeligro(p) > 2500) {
+    $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("circle-check")} Estás lejos del cauce</p><p>A ${(distAlPeligro(p) / 1000).toFixed(1)} km. Quédate en un lugar seguro y sigue las indicaciones oficiales.</p>`;
+    mapa.setView(p, 14, { animate: false });
+    return;
   }
-  const len = Math.hypot(v[0], v[1]) || 1;
-  v = [v[0] / len, v[1] / len];
-  const DIST = 700;
-  const destino = { lat: p[0] + (v[1] * DIST) / (RT * rad), lng: p[1] + (v[0] * DIST) / (RT * rad * cosLat) };
-  $("#textoEvac").textContent = "Buscando una ruta a pie por las calles…";
+  $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("route")} Buscando la zona más alta cercana…</p>`;
+
+  let zona = null, sinElevacion = false;
+  try { zona = await buscarZonaAlta(p, distAlPeligro); } catch (err) { console.warn("Elevación:", err); sinElevacion = true; }
+  const hayZonaAlta = zona && zona.ganancia >= 5;
+  let destino;
+  if (hayZonaAlta) {
+    destino = zona.destino;
+  } else {
+    // Terreno plano o sin datos: alejarse del peligro 700 m (dirección perpendicular)
+    const rad = Math.PI / 180, RT = 6371000, cosLat = Math.cos(p[0] * rad);
+    let v;
+    if (porHuaico) v = [(p[1] - e.reporte.lng) * rad * cosLat * RT, (p[0] - e.reporte.lat) * rad * RT];
+    else { const pc = puntoMasCercanoEnCauce(p); v = pc.d > 25 ? [-pc.xy[0], -pc.xy[1]] : [-pc.seg[1], pc.seg[0]]; }
+    const len = Math.hypot(v[0], v[1]) || 1;
+    destino = { lat: p[0] + (v[1] / len * 700) / (RT * rad), lng: p[1] + (v[0] / len * 700) / (RT * rad * cosLat) };
+  }
   const ruta = await rutaPorCalles({ lat: p[0], lng: p[1] }, destino);
-  L.polyline(ruta.trazo, { color: "#fff", weight: 11, opacity: 0.9 }).addTo(capas.evac);
-  L.polyline(ruta.trazo, { color: "#1565C0", weight: 7, dashArray: ruta.metodo.startsWith("línea recta") ? "12 8" : null }).addTo(capas.evac);
+  const recta = ruta.metodo.startsWith("línea recta");
+  L.polyline(ruta.trazo, { color: "#fff", weight: 10, opacity: 0.9 }).addTo(capas.evac);
+  L.polyline(ruta.trazo, { color: "#1565C0", weight: 6, dashArray: recta ? "10 8" : null }).addTo(capas.evac);
   const fin = ruta.trazo[ruta.trazo.length - 1];
-  L.marker(fin, { icon: L.divIcon({ className: "", html: '<div class="mk" style="background:#1565C0;color:#fff">⬆</div>', iconSize: [38, 38], iconAnchor: [19, 19] }) })
-    .bindTooltip("Zona alejada del peligro (referencial)").addTo(capas.evac);
+  L.marker(fin, { icon: L.divIcon({ className: "", html: `<div class="mk" style="background:#1565C0">${ic(hayZonaAlta ? "arrow-up" : "navigation")}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] }) })
+    .bindTooltip(hayZonaAlta ? `Zona ${Math.round(zona.ganancia)} m más alta (referencial)` : "Punto alejado del peligro (referencial)").addTo(capas.evac);
   const min = Math.max(1, Math.round(ruta.largo / 75)); // ~4,5 km/h caminando
-  $("#textoEvac").innerHTML = `Camina unos <strong>${Math.round(ruta.largo)} m (~${min} min)</strong> por la línea azul, alejándote ${de}, hacia una zona alta. No cruces la quebrada.`
-    + (ruta.metodo.startsWith("línea recta") ? " No se pudo trazar por calles: sigue la dirección de la línea." : "")
-    + ` <em>Ruta referencial: confirma con Defensa Civil y sigue a los brigadistas.</em>` + ana;
+  const que = hayZonaAlta
+    ? `<p>Lleva a una zona <strong>${Math.round(zona.ganancia)} m más alta</strong>, lejos del ${porHuaico ? "huaico" : "cauce"}.</p>`
+    : sinElevacion
+      ? `<p>Sin datos de elevación: aléjate del ${porHuaico ? "huaico" : "cauce"} por esta ruta.</p>`
+      : `<p>Tu zona es plana: no hay un lugar más alto cerca. Aléjate del ${porHuaico ? "huaico" : "cauce"} y, si no puedes, sube al piso más alto.</p>`;
+  $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("footprints")} ${Math.round(ruta.largo)} m · ${min} min a pie</p>${que}`
+    + nota((recta ? ", en línea recta" : "") + (hayZonaAlta ? ". Elevación: Copernicus DEM vía Open-Meteo" : ""));
   // Deja espacio para el panel de arriba y para el botón "Reportar" y la hoja de abajo
   mapa.fitBounds(L.latLngBounds([p, fin].concat(ruta.trazo)), { paddingTopLeft: [30, 230], paddingBottomRight: [30, 170], animate: false });
 }
@@ -1159,7 +1169,7 @@ function validarFormReporte() {
 }
 function fijarUbicacionReporte(lat, lng, origen) {
   R.lat = lat; R.lng = lng; R.origenUbic = origen;
-  $("#textoUbicacion").textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} · ${origen}`;
+  $("#textoUbicacion").textContent = `Ubicación ${origen === "elegida en el mapa" ? "elegida en el mapa" : "por " + origen}.`;
   if (mapa) {
     if (marcadorTemp) marcadorTemp.setLatLng([lat, lng]);
     else marcadorTemp = L.marker([lat, lng], { icon: L.divIcon({ className: "", html: '<div class="mk-temp"></div>', iconSize: [26, 26], iconAnchor: [13, 13] }) }).addTo(mapa);
@@ -1171,7 +1181,7 @@ function fijarUbicacionReporte(lat, lng, origen) {
    aunque se toque encima del cauce, una zona o un marcador; se ignora si el usuario arrastró el mapa. */
 let elegir = null;
 function activarElegirEnMapa() {
-  capturarToque("👆 Toca el mapa donde está el problema", (ll) => {
+  capturarToque("Toca el mapa donde está el problema", (ll) => {
     fijarUbicacionReporte(ll.lat, ll.lng, "elegida en el mapa");
     abrirReporte();
   });
@@ -1263,10 +1273,10 @@ function marcarTramo() {
   if (capaTemp) { capaTemp.remove(); capaTemp = null; }
   // Acercar a nivel de calle para que los toques marquen cuadras, no kilómetros
   if (mapa.getZoom() < 16) mapa.setView(S.ubicacion ? [S.ubicacion.lat, S.ubicacion.lng] : mapa.getCenter(), 16, { animate: false });
-  capturarToque("1/2 · Toca dónde EMPIEZA el problema en la calle", (a) => {
+  capturarToque("Toca dónde empieza el problema", (a) => {
     capaTemp = L.layerGroup().addTo(mapa);
     L.circleMarker(a, { radius: 8, color: "#fff", weight: 3, fillColor: "#1565C0", fillOpacity: 1 }).bindTooltip("Inicio").addTo(capaTemp);
-    capturarToque("2/2 · Ahora toca dónde TERMINA", async (b) => {
+    capturarToque("Ahora toca dónde termina", async (b) => {
       L.circleMarker(b, { radius: 8, color: "#fff", weight: 3, fillColor: "#1565C0", fillOpacity: 1 }).bindTooltip("Fin").addTo(capaTemp);
       $("#textoBannerElegir").textContent = "Trazando el tramo por las calles…";
       $("#bannerElegir").hidden = false;
@@ -1285,7 +1295,7 @@ function marcarTramo() {
       R.trazo = res.trazo; R.metodoTrazo = res.metodo; R.largo = Math.round(res.largo);
       const medio = res.trazo[Math.floor(res.trazo.length / 2)];
       R.lat = medio[0]; R.lng = medio[1]; R.origenUbic = "tramo elegido en el mapa";
-      $("#textoUbicacion").textContent = `〰️ Tramo de ~${R.largo} m · trazado ${res.metodo}`;
+      $("#textoUbicacion").textContent = `Tramo de ${R.largo} m${res.metodo.startsWith("línea recta") ? " (línea recta: no se pudo seguir las calles)" : ""}.`;
       validarFormReporte();
       setTimeout(abrirReporte, 700); // deja ver el tramo un instante antes de volver al formulario
     });
@@ -1313,7 +1323,7 @@ function comprimirImagen(file, max = 800, calidad = 0.6) {
 
 function prepararFormReporte() {
   $("#opcionesTipo").innerHTML = Object.entries(TIPOS_REPORTE).map(([k, t]) =>
-    `<button type="button" class="opcion-tipo" data-tipo="${k}" aria-pressed="false"><span class="ico">${t.icono}</span>${t.nombre}</button>`).join("");
+    `<button type="button" class="opcion-tipo" data-tipo="${k}" aria-pressed="false">${ic(t.icono)}${t.nombre}</button>`).join("");
   $("#opcionesTipo").addEventListener("click", (e) => {
     const b = e.target.closest(".opcion-tipo"); if (!b) return;
     $$(".opcion-tipo").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
@@ -1390,11 +1400,10 @@ function renderGuia() {
   const N = NIVELES[sel], g = GUIA_NIVELES[sel] || {};
   const bloque = (t, arr) => arr ? `<h4>${t}</h4><ul>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
   cont.innerHTML = `<div class="niveles-sel" role="group" aria-label="Elegir nivel">${NIVELES.map((M) =>
-      `<button class="nivel-sel" data-n="${M.n}" aria-pressed="${M.n === sel}"><span class="ico" aria-hidden="true">${M.icono}</span>${M.titulo}${M.n === actual ? '<span class="nivel-ahora">ahora</span>' : ""}</button>`).join("")}</div>
+      `<button class="nivel-sel" data-n="${M.n}" aria-pressed="${M.n === sel}" style="--c:${M.color}">${M.corto}</button>`).join("")}</div>
     <div class="guia-panel">
       <p class="guia-mensaje nivel-${sel}">${esc(N.mensaje)}</p>
       ${bloque("Antes", g.antes)}${bloque("Durante", g.durante)}${bloque("Después", g.despues)}
-      <h4>Lo más importante</h4><ul>${N.acciones.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
     </div>`;
 }
 
@@ -1415,8 +1424,8 @@ function renderPreparate() {
   progreso();
 
   $("#listaNumeros").innerHTML = NUMEROS_EMERGENCIA.map((n) =>
-    `<li class="${n.mostrar ? "ancho" : ""}"><a href="tel:${n.numero}"><span class="num">${esc(n.mostrar || n.numero)}</span><span class="nombre">${esc(n.nombre)}</span></a></li>`).join("");
-  $("#numerosFuente").innerHTML = 'Fuente: <a href="https://www.gob.pe/547" target="_blank" rel="noopener">gob.pe – Teléfonos de emergencia</a> y <a href="https://elperuano.pe/noticia/305020-del-105-al-911-gobierno-avanza-hacia-un-sistema-integrado-para-atender-emergencias-mas-rapido" target="_blank" rel="noopener">El Peruano</a> · consultado 24/11/2026. Central de la MPT: <a href="https://cdn.www.gob.pe/uploads/document/file/7442373/6339567-plan-deanexo-rer-n-699-2024-contingencias-ante-lluvias-intensas-region-la-libertad-2025-2026-visado-finalf.pdf" target="_blank" rel="noopener">Plan de contingencia regional 2025-2026</a>.';
+    `<li class="${n.mostrar ? "ancho" : ""}"><a href="tel:${n.numero}">${ic("phone")}<span><span class="num">${esc(n.mostrar || n.numero)}</span><span class="nombre">${esc(n.nombre)}</span></span></a></li>`).join("");
+  $("#numerosFuente").innerHTML = '<a href="https://www.gob.pe/547" target="_blank" rel="noopener">gob.pe</a>, Gob. Regional La Libertad. Lluvia: ERA5 (Open-Meteo). Mapa: © OpenStreetMap.';
   $("#fuenteGuia").href = FUENTE_GUIA;
   $("#fuenteMochila").href = FUENTE_MOCHILA;
 }
@@ -1438,7 +1447,7 @@ function renderRegistro() {
   $("#registroNiveles").innerHTML = arr.length
     ? arr.map((h) => {
         const N = NIVELES[h.nivel];
-        return `<li><span class="chip-nivel nivel-${N.n}">${N.icono} ${N.estado}</span><span>${fechaHora(h.fecha)}</span>${h.origen === "demo" ? '<span class="tag-sim">SIMULADO</span>' : '<span class="meta">sensor</span>'}</li>`;
+        return `<li><span class="chip-nivel nivel-${N.n}">${N.corto}</span><span>${fechaHora(h.fecha)}</span>${h.origen === "demo" ? '<span class="tag-sim">SIMULADO</span>' : '<span class="meta">sensor</span>'}</li>`;
       }).join("")
     : '<li class="meta">Aún no hay cambios de nivel registrados.</li>';
 }
@@ -1470,7 +1479,7 @@ async function cargarLluviaHistorica() {
     }
     dibujarGraficoLluvia(datos, meses);
     const consult = Math.max(...Object.values(datos).map((d) => d.consultado));
-    $("#lluviaFuente").textContent = `Fuente: Open-Meteo Historical Weather API (ERA5) · Trujillo (${TRUJILLO.lat}, ${TRUJILLO.lng}) · consultado ${fechaHora(consult)}`;
+    $("#lluviaFuente").textContent = `Reanálisis ERA5 (Open-Meteo), puede subestimar picos en la costa · ${fechaHora(consult)}`;
   } catch (e) {
     console.warn("Lluvia histórica:", e);
     $("#graficoLluvia").innerHTML = '<div class="sin-datos">Sin datos disponibles</div>';
@@ -1526,7 +1535,7 @@ function renderAdmin() {
   $$(".btn-nivel").forEach((b) => b.classList.toggle("actual", !!S.demo?.activo && Number(b.dataset.nivel) === Number(S.demo.nivel)));
   $("#chkProximidad").checked = proximidadActiva();
   const al = alertaPorReportes();
-  $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Demo ACTIVO · nivel ${S.demo.nivel} (${NIVELES[S.demo.nivel]?.estado})` : "Demo apagado: la app muestra el sensor real.")
+  $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Simulando: ${["seco", "bajo", "medio", "borde"][S.demo.nivel] || S.demo.nivel}` : "Mostrando el sensor real.")
     + (al ? ` · Alerta por reporte de huaico: ${al.nivel === 3 ? "ROJO (verificado por autoridad)" : "NARANJA (3 vecinos)"}` : "");
   $("#adminConexion").innerHTML = Datos.modo === "firebase"
     ? `Conectado a Firebase · usuario anónimo <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`
@@ -1540,13 +1549,13 @@ function renderAdmin() {
   $("#adminReportes").innerHTML = lista.length ? lista.map(([id, r]) => {
     const T = TIPOS_REPORTE[r.tipo] || TIPOS_REPORTE.otro;
     const est = estadoReporte(r);
-    return `<li><strong>${T.icono} ${esc(T.nombre)}</strong>${trazoDe(r) ? ` · tramo ~${Math.round(r.largo || 0)} m` : ""} · ${NOMBRE_ESTADO[est]}${r.verificadoAutoridad ? " · ✔ autoridad" : ""}<br>
-      <span class="meta">${esc((r.descripcion || "").slice(0, 80))} · ${fechaHora(r.creado)} · ✔${r.confirmaciones || 0} ✖${r.negaciones || 0}</span>
+    return `<li><strong>${esc(T.nombre)}</strong>${trazoDe(r) ? ` · tramo ~${Math.round(r.largo || 0)} m` : ""} · ${NOMBRE_ESTADO[est]}${r.verificadoAutoridad ? " · ✔ autoridad" : ""}<br>
+      <span class="meta">${esc((r.descripcion || "").slice(0, 80))} · ${fechaHora(r.creado)} · ${r.confirmaciones || 0} confirman, ${r.negaciones || 0} descartan</span>
       <div class="acciones-admin">
-        <button data-acc="verificar" data-id="${esc(id)}">${r.verificadoAutoridad ? "Quitar verificación" : "✔ Verificar (autoridad)"}</button>
-        <button data-acc="si" data-id="${esc(id)}">+1 "Sigue ahí" (SIMULADO)</button>
-        <button data-acc="no" data-id="${esc(id)}">+1 "Ya no está" (SIMULADO)</button>
-        <button data-acc="borrar" data-id="${esc(id)}">🗑 Eliminar</button>
+        <button data-acc="verificar" data-id="${esc(id)}">${r.verificadoAutoridad ? "Quitar verificación" : "Verificar (autoridad)"}</button>
+        <button data-acc="si" data-id="${esc(id)}">+1 confirmar (simulado)</button>
+        <button data-acc="no" data-id="${esc(id)}">+1 ya no está (simulado)</button>
+        <button data-acc="borrar" data-id="${esc(id)}">Eliminar</button>
       </div></li>`;
   }).join("") : '<li class="meta">No hay reportes.</li>';
 }
@@ -1568,7 +1577,7 @@ function prepararAdmin() {
       Sirena.desbloquear();
       await Datos.setDemo(true, n);
       await Datos.addHistorial(`d_${ahora()}`, { nivel: n, estado: NIVELES[n].estado, fecha: ahora(), origen: "demo" });
-      toast(`Demo: nivel ${n} · ${NIVELES[n].estado}`);
+      toast(`Simulando nivel: ${["seco", "bajo", "medio", "borde"][n]}`);
     } catch (e) { console.error(e); toast("No se pudo cambiar el nivel demo: " + e.message); }
   }));
   $("#btnDemoOff").onclick = async () => {
@@ -1644,7 +1653,7 @@ async function iniciar() {
     const on = b.getAttribute("aria-pressed") !== "true";
     b.setAttribute("aria-pressed", String(on));
     if (!mapa) return;
-    const grupos = b.dataset.capa === "reportes" ? [capas.reportes, capas.bloqueos] : [capas.cauce, capas.zonas];
+    const grupos = b.dataset.capa === "reportes" ? [capas.reportes, capas.bloqueos] : b.dataset.capa === "cauce" ? [capas.cauce] : [capas.zonas];
     grupos.forEach((g) => on ? g.addTo(mapa) : g.remove());
   }));
   $("#btnCentrarme").onclick = async () => { const u = await pedirUbicacion(); if (u && mapa) mapa.setView([u.lat, u.lng], 16, { animate: false }); };
@@ -1658,7 +1667,6 @@ async function iniciar() {
   $("#btnReportar").onclick = abrirReporte;
   $("#btnSonidoSirena").onclick = () => Sirena.desbloquear();
   $("#btnSilenciar").onclick = () => Sirena.silenciar();
-  $("#btnLeyenda").onclick = () => { const l = $("#leyenda"); l.hidden = !l.hidden; $("#btnLeyenda").setAttribute("aria-expanded", String(!l.hidden)); };
   $("#btnUbicacion").onclick = async () => { if (await pedirUbicacion()) cargarClima(); };
 
   prepararFormReporte();
