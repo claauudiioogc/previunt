@@ -613,12 +613,27 @@ function prepararBotonNotif() {
 }
 
 /* ---------------------------------------------------------------------
+   ALARMA (pop-up de emergencia)
+--------------------------------------------------------------------- */
+function abrirAlarma() {
+  $("#alarma").hidden = false;
+  Sirena.desbloquear();          // si el navegador lo permite, suena; si no, aparece "Activar sonido"
+  actualizarBotonesSirena();
+  setTimeout(() => $("#btnRutaEmergencia").focus(), 50);
+}
+function cerrarAlarma() { $("#alarma").hidden = true; }
+
+/* ---------------------------------------------------------------------
    INICIO
 --------------------------------------------------------------------- */
 function renderInicio() {
   const e = estadoEfectivo();
   const card = $("#tarjetaEstado");
-  card.className = "tarjeta-estado " + (e.nivel === null ? "nivel-x" : "nivel-" + e.nivel);
+  card.className = "estado " + (e.nivel === null ? "nivel-x" : "nivel-" + e.nivel);
+  // La regla muestra lo que mide el sensor (o el demo): el nivel de la quebrada, no los reportes
+  const nRegla = esPorReporte(e) ? e.base.nivel : e.nivel;
+  $("#medidorNivel").dataset.nivel = nRegla === null || nRegla === undefined ? "x" : String(nRegla);
+  $("#medidorNivel").setAttribute("aria-label", nRegla === null || nRegla === undefined ? "Nivel de la quebrada: sin datos" : `Nivel de la quebrada: ${nRegla} de 3 (${NIVELES[nRegla].estado})`);
   $("#estadoEtiqueta").textContent = "Quebrada San Ildefonso";
 
   if (e.nivel !== null) {
@@ -663,16 +678,19 @@ function renderInicio() {
   // Modo emergencia (rojo)
   const rojo = e.nivel === 3;
   document.body.classList.toggle("emergencia", rojo);
-  $("#bloqueEmergencia").hidden = !rojo;
+  $("#bannerEmergencia").hidden = !rojo;
+  if (!rojo) cerrarAlarma();
   if (rojo && esPorReporte(e)) {
     // Emergencia por huaico verificado: las sirenas de la quebrada NO están activas, no se dice que lo estén
     $("#emergenciaTitulo").textContent = "HUAICO: EVACÚA AHORA";
+    $("#bannerEmergenciaTitulo").textContent = "Huaico verificado cerca: evacúa";
     $("#emergenciaSub").textContent = "Dónde";
     const donde = e.dist !== null && e.dist !== undefined ? `a unos ${Math.round(e.dist)} m de ti` : "en la ciudad (activa tu ubicación para ver la distancia)";
     $("#listaZonasSirena").innerHTML = `<li>🪨 Huaico verificado por la autoridad ${esc(donde)}${e.reporte.descripcion ? ": " + esc(e.reporte.descripcion) : ""}</li>`;
     $("#emergenciaFuente").innerHTML = `Reporte ciudadano verificado por la autoridad · ${hora(e.ts)} · las sirenas de la quebrada solo suenan con el sensor`;
   } else if (rojo) {
     $("#emergenciaTitulo").textContent = "DESBORDE: EVACÚA AHORA";
+    $("#bannerEmergenciaTitulo").textContent = "Desborde: evacúa ahora";
     $("#emergenciaSub").textContent = "Zonas con sirena activa";
     $("#listaZonasSirena").innerHTML = ZONAS_SIRENA.map((z) => `<li>🔊 ${esc(z.nombre)} – sirena activa</li>`).join("");
     $("#emergenciaFuente").innerHTML = e.fuente === "demo" ? "SIMULADO · modo demo" : `Sensor San Ildefonso · ${hora(e.ts)}`;
@@ -690,7 +708,10 @@ function alCambiarNivel() {
   const nb = esPorReporte(e) ? e.base.nivel : n;
   if (nb !== S.nivelBasePrevio) { S.nivelBasePrevio = nb; if (mapa) pintarCauceYZonas(); }
   if (n === S.nivelPrevio) return;
+  const previo = S.nivelPrevio;
   S.nivelPrevio = n;
+  if (n === 3 && previo !== 3) abrirAlarma();
+  if (typeof renderGuia === "function") renderGuia();
 
   if (n === 3) Sirena.iniciar(); else Sirena.detener();
   // Regla del proyecto: los reportes ciudadanos no generan notificaciones. Sí notifica el sensor, el demo
@@ -777,8 +798,10 @@ function pedirUbicacion({ silencioso = false } = {}) {
       (p) => {
         S.ubicacion = { lat: p.coords.latitude, lng: p.coords.longitude, precision: Math.round(p.coords.accuracy) };
         lsSet("previunt_geoOK", true);
-        $("#btnUbicacion").textContent = "📍 Actualizar ubicación";
+        $("#btnUbicacion").textContent = "Actualizar ubicación";
         pintarYo();
+        renderListas();
+        renderTodo(); // la distancia al huaico reportado depende de la ubicación
         resolve(S.ubicacion);
       },
       (err) => {
@@ -820,7 +843,7 @@ function iniciarMapa() {
   pintarReportes();
   pintarYo();
   // Encuadre inicial: cauce + zonas de sirena
-  mapa.fitBounds(L.latLngBounds(CAUCE_REFERENCIAL.concat(ZONAS_SIRENA.map((z) => z.centro))), { padding: [20, 20] });
+  mapa.fitBounds(L.latLngBounds(CAUCE_REFERENCIAL.concat(ZONAS_SIRENA.map((z) => z.centro))), { padding: [20, 20], animate: false });
 
   // Fotos: se descargan solo al abrir el reporte
   mapa.on("popupopen", async (ev) => {
@@ -906,6 +929,7 @@ function pintarReportes(forzar = true) {
   firmaReportes = firma;
   capas.reportes.clearLayers();
   capas.bloqueos.clearLayers();
+  marcadoresReporte = {};
   Object.entries(S.reportes || {}).forEach(([id, r]) => {
     if (typeof r?.lat !== "number" || typeof r?.lng !== "number") return;
     const est = estadoReporte(r);
@@ -930,8 +954,66 @@ function pintarReportes(forzar = true) {
       L.circle([r.lat, r.lng], { radius: 70, color: "#C62828", weight: 3, fillColor: "#C62828", fillOpacity: 0.35 })
         .bindTooltip("Calle bloqueada (confirmada)").addTo(capas.bloqueos);
     }
-    L.marker([r.lat, r.lng], { icon: icono, title: T.nombre }).bindPopup(() => htmlPopup(id, r, est), { maxWidth: 280 }).addTo(capas.reportes);
+    marcadoresReporte[id] = L.marker([r.lat, r.lng], { icon: icono, title: T.nombre }).bindPopup(() => htmlPopup(id, r, est), { maxWidth: 280 }).addTo(capas.reportes);
   });
+}
+
+/* ---------- Listas de reportes (Inicio y hoja del mapa) ---------- */
+let filtroMapa = "todos";
+let marcadoresReporte = {};
+function itemsReportes() {
+  const p = S.ubicacion ? [S.ubicacion.lat, S.ubicacion.lng] : null;
+  return Object.entries(S.reportes || {})
+    .filter(([, r]) => r && typeof r.lat === "number")
+    .map(([id, r]) => ({ id, r, est: estadoReporte(r), dist: p ? distAReporte(p, r) : null }))
+    .filter((x) => x.est === "sinValidar" || x.est === "confirmado")
+    .sort((a, b) => (a.dist !== null && b.dist !== null) ? a.dist - b.dist : (b.r.creado || 0) - (a.r.creado || 0));
+}
+function htmlItemReporte(x) {
+  const T = TIPOS_REPORTE[x.r.tipo] || TIPOS_REPORTE.otro;
+  const badge = x.r.verificadoAutoridad ? ["autoridad", "Verificado"] : x.est === "confirmado" ? ["confirmado", "Confirmado"] : ["sinValidar", "Sin validar"];
+  const dist = x.dist === null ? "" : x.dist < 1000 ? ` · a ${Math.round(x.dist / 10) * 10} m` : ` · a ${(x.dist / 1000).toFixed(1)} km`;
+  return `<li><button class="item-reporte" data-rep="${esc(x.id)}">
+    <span class="item-foto" data-foto-item="${esc(x.id)}" aria-hidden="true">${T.icono}</span>
+    <span><span class="item-titulo">${esc(T.nombre)}${trazoDe(x.r) ? " (tramo)" : ""}</span>
+      ${x.r.descripcion ? `<span class="item-desc">${esc(x.r.descripcion)}</span>` : ""}
+      <span class="item-meta">${hace(x.r.creado)}${dist}</span></span>
+    <span class="estado-badge ${badge[0]}">${badge[1]}</span></button></li>`;
+}
+async function cargarMiniaturas(cont, max = 10) {
+  const spans = [...cont.querySelectorAll("[data-foto-item]")].slice(0, max);
+  for (const sp of spans) {
+    const id = sp.dataset.fotoItem, r = S.reportes[id];
+    if (!r || !(r.foto || r.tieneFoto)) continue;
+    try {
+      const f = await Datos.getFoto(id, r);
+      if (f && sp.isConnected) { const img = document.createElement("img"); img.className = "item-foto"; img.alt = ""; img.src = f; sp.replaceWith(img); }
+    } catch (e) { console.warn("Miniatura:", e); }
+  }
+}
+function renderListas() {
+  const items = itemsReportes();
+  const ini = $("#listaReportesInicio");
+  ini.innerHTML = items.length
+    ? items.slice(0, 3).map(htmlItemReporte).join("")
+    : '<li class="lista-vacia">No hay reportes activos. Si ves un problema en tu calle, repórtalo.</li>';
+  cargarMiniaturas(ini, 3);
+  const conf = items.filter((x) => x.est === "confirmado").length;
+  const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+  $("#resumenReportes").textContent = items.length ? `${pl(items.length, "activo", "activos")} · ${pl(conf, "confirmado", "confirmados")}` : "ninguno activo";
+  const fil = items.filter((x) => filtroMapa === "todos" || x.est === filtroMapa);
+  const lm = $("#listaReportesMapa");
+  lm.innerHTML = fil.length ? fil.map(htmlItemReporte).join("") : '<li class="lista-vacia">No hay reportes con este filtro.</li>';
+  cargarMiniaturas(lm, 10);
+}
+function verReporteEnMapa(id) {
+  irATab("mapa");
+  const r = S.reportes[id];
+  if (!mapa || !r) return;
+  $("#hojaMapa").dataset.abierta = "false";
+  $("#asaHoja").setAttribute("aria-expanded", "false");
+  mapa.setView([r.lat, r.lng], 16, { animate: false });
+  setTimeout(() => marcadoresReporte[id]?.openPopup(), 300);
 }
 
 function htmlPopup(id, r, est) {
@@ -993,36 +1075,55 @@ function puntoMasCercanoEnCauce(p) {
 }
 
 async function mostrarEvacuacion() {
+  cerrarAlarma();
   irATab("mapa");
   if (!mapa) return;
+  $("#hojaMapa").dataset.abierta = "false";
   if (!S.ubicacion) await pedirUbicacion();
   capas.evac.clearLayers();
-  const panel = $("#panelEvac");
-  panel.hidden = false;
+  $("#panelEvac").hidden = false;
+  const ana = ` <a href="${MAPA_ANA_2015}" target="_blank" rel="noopener">Ver mapa oficial de evacuación (ANA, 2015)</a>.`;
   if (!S.ubicacion) {
-    $("#textoEvac").innerHTML = "<strong>Activa tu ubicación</strong> para calcular hacia dónde alejarte del cauce. Regla general: muévete hacia los costados de la quebrada y hacia zonas altas; nunca a lo largo del cauce. <em>Referencial, confirmar con Defensa Civil.</em>";
-    mapa.fitBounds(L.polyline(CAUCE_REFERENCIAL).getBounds(), { padding: [30, 30] });
+    $("#textoEvac").innerHTML = "<strong>Activa tu ubicación</strong> para trazar tu ruta. Regla general: muévete hacia los costados de la quebrada y hacia zonas altas; nunca a lo largo del cauce." + ana;
+    mapa.fitBounds(L.polyline(CAUCE_REFERENCIAL).getBounds(), { padding: [30, 30], animate: false });
     return;
   }
   const p = [S.ubicacion.lat, S.ubicacion.lng];
-  const { d, xy, seg, cosLat } = puntoMasCercanoEnCauce(p);
-  if (d > 2500) {
-    $("#textoEvac").innerHTML = `Estás a unos <strong>${(d / 1000).toFixed(1)} km</strong> del cauce referencial. Si no estás en zona de riesgo, permanece en un lugar seguro y sigue las indicaciones oficiales. <em>Referencial, confirmar con Defensa Civil.</em>`;
-    mapa.setView(p, 14);
-    return;
+  const rad = Math.PI / 180, RT = 6371000, cosLat = Math.cos(p[0] * rad);
+  const e = estadoEfectivo();
+  let v, de;
+  if (esPorReporte(e) && e.reporte) {
+    // Huaico reportado: alejarse del punto del huaico
+    v = [(p[1] - e.reporte.lng) * rad * cosLat * RT, (p[0] - e.reporte.lat) * rad * RT];
+    de = "del huaico reportado";
+    if (Math.hypot(v[0], v[1]) < 25) { const pc = puntoMasCercanoEnCauce(p); v = [-pc.seg[1], pc.seg[0]]; }
+  } else {
+    const pc = puntoMasCercanoEnCauce(p);
+    if (pc.d > 2500) {
+      $("#textoEvac").innerHTML = `Estás a unos <strong>${(pc.d / 1000).toFixed(1)} km</strong> del cauce. Si no estás en zona de riesgo, quédate en un lugar seguro y sigue las indicaciones oficiales.` + ana;
+      mapa.setView(p, 14, { animate: false });
+      return;
+    }
+    v = pc.d > 25 ? [-pc.xy[0], -pc.xy[1]] : [-pc.seg[1], pc.seg[0]];
+    de = "del cauce";
   }
-  // Vector desde el cauce hacia el usuario (alejarse); si está encima, perpendicular al tramo
-  let v = d > 25 ? [-xy[0], -xy[1]] : [-seg[1], seg[0]];
   const len = Math.hypot(v[0], v[1]) || 1;
   v = [v[0] / len, v[1] / len];
-  const dist = 700; // metros
-  const rad = Math.PI / 180, R = 6371000;
-  const destino = [p[0] + (v[1] * dist) / (R * rad), p[1] + (v[0] * dist) / (R * rad * cosLat)];
-  L.polyline([p, destino], { color: "#1565C0", weight: 6, dashArray: "12 8" }).addTo(capas.evac);
-  L.marker(destino, { icon: L.divIcon({ className: "", html: '<div class="mk" style="background:#1565C0;color:#fff">⬆</div>', iconSize: [38, 38], iconAnchor: [19, 19] }) })
-    .bindTooltip("Dirección para alejarte del cauce (referencial)").addTo(capas.evac);
-  $("#textoEvac").innerHTML = `Estás a unos <strong>${Math.round(d)} m</strong> del cauce referencial. Avanza en la <strong>dirección de la línea azul</strong> (alejándote del cauce) hacia una zona alta. No cruces la quebrada. <em>Dirección referencial, confirma rutas oficiales con Defensa Civil.</em>`;
-  mapa.fitBounds(L.latLngBounds([p, destino]).pad(0.6));
+  const DIST = 700;
+  const destino = { lat: p[0] + (v[1] * DIST) / (RT * rad), lng: p[1] + (v[0] * DIST) / (RT * rad * cosLat) };
+  $("#textoEvac").textContent = "Buscando una ruta a pie por las calles…";
+  const ruta = await rutaPorCalles({ lat: p[0], lng: p[1] }, destino);
+  L.polyline(ruta.trazo, { color: "#fff", weight: 11, opacity: 0.9 }).addTo(capas.evac);
+  L.polyline(ruta.trazo, { color: "#1565C0", weight: 7, dashArray: ruta.metodo.startsWith("línea recta") ? "12 8" : null }).addTo(capas.evac);
+  const fin = ruta.trazo[ruta.trazo.length - 1];
+  L.marker(fin, { icon: L.divIcon({ className: "", html: '<div class="mk" style="background:#1565C0;color:#fff">⬆</div>', iconSize: [38, 38], iconAnchor: [19, 19] }) })
+    .bindTooltip("Zona alejada del peligro (referencial)").addTo(capas.evac);
+  const min = Math.max(1, Math.round(ruta.largo / 75)); // ~4,5 km/h caminando
+  $("#textoEvac").innerHTML = `Camina unos <strong>${Math.round(ruta.largo)} m (~${min} min)</strong> por la línea azul, alejándote ${de}, hacia una zona alta. No cruces la quebrada.`
+    + (ruta.metodo.startsWith("línea recta") ? " No se pudo trazar por calles: sigue la dirección de la línea." : "")
+    + ` <em>Ruta referencial: confirma con Defensa Civil y sigue a los brigadistas.</em>` + ana;
+  // Deja espacio para el panel de arriba y para el botón "Reportar" y la hoja de abajo
+  mapa.fitBounds(L.latLngBounds([p, fin].concat(ruta.trazo)), { paddingTopLeft: [30, 230], paddingBottomRight: [30, 170], animate: false });
 }
 
 /* ---------------------------------------------------------------------
@@ -1161,7 +1262,7 @@ function marcarTramo() {
   if (marcadorTemp) { marcadorTemp.remove(); marcadorTemp = null; }
   if (capaTemp) { capaTemp.remove(); capaTemp = null; }
   // Acercar a nivel de calle para que los toques marquen cuadras, no kilómetros
-  if (mapa.getZoom() < 16) mapa.setView(S.ubicacion ? [S.ubicacion.lat, S.ubicacion.lng] : mapa.getCenter(), 16);
+  if (mapa.getZoom() < 16) mapa.setView(S.ubicacion ? [S.ubicacion.lat, S.ubicacion.lng] : mapa.getCenter(), 16, { animate: false });
   capturarToque("1/2 · Toca dónde EMPIEZA el problema en la calle", (a) => {
     capaTemp = L.layerGroup().addTo(mapa);
     L.circleMarker(a, { radius: 8, color: "#fff", weight: 3, fillColor: "#1565C0", fillOpacity: 1 }).bindTooltip("Inicio").addTo(capaTemp);
@@ -1180,7 +1281,7 @@ function marcarTramo() {
         return;
       }
       L.polyline(res.trazo, { color: "#1565C0", weight: 7, opacity: 0.85 }).addTo(capaTemp);
-      mapa.fitBounds(L.polyline(res.trazo).getBounds().pad(0.4));
+      mapa.fitBounds(L.polyline(res.trazo).getBounds().pad(0.4), { animate: false });
       R.trazo = res.trazo; R.metodoTrazo = res.metodo; R.largo = Math.round(res.largo);
       const medio = res.trazo[Math.floor(res.trazo.length / 2)];
       R.lat = medio[0]; R.lng = medio[1]; R.origenUbic = "tramo elegido en el mapa";
@@ -1231,7 +1332,7 @@ function prepararFormReporte() {
   $("#btnGPS").onclick = async () => {
     $("#textoUbicacion").textContent = "Buscando tu ubicación…";
     const u = await pedirUbicacion();
-    if (u) { fijarUbicacionReporte(u.lat, u.lng, `GPS ±${u.precision} m`); mapa?.setView([u.lat, u.lng], 16); }
+    if (u) { fijarUbicacionReporte(u.lat, u.lng, `GPS ±${u.precision} m`); mapa?.setView([u.lat, u.lng], 16, { animate: false }); }
     else $("#textoUbicacion").textContent = "No se pudo usar el GPS. Toca el mapa para ubicarlo.";
   };
   $("#btnElegirMapa").onclick = () => {
@@ -1280,17 +1381,25 @@ function prepararFormReporte() {
 /* ---------------------------------------------------------------------
    PREPÁRATE
 --------------------------------------------------------------------- */
+let nivelGuia = null; // nivel elegido por el usuario en Prepárate (null = el actual)
+function renderGuia() {
+  const cont = $("#guiaNiveles");
+  if (!cont) return;
+  const actual = estadoEfectivo().nivel;
+  const sel = nivelGuia ?? (actual ?? 0);
+  const N = NIVELES[sel], g = GUIA_NIVELES[sel] || {};
+  const bloque = (t, arr) => arr ? `<h4>${t}</h4><ul>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
+  cont.innerHTML = `<div class="niveles-sel" role="group" aria-label="Elegir nivel">${NIVELES.map((M) =>
+      `<button class="nivel-sel" data-n="${M.n}" aria-pressed="${M.n === sel}"><span class="ico" aria-hidden="true">${M.icono}</span>${M.titulo}${M.n === actual ? '<span class="nivel-ahora">ahora</span>' : ""}</button>`).join("")}</div>
+    <div class="guia-panel">
+      <p class="guia-mensaje nivel-${sel}">${esc(N.mensaje)}</p>
+      ${bloque("Antes", g.antes)}${bloque("Durante", g.durante)}${bloque("Después", g.despues)}
+      <h4>Lo más importante</h4><ul>${N.acciones.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
+    </div>`;
+}
+
 function renderPreparate() {
-  $("#guiaNiveles").innerHTML = NIVELES.map((N) => {
-    const g = GUIA_NIVELES[N.n] || {};
-    const bloque = (t, arr) => arr ? `<h4>${t}</h4><ul>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
-    return `<details class="guia" ${N.n === (estadoEfectivo().nivel ?? -1) ? "open" : ""}>
-      <summary class="nivel-${N.n}"><span aria-hidden="true">${N.icono}</span> ${N.titulo} · ${N.estado}</summary>
-      <div class="cuerpo"><p><strong>${esc(N.mensaje)}.</strong></p>
-        ${bloque("Antes", g.antes)}${bloque("Durante", g.durante)}${bloque("Después", g.despues)}
-        <h4>Ahora mismo</h4><ul>${N.acciones.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
-      </div></details>`;
-  }).join("");
+  renderGuia();
 
   const marcados = lsGet("previunt_mochila", {});
   $("#listaMochila").innerHTML = MOCHILA.map((m, i) =>
@@ -1306,10 +1415,8 @@ function renderPreparate() {
   progreso();
 
   $("#listaNumeros").innerHTML = NUMEROS_EMERGENCIA.map((n) =>
-    `<li><a href="tel:${n.numero}"><span>${esc(n.nombre)}</span><span class="num">📞 ${esc(n.mostrar || n.numero)}</span></a></li>`).join("");
+    `<li class="${n.mostrar ? "ancho" : ""}"><a href="tel:${n.numero}"><span class="num">${esc(n.mostrar || n.numero)}</span><span class="nombre">${esc(n.nombre)}</span></a></li>`).join("");
   $("#numerosFuente").innerHTML = 'Fuente: <a href="https://www.gob.pe/547" target="_blank" rel="noopener">gob.pe – Teléfonos de emergencia</a> y <a href="https://elperuano.pe/noticia/305020-del-105-al-911-gobierno-avanza-hacia-un-sistema-integrado-para-atender-emergencias-mas-rapido" target="_blank" rel="noopener">El Peruano</a> · consultado 24/11/2026. Central de la MPT: <a href="https://cdn.www.gob.pe/uploads/document/file/7442373/6339567-plan-deanexo-rer-n-699-2024-contingencias-ante-lluvias-intensas-region-la-libertad-2025-2026-visado-finalf.pdf" target="_blank" rel="noopener">Plan de contingencia regional 2025-2026</a>.';
-  $("#zonasANA").innerHTML = ZONAS_ANA_2015.map((z) => `<li>${esc(z.nombre)}${z.alerta ? `<br><strong class="txt-alerta">⚠️ ${esc(z.alerta)}</strong> <a href="${z.fuenteAlerta}" target="_blank" rel="noopener">Fuente ↗</a>` : ""}</li>`).join("");
-  $("#linkMapaANA").href = MAPA_ANA_2015;
   $("#fuenteGuia").href = FUENTE_GUIA;
   $("#fuenteMochila").href = FUENTE_MOCHILA;
 }
@@ -1321,8 +1428,7 @@ function renderLineaTiempo() {
   $("#lineaTiempo").innerHTML = HISTORIA.map((h) => `
     <li class="${h.pendiente ? "pendiente" : ""}">
       <div class="fecha">${esc(h.fecha)}</div>
-      <div><strong>${esc(h.titulo)}</strong></div>
-      <p>${esc(h.texto)}</p>
+      <p><strong>${esc(h.titulo)}.</strong> ${esc(h.texto)}</p>
       <div class="fuentes">${h.fuentes.length ? "Fuente: " + h.fuentes.map((f) => `<a href="${f.u}" target="_blank" rel="noopener">${esc(f.t)} ↗</a>`).join("") : '<span class="meta">Sin fuente verificada aún</span>'}</div>
     </li>`).join("");
 }
@@ -1332,7 +1438,7 @@ function renderRegistro() {
   $("#registroNiveles").innerHTML = arr.length
     ? arr.map((h) => {
         const N = NIVELES[h.nivel];
-        return `<li><span class="chip nivel-${N.n}">${N.icono} ${N.estado}</span><span>${fechaHora(h.fecha)}</span>${h.origen === "demo" ? '<span class="tag-sim">SIMULADO</span>' : '<span class="meta">sensor</span>'}</li>`;
+        return `<li><span class="chip-nivel nivel-${N.n}">${N.icono} ${N.estado}</span><span>${fechaHora(h.fecha)}</span>${h.origen === "demo" ? '<span class="tag-sim">SIMULADO</span>' : '<span class="meta">sensor</span>'}</li>`;
       }).join("")
     : '<li class="meta">Aún no hay cambios de nivel registrados.</li>';
 }
@@ -1436,7 +1542,7 @@ function renderAdmin() {
     const est = estadoReporte(r);
     return `<li><strong>${T.icono} ${esc(T.nombre)}</strong>${trazoDe(r) ? ` · tramo ~${Math.round(r.largo || 0)} m` : ""} · ${NOMBRE_ESTADO[est]}${r.verificadoAutoridad ? " · ✔ autoridad" : ""}<br>
       <span class="meta">${esc((r.descripcion || "").slice(0, 80))} · ${fechaHora(r.creado)} · ✔${r.confirmaciones || 0} ✖${r.negaciones || 0}</span>
-      <div class="acciones">
+      <div class="acciones-admin">
         <button data-acc="verificar" data-id="${esc(id)}">${r.verificadoAutoridad ? "Quitar verificación" : "✔ Verificar (autoridad)"}</button>
         <button data-acc="si" data-id="${esc(id)}">+1 "Sigue ahí" (SIMULADO)</button>
         <button data-acc="no" data-id="${esc(id)}">+1 "Ya no está" (SIMULADO)</button>
@@ -1501,7 +1607,6 @@ function irATab(nombre) {
   $$(".tab").forEach((t) => t.classList.toggle("activa", t.id === "tab-" + nombre));
   $$(".nav-btn").forEach((b) => b.classList.toggle("activa", b.dataset.tab === nombre));
   if (nombre === "mapa") { iniciarMapa(); setTimeout(() => mapa?.invalidateSize(), 60); }
-  if (nombre === "historial") renderRegistro();
   window.scrollTo(0, 0);
 }
 
@@ -1519,7 +1624,36 @@ async function iniciar() {
   // Navegación
   $$(".nav-btn").forEach((b) => b.addEventListener("click", () => irATab(b.dataset.tab)));
   $("#btnRutaEmergencia").onclick = mostrarEvacuacion;
-  $("#btnRutaPrep").onclick = mostrarEvacuacion;
+  $("#btnCerrarAlarma").onclick = cerrarAlarma;
+  $("#bannerEmergencia").onclick = abrirAlarma;
+  $("#btnReportarInicio").onclick = abrirReporte;
+  $$("[data-ir]").forEach((b) => b.addEventListener("click", () => irATab(b.dataset.ir)));
+  const listaClick = (ev) => { const b = ev.target.closest("[data-rep]"); if (b) verReporteEnMapa(b.dataset.rep); };
+  $("#listaReportesInicio").addEventListener("click", listaClick);
+  $("#listaReportesMapa").addEventListener("click", listaClick);
+  $("#asaHoja").onclick = () => {
+    const h = $("#hojaMapa"), abierta = h.dataset.abierta !== "true";
+    h.dataset.abierta = String(abierta); $("#asaHoja").setAttribute("aria-expanded", String(abierta));
+  };
+  $$(".filtro").forEach((b) => b.addEventListener("click", () => {
+    filtroMapa = b.dataset.filtro;
+    $$(".filtro").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderListas();
+  }));
+  $$(".chip[data-capa]").forEach((b) => b.addEventListener("click", () => {
+    const on = b.getAttribute("aria-pressed") !== "true";
+    b.setAttribute("aria-pressed", String(on));
+    if (!mapa) return;
+    const grupos = b.dataset.capa === "reportes" ? [capas.reportes, capas.bloqueos] : [capas.cauce, capas.zonas];
+    grupos.forEach((g) => on ? g.addTo(mapa) : g.remove());
+  }));
+  $("#btnCentrarme").onclick = async () => { const u = await pedirUbicacion(); if (u && mapa) mapa.setView([u.lat, u.lng], 16, { animate: false }); };
+  $("#guiaNiveles").addEventListener("click", (ev) => {
+    const b = ev.target.closest(".nivel-sel"); if (!b) return;
+    nivelGuia = Number(b.dataset.n); renderGuia();
+  });
+  let lluviaCargada = false;
+  $("#detLluvia").addEventListener("toggle", () => { if ($("#detLluvia").open && !lluviaCargada) { lluviaCargada = true; cargarLluviaHistorica(); } });
   $("#btnCerrarEvac").onclick = () => { $("#panelEvac").hidden = true; capas.evac?.clearLayers(); };
   $("#btnReportar").onclick = abrirReporte;
   $("#btnSonidoSirena").onclick = () => Sirena.desbloquear();
@@ -1541,7 +1675,7 @@ async function iniciar() {
 
   Datos.suscribir("sensor", (v) => { S.sensor = v; renderTodo(); });
   Datos.suscribir("demo", (v) => { S.demo = v || { activo: false, nivel: 0 }; renderTodo(); });
-  Datos.suscribir("reportes", (v) => { S.reportes = v || {}; pintarReportes(); renderTodo(); });
+  Datos.suscribir("reportes", (v) => { S.reportes = v || {}; pintarReportes(); renderTodo(); renderListas(); });
   Datos.suscribir("historial", (v) => { S.historial = v || {}; renderRegistro(); });
 
   // Revisión periódica: antigüedad del sensor y caducidad de reportes
@@ -1554,7 +1688,7 @@ async function iniciar() {
   } catch {}
   cargarClima();
   setInterval(cargarClima, 10 * 60 * 1000);
-  cargarLluviaHistorica();
+  setInterval(renderListas, 60 * 1000); // refresca "hace X min" y caducidad
 }
 
 if ("serviceWorker" in navigator) {

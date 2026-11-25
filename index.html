@@ -5,13 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>PREVIUNT · Alerta quebrada San Ildefonso</title>
   <meta name="description" content="Prevención y alerta temprana ante huaicos y lluvias intensas en Trujillo – quebrada San Ildefonso.">
-  <meta name="theme-color" content="#1565C0">
+  <meta name="theme-color" content="#0E2846">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Tipografía: Atkinson Hyperlegible (diseñada para baja visión). Sin conexión usa la del sistema. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 
   <!-- Leaflet (mapa) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
@@ -25,10 +30,10 @@
 
   <header class="barra">
     <button id="logo" class="logo" aria-label="PREVIUNT">
-      <img src="icons/icon-192.png" alt="" width="32" height="32">
+      <img src="icons/icon-192.png" alt="" width="34" height="34">
       <span class="logo-texto">
         <strong>PREVIUNT</strong>
-        <small>Quebrada San Ildefonso · Trujillo</small>
+        <small>Quebrada San Ildefonso, Trujillo</small>
       </span>
     </button>
     <span id="badgeConexion" class="badge-conexion" title="Origen de los datos">…</span>
@@ -38,154 +43,187 @@
     <!-- ===================== INICIO ===================== -->
     <section id="tab-inicio" class="tab activa" aria-label="Inicio">
 
-      <!-- Modo emergencia (solo nivel 3) -->
-      <div id="bloqueEmergencia" class="bloque-emergencia" hidden>
-        <div class="emergencia-icono" aria-hidden="true">🚨</div>
-        <h1 id="emergenciaTitulo">DESBORDE: EVACÚA AHORA</h1>
-        <p class="emergencia-instr">Sal hacia una <strong>zona alta</strong>, alejándote del cauce de la quebrada. <strong>No cruces</strong> calles con agua o lodo.</p>
-        <button id="btnRutaEmergencia" class="btn btn-blanco btn-grande">🧭 Ver ruta de evacuación</button>
-        <div class="emergencia-sirena">
-          <button id="btnSonidoSirena" class="btn btn-borde-blanco" hidden>🔊 Activar sonido de sirena</button>
-          <button id="btnSilenciar" class="btn btn-borde-blanco" hidden>🔇 Silenciar sirena en este celular</button>
-        </div>
-        <h2 id="emergenciaSub" class="emergencia-sub">Zonas con sirena activa</h2>
-        <ul id="listaZonasSirena" class="lista-zonas"></ul>
-        <p id="emergenciaFuente" class="meta meta-blanco"></p>
-      </div>
+      <!-- Aviso de emergencia (reabre la alarma) -->
+      <button id="bannerEmergencia" class="banner-emergencia" hidden>
+        <span class="banner-emergencia-pulso" aria-hidden="true"></span>
+        <span><strong id="bannerEmergenciaTitulo">Emergencia activa</strong><br>Toca para ver qué hacer y tu ruta a zona alta</span>
+      </button>
 
-      <!-- Tarjeta de estado de la quebrada -->
-      <article id="tarjetaEstado" class="tarjeta-estado nivel-x" aria-live="polite">
-        <div class="estado-cabecera">
-          <span id="estadoIcono" class="estado-icono" aria-hidden="true">…</span>
-          <div>
-            <p id="estadoEtiqueta" class="estado-etiqueta">Quebrada San Ildefonso</p>
-            <h1 id="estadoTitulo" class="estado-titulo">Cargando…</h1>
-          </div>
+      <!-- Estado de la quebrada -->
+      <article id="tarjetaEstado" class="estado nivel-x" aria-live="polite">
+        <div class="estado-texto">
+          <p id="estadoEtiqueta" class="estado-etiqueta">Quebrada San Ildefonso</p>
+          <h1 class="estado-titulo"><span id="estadoIcono" aria-hidden="true">…</span> <span id="estadoTitulo">Cargando…</span></h1>
+          <p id="estadoMensaje" class="estado-mensaje"></p>
+          <p id="estadoMeta" class="estado-meta"></p>
         </div>
-        <p id="estadoMensaje" class="estado-mensaje"></p>
-        <p id="estadoMeta" class="estado-meta"></p>
+        <!-- Regla de nivel: los 3 electrodos de la estación (bajo, medio, borde) -->
+        <div id="medidorNivel" class="regla" data-nivel="x" role="img" aria-label="Nivel de la quebrada">
+          <span class="regla-marca" data-n="3">Borde</span>
+          <span class="regla-marca" data-n="2">Medio</span>
+          <span class="regla-marca" data-n="1">Bajo</span>
+          <span class="regla-marca regla-base" data-n="0">Seca</span>
+        </div>
       </article>
 
-      <section class="tarjeta">
+      <section class="bloque">
         <h2>Qué hacer ahora</h2>
-        <ol id="listaAcciones" class="lista-acciones"></ol>
+        <ol id="listaAcciones" class="acciones"></ol>
       </section>
 
-      <section class="tarjeta" id="tarjetaClima">
-        <div class="tarjeta-cab">
+      <section class="bloque" id="tarjetaClima">
+        <div class="bloque-cab">
           <h2>Clima en tu zona</h2>
-          <button id="btnUbicacion" class="btn-link">📍 Usar mi ubicación</button>
+          <button id="btnUbicacion" class="btn-texto">Usar mi ubicación</button>
         </div>
         <p id="climaLugar" class="meta"></p>
-        <div id="climaCuerpo" class="clima-cuerpo">
-          <p class="meta">Cargando clima…</p>
-        </div>
+        <div id="climaCuerpo" class="clima"><p class="meta">Cargando clima…</p></div>
         <p id="climaFuente" class="meta"></p>
       </section>
 
-      <section class="tarjeta fila-notif" id="filaNotif" hidden>
-        <p>🔔 Recibe un aviso solo si la quebrada sube a <strong>naranja</strong> o <strong>rojo</strong>.</p>
-        <button id="btnNotif" class="btn btn-primario">Activar avisos</button>
+      <section class="bloque">
+        <div class="bloque-cab">
+          <h2>Reportes cerca de ti</h2>
+          <button class="btn-texto" data-ir="mapa">Ver en el mapa</button>
+        </div>
+        <ul id="listaReportesInicio" class="lista-reportes"></ul>
+        <button id="btnReportarInicio" class="btn btn-primario btn-ancho">＋ Reportar un problema</button>
       </section>
+
+      <section class="bloque bloque-suave fila-notif" id="filaNotif" hidden>
+        <p>Recibe un aviso solo si la quebrada sube a <strong>naranja</strong> o <strong>rojo</strong>.</p>
+        <button id="btnNotif" class="btn btn-secundario">Activar avisos</button>
+      </section>
+
+      <details class="bloque plegable">
+        <summary>Últimos cambios de nivel</summary>
+        <ul id="registroNiveles" class="registro"></ul>
+      </details>
     </section>
 
     <!-- ===================== MAPA ===================== -->
     <section id="tab-mapa" class="tab" aria-label="Mapa">
-      <div id="mapa" class="mapa"></div>
-      <div id="mapaAviso" class="mapa-aviso" hidden></div>
-      <div id="bannerElegir" class="banner-elegir" hidden>
-        <span id="textoBannerElegir">👆 Toca el mapa donde está el problema</span>
-        <button id="btnCancelarElegir" class="btn btn-borde">Cancelar</button>
-      </div>
-      <div id="panelEvac" class="panel-evac" hidden>
-        <button id="btnCerrarEvac" class="cerrar" aria-label="Cerrar">✕</button>
-        <p id="textoEvac"></p>
-      </div>
-      <button id="btnReportar" class="fab">＋ Reportar</button>
-      <button id="btnLeyenda" class="btn-leyenda" aria-expanded="false">Leyenda</button>
-      <div id="leyenda" class="leyenda" hidden>
-        <p><strong>Quebrada (nivel actual)</strong></p>
-        <p><span class="sw" style="background:#2E7D32"></span>Verde · Normal</p>
-        <p><span class="sw" style="background:#F9A825"></span>Amarillo · Vigilancia</p>
-        <p><span class="sw" style="background:#EF6C00"></span>Naranja · Alerta</p>
-        <p><span class="sw" style="background:#C62828"></span>Rojo · Emergencia</p>
-        <p><strong>Reportes ciudadanos</strong></p>
-        <p><span class="sw sw-gris"></span>Sin validar (borde punteado)</p>
-        <p><span class="sw" style="background:#455A64"></span>Confirmado (≥ 3 usuarios)</p>
-        <p><span class="sw" style="background:#C62828;opacity:.5"></span>Calle bloqueada confirmada</p>
-        <p><span class="sw sw-linea"></span>Tramo de calle reportado (línea)</p>
-        <p class="meta">Cauce y zonas de sirena: <strong>trazado referencial</strong>.</p>
+      <div class="mapa-contenedor">
+        <div id="mapa" class="mapa"></div>
+        <div id="mapaAviso" class="mapa-aviso" hidden></div>
+
+        <div class="chips" role="group" aria-label="Capas del mapa">
+          <button class="chip" data-capa="reportes" aria-pressed="true">Reportes</button>
+          <button class="chip" data-capa="quebrada" aria-pressed="true">Quebrada</button>
+          <button class="chip" id="btnCentrarme">Mi ubicación</button>
+          <button class="chip" id="btnLeyenda" aria-expanded="false">Leyenda</button>
+        </div>
+        <div id="leyenda" class="leyenda" hidden>
+          <p><strong>Quebrada (color = nivel actual)</strong></p>
+          <p><span class="sw" style="background:#2E7D32"></span>Normal</p>
+          <p><span class="sw" style="background:#F9A825"></span>Vigilancia</p>
+          <p><span class="sw" style="background:#EF6C00"></span>Alerta</p>
+          <p><span class="sw" style="background:#C62828"></span>Emergencia</p>
+          <p><strong>Reportes</strong></p>
+          <p><span class="sw sw-gris"></span>Sin validar (borde punteado)</p>
+          <p><span class="sw" style="background:#455A64"></span>Confirmado por 3 vecinos</p>
+          <p><span class="sw sw-linea"></span>Tramo de calle</p>
+          <p class="meta">Cauce y zonas de sirena: trazado referencial.</p>
+        </div>
+
+        <div id="bannerElegir" class="banner-elegir" hidden>
+          <span id="textoBannerElegir">Toca el mapa donde está el problema</span>
+          <button id="btnCancelarElegir" class="btn btn-secundario btn-chico">Cancelar</button>
+        </div>
+        <div id="panelEvac" class="panel-evac" hidden>
+          <button id="btnCerrarEvac" class="cerrar" aria-label="Cerrar">✕</button>
+          <p id="textoEvac"></p>
+        </div>
+
+        <button id="btnReportar" class="fab">＋ Reportar</button>
+
+        <!-- Hoja inferior con la lista de reportes -->
+        <section id="hojaMapa" class="hoja-mapa" data-abierta="false" aria-label="Reportes">
+          <button id="asaHoja" class="hoja-mapa-asa" aria-expanded="false">
+            <span class="asa" aria-hidden="true"></span>
+            <span class="hoja-mapa-titulo"><strong>Reportes</strong> <span id="resumenReportes" class="meta"></span></span>
+          </button>
+          <div class="hoja-mapa-cuerpo">
+            <div class="filtros" role="group" aria-label="Filtrar reportes">
+              <button class="filtro" data-filtro="todos" aria-pressed="true">Todos</button>
+              <button class="filtro" data-filtro="sinValidar" aria-pressed="false">Sin validar</button>
+              <button class="filtro" data-filtro="confirmado" aria-pressed="false">Confirmados</button>
+            </div>
+            <ul id="listaReportesMapa" class="lista-reportes"></ul>
+            <p class="meta nota-comunidad">La confirmación de los vecinos no reemplaza la verificación de las autoridades.</p>
+          </div>
+        </section>
       </div>
     </section>
 
     <!-- ===================== PREPÁRATE ===================== -->
     <section id="tab-preparate" class="tab" aria-label="Prepárate">
       <h1 class="titulo-tab">Prepárate</h1>
+      <p class="subtitulo-tab">Qué hacer antes, durante y después de un huaico.</p>
 
-      <section class="tarjeta">
-        <h2>Qué hacer según el nivel</h2>
+      <section class="bloque">
+        <h2>Qué significa cada nivel</h2>
         <div id="guiaNiveles"></div>
-        <p class="meta">Fuente: <a id="fuenteGuia" target="_blank" rel="noopener">cartilla "Huaicos y aluviones" – OGRD del Congreso (2025)</a>, alineada con INDECI.</p>
+        <p class="meta">Fuente: <a id="fuenteGuia" target="_blank" rel="noopener">cartilla "Huaicos y aluviones", OGRD del Congreso (2025)</a>, alineada con INDECI. Si suena la alarma, la app te muestra cómo llegar a una zona alta.</p>
       </section>
 
-      <section class="tarjeta">
-        <h2>Evacuación y puntos seguros</h2>
-        <p>Ante un huaico, muévete <strong>hacia los costados del cauce y hacia zonas altas</strong>, nunca a lo largo de la quebrada ni cruzándola.</p>
-        <button id="btnRutaPrep" class="btn btn-primario">🧭 Ver mi dirección de evacuación</button>
-        <p class="meta">La dirección que calcula la app es <strong>referencial, confirmar con Defensa Civil</strong>.</p>
-        <h3>Zonas seguras del mapa oficial de la ANA (2015)</h3>
-        <ul id="zonasANA" class="lista-ana"></ul>
-        <p class="meta">Mapa de rutas de evacuación y zonas de refugio – Quebrada San Idelfonso, ANA, setiembre 2015: <a id="linkMapaANA" target="_blank" rel="noopener">ver mapa oficial (PDF) ↗</a>. Tiene más de 10 años: confirma con Defensa Civil de El Porvenir antes de usarlo.</p>
-      </section>
-
-      <section class="tarjeta">
-        <div class="tarjeta-cab">
+      <section class="bloque">
+        <div class="bloque-cab">
           <h2>Mochila de emergencia</h2>
           <span id="mochilaProgreso" class="pill"></span>
         </div>
         <ul id="listaMochila" class="checklist"></ul>
-        <button id="btnReiniciarMochila" class="btn-link">Desmarcar todo</button>
-        <p class="meta">Se guarda en este celular. Máximo 8 kg; una mochila por cada dos personas. Fuente: <a id="fuenteMochila" target="_blank" rel="noopener">"Combo de Supervivencia" de INDECI (OGRD del Congreso, 2025)</a>.</p>
+        <button id="btnReiniciarMochila" class="btn-texto">Desmarcar todo</button>
+        <p class="meta">Se guarda en este celular. Máximo 8 kg; una mochila por cada dos personas. Fuente: <a id="fuenteMochila" target="_blank" rel="noopener">"Combo de Supervivencia" de INDECI</a>.</p>
       </section>
 
-      <section class="tarjeta">
+      <section class="bloque">
         <h2>Números de emergencia</h2>
-        <ul id="listaNumeros" class="lista-numeros"></ul>
+        <ul id="listaNumeros" class="numeros"></ul>
         <p id="numerosFuente" class="meta"></p>
       </section>
-    </section>
 
-    <!-- ===================== HISTORIAL ===================== -->
-    <section id="tab-historial" class="tab" aria-label="Historial">
-      <h1 class="titulo-tab">Historial y El Niño</h1>
-
-      <section class="tarjeta">
-        <h2>Activaciones de la quebrada</h2>
+      <section class="bloque">
+        <h2>La quebrada ya se activó</h2>
         <ol id="lineaTiempo" class="linea-tiempo"></ol>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Lluvia en Trujillo, enero–abril</h2>
-        <p class="meta">Total mensual (mm). Comparación de años con El Niño y el año actual.</p>
-        <div id="graficoLluvia" class="grafico"><p class="meta">Cargando…</p></div>
-        <p class="meta"><strong>Estimación satelital/reanálisis ERA5, Open-Meteo.</strong> En la costa desértica puede subestimar los picos reales de lluvia.</p>
-        <p id="lluviaFuente" class="meta"></p>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Registro de lecturas del sensor</h2>
-        <ul id="registroNiveles" class="registro"></ul>
+        <details id="detLluvia" class="plegable plegable-interno">
+          <summary>Ver lluvia de enero a abril (2017, 2023 y este año)</summary>
+          <div id="graficoLluvia" class="grafico"><p class="meta">Cargando…</p></div>
+          <p class="meta">Estimación satelital/reanálisis ERA5, Open-Meteo. En la costa desértica puede subestimar los picos reales de lluvia.</p>
+          <p id="lluviaFuente" class="meta"></p>
+        </details>
       </section>
     </section>
   </main>
 
   <!-- Navegación inferior -->
   <nav class="nav-inferior" aria-label="Navegación principal">
-    <button class="nav-btn activa" data-tab="inicio"><span aria-hidden="true">🏠</span>Inicio</button>
-    <button class="nav-btn" data-tab="mapa"><span aria-hidden="true">🗺️</span>Mapa</button>
-    <button class="nav-btn" data-tab="preparate"><span aria-hidden="true">🎒</span>Prepárate</button>
-    <button class="nav-btn" data-tab="historial"><span aria-hidden="true">📈</span>Historial</button>
+    <button class="nav-btn activa" data-tab="inicio">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</button>
+    <button class="nav-btn" data-tab="mapa">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Mapa</button>
+    <button class="nav-btn" data-tab="preparate">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>Prepárate</button>
   </nav>
+
+  <!-- ===================== ALARMA (pop-up de emergencia) ===================== -->
+  <div id="alarma" class="alarma" hidden role="alertdialog" aria-modal="true" aria-labelledby="emergenciaTitulo">
+    <div class="alarma-caja">
+      <div class="alarma-ondas" aria-hidden="true"><span></span><span></span><span></span></div>
+      <h1 id="emergenciaTitulo">DESBORDE: EVACÚA AHORA</h1>
+      <p class="alarma-instr">Sal hacia una <strong>zona alta</strong>, alejándote del cauce. <strong>No cruces</strong> calles con agua o lodo.</p>
+      <button id="btnRutaEmergencia" class="btn btn-blanco btn-ancho btn-grande">Llévame a una zona alta</button>
+      <div class="alarma-fila">
+        <button id="btnSonidoSirena" class="btn btn-borde-blanco" hidden>Activar sonido</button>
+        <button id="btnSilenciar" class="btn btn-borde-blanco" hidden>Silenciar sirena</button>
+        <a class="btn btn-borde-blanco" href="tel:115">Llamar a Defensa Civil · 115</a>
+      </div>
+      <h2 id="emergenciaSub" class="alarma-sub">Zonas con sirena activa</h2>
+      <ul id="listaZonasSirena" class="alarma-zonas"></ul>
+      <p id="emergenciaFuente" class="alarma-fuente"></p>
+      <button id="btnCerrarAlarma" class="btn-texto btn-texto-blanco">Cerrar esta ventana</button>
+    </div>
+  </div>
 
   <!-- ===================== HOJA: NUEVO REPORTE ===================== -->
   <div id="hojaReporte" class="hoja-fondo" hidden>
@@ -202,13 +240,13 @@
 
       <fieldset>
         <legend>2. Foto (opcional)</legend>
-        <label class="btn btn-borde btn-camara">
-          📷 Tomar o elegir foto
+        <label class="btn btn-secundario btn-ancho">
+          Tomar o elegir foto
           <input id="inputFoto" type="file" accept="image/*" capture="environment" hidden>
         </label>
         <div id="previewFoto" class="preview-foto" hidden>
           <img id="imgPreview" alt="Vista previa de la foto">
-          <button type="button" id="btnQuitarFoto" class="btn-link">Quitar foto</button>
+          <button type="button" id="btnQuitarFoto" class="btn-texto">Quitar foto</button>
         </div>
       </fieldset>
 
@@ -221,22 +259,22 @@
       <fieldset>
         <legend>4. Ubicación</legend>
         <div class="selector-forma" role="group" aria-label="Forma del reporte">
-          <button type="button" class="opcion-forma" data-forma="punto" aria-pressed="true">📍 Un punto<small>Daño en un lugar</small></button>
-          <button type="button" class="opcion-forma" data-forma="tramo" aria-pressed="false">〰️ Tramo de calle<small>Calle bloqueada o inundada</small></button>
+          <button type="button" class="opcion-forma" data-forma="punto" aria-pressed="true">Un punto<small>Daño en un lugar</small></button>
+          <button type="button" class="opcion-forma" data-forma="tramo" aria-pressed="false">Tramo de calle<small>Calle bloqueada o inundada</small></button>
         </div>
         <div id="ubicPunto" class="fila-botones">
-          <button type="button" id="btnGPS" class="btn btn-borde">📍 Usar mi GPS</button>
-          <button type="button" id="btnElegirMapa" class="btn btn-borde">👆 Tocar en el mapa</button>
+          <button type="button" id="btnGPS" class="btn btn-secundario">Usar mi GPS</button>
+          <button type="button" id="btnElegirMapa" class="btn btn-secundario">Tocar en el mapa</button>
         </div>
         <div id="ubicTramo" class="fila-botones" hidden>
-          <button type="button" id="btnMarcarTramo" class="btn btn-borde">👆 Marcar inicio y fin en el mapa</button>
+          <button type="button" id="btnMarcarTramo" class="btn btn-secundario">Marcar inicio y fin en el mapa</button>
         </div>
         <p id="textoUbicacion" class="meta">Sin ubicación todavía.</p>
       </fieldset>
 
-      <p id="avisoProximidad" class="meta" hidden>📍 Modo cercanía activo: solo puedes reportar a menos de 500 m de donde estás.</p>
+      <p id="avisoProximidad" class="meta" hidden>Modo cercanía activo: solo puedes reportar a menos de 500 m de donde estás.</p>
       <p class="meta">Tu reporte aparecerá en gris hasta que otros 3 vecinos lo confirmen. No genera notificaciones.</p>
-      <button type="submit" id="btnEnviarReporte" class="btn btn-primario btn-grande" disabled>Enviar reporte</button>
+      <button type="submit" id="btnEnviarReporte" class="btn btn-primario btn-ancho btn-grande" disabled>Enviar reporte</button>
     </form>
   </div>
 
@@ -252,12 +290,12 @@
         <h3>Modo demo</h3>
         <p class="meta">Fuerza el nivel de la quebrada para la demostración. Mientras esté activo, toda la app muestra la cinta "MODO DEMO – DATOS SIMULADOS". La sirena física (ESP32) <strong>no</strong> se activa con el modo demo.</p>
         <div class="botones-nivel">
-          <button class="btn-nivel nivel-0" data-nivel="0">✅ 0 · SECA</button>
-          <button class="btn-nivel nivel-1" data-nivel="1">👁️ 1 · NORMAL</button>
-          <button class="btn-nivel nivel-2" data-nivel="2">⚠️ 2 · ALERTA</button>
-          <button class="btn-nivel nivel-3" data-nivel="3">🚨 3 · DESBORDE</button>
+          <button class="btn-nivel nivel-0" data-nivel="0">0 · SECA</button>
+          <button class="btn-nivel nivel-1" data-nivel="1">1 · NORMAL</button>
+          <button class="btn-nivel nivel-2" data-nivel="2">2 · ALERTA</button>
+          <button class="btn-nivel nivel-3" data-nivel="3">3 · DESBORDE</button>
         </div>
-        <button id="btnDemoOff" class="btn btn-borde">Desactivar demo (usar sensor real)</button>
+        <button id="btnDemoOff" class="btn btn-secundario btn-ancho">Desactivar demo (usar sensor real)</button>
         <p id="adminEstadoDemo" class="meta"></p>
       </section>
 
@@ -266,8 +304,8 @@
         <p id="adminConexion" class="meta"></p>
         <p id="adminSensor" class="meta"></p>
         <div class="fila-botones">
-          <button id="btnProbarSirena" class="btn btn-borde">🔊 Probar sirena 3 s</button>
-          <button id="btnProbarNotif" class="btn btn-borde">🔔 Probar aviso</button>
+          <button id="btnProbarSirena" class="btn btn-secundario">Probar sirena 3 s</button>
+          <button id="btnProbarNotif" class="btn btn-secundario">Probar aviso</button>
         </div>
       </section>
 
