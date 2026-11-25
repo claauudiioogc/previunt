@@ -474,3 +474,14 @@ textarea:focus { outline: none; border-color: var(--azul); }
 .leaflet-popup-content { margin: 12px 14px; }
 .popup-rep { min-width: 236px; }
 .popup-rep .votos button { white-space: nowrap; padding: 0 8px; font-size: .88rem; }
+
+/* "En aumento": amarillo con texto oscuro (contraste) */
+.nivel-1 { background: #F9A825; color: #1C1C1C; --c: #F9A825; }
+.estado.nivel-1 .regla-marca { color: #1C1C1C; }
+.regla[data-nivel="1"] .regla-marca[data-n="1"] { background: #1C1C1C; border-color: #1C1C1C; color: #F9A825; }
+.estado { grid-template-columns: 1fr 72px; }
+.regla-marca { font-size: .62rem; }
+.botones-3 { grid-template-columns: repeat(3, 1fr); }
+.campo { display: block; font-weight: 650; font-size: .9rem; margin: 8px 0 4px; }
+.input { width: 100%; font: inherit; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--linea); }
+.input:focus { outline: none; border-color: var(--azul); }

@@ -27,7 +27,7 @@ const FIREBASE_SDK = "10.12.2";
    CONSTANTES
 --------------------------------------------------------------------- */
 const TRUJILLO = { lat: -8.11, lng: -79.03, nombre: "Trujillo centro" };
-const SENSOR_MAX_EDAD_MS = 30_000;          // > 30 s ⇒ "Sensor sin conexión"
+
 const REPORTE_CADUCA_MS = 6 * 60 * 60 * 1000; // 6 h sin nuevas confirmaciones
 const VOTOS_MIN = 3;
 const RADIO_ALERTA_HUAICO_M = 1000;
@@ -43,29 +43,34 @@ const RADIO_VOTO_M = 1000;                   // solo validan quienes están a me
 const proximidadActiva = () => !!(S.demo && S.demo.proximidad);          // un huaico confirmado a menos de 1 km sube la alerta del usuario
 
 // Sistema de colores normado (igual en toda la app)
+/* El estado NO viene de un sensor: lo publica la autoridad (Defensa Civil, COER La Libertad, municipalidad)
+   desde el Panel de autoridad, citando su fuente (aviso SENAMHI, parte del COER, inspección en campo).
+   El nivel 2 (huaico) solo lo producen los reportes vecinales confirmados.
+   Se guarda en /quebrada_san_ildefonso/nivel (0-3), que es lo que lee la sirena física. */
 const NIVELES = [
   {
-    n: 0, estado: "SECA", corto: "Seca", color: "#2E7D32", titulo: "Normal", icono: "circle-check",
-    mensaje: "Quebrada seca. Sin riesgo.",
+    n: 0, estado: "SECA", corto: "Seco", color: "#2E7D32", titulo: "Seco", icono: "circle-check",
+    mensaje: "Sin avisos ni reportes de activación.",
     acciones: ["Ten lista tu mochila de emergencia", "Conoce tu ruta a zona alta", "No arrojes basura al cauce"]
   },
   {
-    // Caudal bajo: también verde (decisión del equipo: no debe alarmar a la población)
-    n: 1, estado: "NORMAL", corto: "Caudal bajo", color: "#2E7D32", titulo: "Normal", icono: "circle-check",
-    mensaje: "Caudal bajo. Sin riesgo por ahora.",
-    acciones: ["Ten lista tu mochila de emergencia", "No te acerques al cauce", "Revisa la app si llueve fuerte"]
+    n: 1, estado: "EN AUMENTO", corto: "En aumento", color: "#F9A825", titulo: "En aumento", icono: "arrow-up",
+    mensaje: "Lluvias y caudal en aumento. Prepárate.",
+    acciones: ["Prepara tu mochila", "Ubica a tu familia y tu ruta a zona alta", "Aléjate del cauce"]
   },
   {
-    n: 2, estado: "ALERTA", corto: "Alerta", color: "#EF6C00", titulo: "Alerta", icono: "triangle-alert",
-    mensaje: "Próxima a rebalsar. Prepárate para evacuar.",
-    acciones: ["Prepara tu mochila", "Ubica a tu familia", "Aléjate del cauce"]
+    n: 2, estado: "HUAICO", corto: "Huaico", color: "#EF6C00", titulo: "Huaico reportado", icono: "triangle-alert",
+    mensaje: "Vecinos confirmaron un huaico cerca. Prepárate para evacuar.",
+    acciones: ["Prepárate para evacuar", "Ubica a tu familia", "No cruces agua ni lodo"]
   },
   {
-    n: 3, estado: "DESBORDE", corto: "Desborde", color: "#C62828", titulo: "Emergencia", icono: "siren",
-    mensaje: "Desborde. Evacúa ahora a zona alta.",
+    n: 3, estado: "DESBORDE", corto: "Desborde", color: "#C62828", titulo: "Desborde", icono: "siren",
+    mensaje: "Confirmado por la autoridad. Evacúa ahora a zona alta.",
     acciones: ["Evacúa ahora a zona alta", "Si no puedes salir, sube al piso más alto", "No cruces agua ni lodo"]
   }
 ];
+// Estados que puede publicar la autoridad (el huaico lo marcan los vecinos)
+const NIVELES_AUTORIDAD = [0, 1, 3];
 
 /* Trazado REFERENCIAL del cauce de San Ildefonso (aguas arriba → mar).
    Basado en descripciones de INGEMMET (dique de Las Canteras, ~4 km aguas arriba de El Porvenir), ANA (mapa de rutas de
@@ -160,10 +165,12 @@ const GUIA_NIVELES = {
   1: { durante: [
     "Sigue solo información oficial: COER, Defensa Civil, SENAMHI",
     "Atiende las señales: agua turbia, subida repentina del caudal o un ruido fuerte que se acerca",
-    "Ten la mochila cerca de la puerta"
+    "Ten la mochila cerca de la puerta",
+    "Ten listos a niños, adultos mayores, personas con discapacidad y mascotas"
   ] },
   2: { durante: [
     "Prepárate para evacuar hacia tu punto de reunión",
+    "Si ves el huaico, confírmalo en el mapa para avisar a tus vecinos",
     "Ten listos a niños, adultos mayores, personas con discapacidad y mascotas",
     "No cruces el cauce de la quebrada"
   ] },
@@ -307,7 +314,7 @@ const Datos = {
     window.addEventListener("storage", (e) => { if (claves[e.key]) this._emitLocal(claves[e.key]); });
   },
   _leerLocal(canal) {
-    if (canal === "sensor") return null; // sin ESP32 en modo local
+    if (canal === "sensor") return lsGet("previunt_sensor", null); // estado oficial publicado en este navegador
     if (canal === "demo") return lsGet("previunt_demo", { activo: false, nivel: 0 });
     if (canal === "reportes") return lsGet("previunt_reportes", {});
     if (canal === "historial") return lsGet("previunt_historial", {});
@@ -352,8 +359,15 @@ const Datos = {
     onValue(r, (s) => cb(s.val()), (err) => { console.error(canal, err); cb(canal === "reportes" || canal === "historial" ? {} : null); });
   },
 
-  async setDemo(activo, nivel) {
-    const valor = { activo, nivel: nivelValido(nivel) ? nivel : 0, actualizado: ahora() };
+  async publicarEstado(nivel, fuente) {
+    // Mismo nodo y mismo campo "nivel" que lee la sirena física (ESP32)
+    const valor = { nivel, estado: NIVELES[nivel].estado, actualizado: ahora(), origen: "autoridad", fuente, autor: this.uid };
+    if (this.modo === "local") { lsSet("previunt_sensor", valor); this._emitLocal("sensor"); return; }
+    await this.fb.set(this.fb.ref(this.db, "quebrada_san_ildefonso"), valor);
+  },
+
+  async setDemo(activo, nivel, fuente = "") {
+    const valor = { activo, nivel: nivelValido(nivel) ? nivel : 0, actualizado: ahora(), fuente };
     if (this.modo === "local") { lsSet("previunt_demo", { ...lsGet("previunt_demo", {}), ...valor }); this._emitLocal("demo"); return; }
     await this.fb.update(this.fb.ref(this.db, "demo"), valor);
   },
@@ -469,16 +483,14 @@ const S = {
 
 /* Nivel de la quebrada (sensor o demo). Es el que colorea el cauce y las zonas de sirena. */
 function estadoBase() {
+  // El nivel 2 (huaico) solo sale de reportes vecinales: un 2 guardado por la versión anterior se lee como "En aumento"
+  const oficial = (n) => (n === 2 ? 1 : n);
   if (S.demo && S.demo.activo && nivelValido(Number(S.demo.nivel))) {
-    return { nivel: Number(S.demo.nivel), fuente: "demo", ts: S.demo.actualizado };
+    return { nivel: oficial(Number(S.demo.nivel)), fuente: "demo", ts: S.demo.actualizado, cita: S.demo.fuente || "" };
   }
   const s = S.sensor;
-  if (!s || !nivelValido(Number(s.nivel))) return { nivel: null, fuente: "sinDatos" };
-  const ts = Number(s.actualizado) || 0;
-  if (!ts || ahora() - ts > SENSOR_MAX_EDAD_MS) {
-    return { nivel: null, fuente: "sensorOffline", ultimoNivel: Number(s.nivel), ts };
-  }
-  return { nivel: Number(s.nivel), fuente: "sensor", ts };
+  if (!s || !nivelValido(Number(s.nivel))) return { nivel: 0, fuente: "sinReportes" };
+  return { nivel: oficial(Number(s.nivel)), fuente: "autoridad", ts: Number(s.actualizado) || 0, cita: s.fuente || "" };
 }
 
 /* Alerta por reportes de huaico cerca del usuario (o en cualquier zona si no compartió su ubicación):
@@ -578,7 +590,7 @@ function afectaMiZona() {
 async function notificar(nivel) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const N = NIVELES[nivel];
-  const titulo = nivel === 3 ? "Desborde: evacúa ahora" : "Alerta: quebrada San Ildefonso";
+  const titulo = nivel === 3 ? "Desborde: evacúa ahora" : nivel === 1 ? "Quebrada San Ildefonso en aumento" : "Alerta: quebrada San Ildefonso";
   const opts = { body: N.mensaje, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "nivel-quebrada", renotify: true, requireInteraction: nivel === 3, vibrate: nivel === 3 ? [600, 250, 600] : [300] };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
@@ -589,7 +601,7 @@ async function notificar(nivel) {
 function gestionarNotificacion(n) {
   if (n === null) return;
   let ult = lsGet("previunt_ultimoNotificado", 0);
-  if (n < 2) { lsSet("previunt_ultimoNotificado", n); return; }
+  if (n < 1) { lsSet("previunt_ultimoNotificado", n); return; }
   if (n > ult && afectaMiZona()) { notificar(n); lsSet("previunt_ultimoNotificado", n); }
   else if (n < ult) lsSet("previunt_ultimoNotificado", n);
 }
@@ -623,7 +635,7 @@ function renderInicio() {
   const card = $("#tarjetaEstado");
   card.className = "estado " + (e.nivel === null ? "nivel-x" : "nivel-" + e.nivel);
   // La regla muestra lo que mide el sensor (o el demo): el nivel de la quebrada, no los reportes
-  const nRegla = esPorReporte(e) ? e.base.nivel : e.nivel;
+  const nRegla = e.nivel;
   const sinRegla = nRegla === null || nRegla === undefined;
   $("#medidorNivel").dataset.nivel = sinRegla ? "x" : String(nRegla);
   $("#medidorNivel").setAttribute("aria-label", sinRegla ? "Nivel de la quebrada: sin datos" : `Nivel de la quebrada: ${NIVELES[nRegla].corto}`);
@@ -634,27 +646,15 @@ function renderInicio() {
     $("#estadoIcono").innerHTML = ic(N.icono);
     $("#estadoTitulo").textContent = N.titulo;
     $("#estadoMensaje").textContent = N.mensaje;
-    $("#estadoMeta").innerHTML = e.fuente === "demo" ? `<span class="tag-sim">SIMULADO</span> ${hora(e.ts)}` : `Sensor · ${hora(e.ts)}`;
+    $("#estadoMeta").innerHTML = textoFuente(e);
     renderAcciones(N.acciones);
     if (esPorReporte(e)) {
       const donde = e.dist !== null && e.dist !== undefined ? ` a ${Math.round(e.dist / 10) * 10} m` : "";
       $("#estadoEtiqueta").textContent = "Huaico reportado" + donde;
       $("#estadoMensaje").textContent = e.nivel === 3 ? "Verificado por la autoridad. Evacúa a zona alta." : "Confirmado por vecinos. Prepárate.";
       const base = e.base.nivel !== null ? NIVELES[e.base.nivel].corto.toLowerCase() : "sin datos";
-      $("#estadoMeta").textContent = `Reporte ciudadano · ${hora(e.ts)} · Quebrada: ${base}`;
+      $("#estadoMeta").textContent = `Reporte vecinal · ${hora(e.ts)} · Estado oficial: ${base}`;
     }
-  } else if (e.fuente === "sensorOffline") {
-    $("#estadoIcono").innerHTML = ic("radio-tower");
-    $("#estadoTitulo").textContent = "Sin conexión";
-    $("#estadoMensaje").innerHTML = `<span class="aviso-offline">Sensor sin conexión – último dato: ${hora(e.ts)}</span>`;
-    $("#estadoMeta").textContent = "";
-    renderAcciones(["Sigue a Defensa Civil y la radio local", "Si llueve fuerte, aléjate del cauce", "Ten lista tu mochila"]);
-  } else {
-    $("#estadoIcono").innerHTML = ic("radio-tower");
-    $("#estadoTitulo").textContent = "Sin datos";
-    $("#estadoMensaje").textContent = "La estación aún no envía lecturas.";
-    $("#estadoMeta").textContent = "";
-    renderAcciones(["Sigue a Defensa Civil y la radio local", "Si llueve fuerte, aléjate del cauce", "Ten lista tu mochila"]);
   }
 
   // Emergencia (rojo)
@@ -673,9 +673,16 @@ function renderInicio() {
     $("#emergenciaTitulo").textContent = "Desborde: evacúa ahora";
     $("#bannerEmergenciaTitulo").textContent = "Desborde: evacúa ahora";
     $("#listaZonasSirena").innerHTML = `<li>Sirenas activas en ${ZONAS_SIRENA.map((z) => esc(z.nombre)).join(", ").replace(/, ([^,]*)$/, " y $1")}</li>`;
-    $("#emergenciaFuente").innerHTML = e.fuente === "demo" ? "SIMULADO" : `Sensor · ${hora(e.ts)}`;
+    $("#emergenciaFuente").innerHTML = textoFuente(e);
   }
   actualizarBotonesSirena();
+}
+/* "Fuente: Parte COER La Libertad · 21:40" (o SIMULADO en la demo). Sin reporte: lo dice. */
+function textoFuente(e) {
+  if (e.fuente === "sinReportes") return "Sin reportes oficiales registrados";
+  const cita = e.cita ? esc(e.cita) : "Autoridad";
+  const h = e.ts ? ` · ${hora(e.ts)}` : "";
+  return e.fuente === "demo" ? `<span class="tag-sim">SIMULADO</span> ${cita}${h}` : `Fuente: ${cita}${h}`;
 }
 function renderAcciones(lista) {
   $("#listaAcciones").innerHTML = lista.map((a) => `<li>${esc(a)}</li>`).join("");
@@ -698,13 +705,6 @@ function alCambiarNivel() {
   // y un huaico verificado por la autoridad.
   gestionarNotificacion(e.fuente === "reporteVecinos" ? e.base.nivel : n);
 
-  // Registrar cambio de nivel del SENSOR real (los de demo se registran al forzarlos)
-  if (e.fuente === "sensor") {
-    const ultimo = ultimoHistorial("sensor");
-    if (!ultimo || ultimo.nivel !== n) {
-      Datos.addHistorial(`s_${e.ts}`, { nivel: n, estado: NIVELES[n].estado, fecha: e.ts, origen: "sensor" }).catch(console.warn);
-    }
-  }
   if (mapa) pintarCauceYZonas();
 }
 function ultimoHistorial(origen) {
@@ -820,6 +820,7 @@ function iniciarMapa() {
   }
   // Cauce y zonas de sirena: ocultos por defecto (se muestran con los botones del mapa)
   capas.zonas = L.layerGroup();
+  capas.satelite = crearCapaSatelite();
   capas.cauce = L.layerGroup();
   capas.bloqueos = L.layerGroup().addTo(mapa);
   capas.reportes = L.layerGroup().addTo(mapa);
@@ -879,6 +880,36 @@ function iniciarMapa() {
 function colorNivelActual() {
   const n = estadoBase().nivel;
   return n === null ? "#9E9E9E" : NIVELES[n].color;
+}
+
+/* Imagen satelital del día anterior: NASA GIBS, VIIRS (Suomi NPP) color real, 250 m por píxel.
+   Sirve para ver nubes y sistemas de lluvia sobre Trujillo; no tiene detalle para ver el cauce.
+   Si la imagen no carga, no se muestra nada (no se inventa). */
+let fechaSatelite = "";
+function crearCapaSatelite() {
+  fechaSatelite = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const capa = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${fechaSatelite}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`, {
+    maxNativeZoom: 9, maxZoom: 20, opacity: 0.85,
+    attribution: `Imagen satelital: NASA GIBS / VIIRS, ${fechaSatelite}`
+  });
+  let errores = 0, cargadas = 0;
+  capa.on("tileload", () => { cargadas++; });
+  capa.on("tileerror", () => {
+    errores++;
+    if (errores >= 2 && cargadas === 0 && mapa?.hasLayer(capa)) {
+      capa.remove();
+      $('.chip[data-capa="satelite"]')?.setAttribute("aria-pressed", "false");
+      toast("Sin imagen satelital disponible para ayer.");
+    }
+  });
+  return capa;
+}
+function alternarSatelite(on) {
+  if (!mapa) return;
+  if (on) {
+    capas.satelite.addTo(mapa); capas.satelite.bringToFront();
+    toast(`Satélite VIIRS (NASA), ${fechaSatelite}. Muestra nubes y lluvia, no el cauce.`);
+  } else capas.satelite.remove();
 }
 
 function pintarCauceYZonas() {
@@ -1525,7 +1556,7 @@ function renderRegistro() {
   $("#registroNiveles").innerHTML = arr.length
     ? arr.map((h) => {
         const N = NIVELES[h.nivel];
-        return `<li><span class="chip-nivel nivel-${N.n}">${N.corto}</span><span>${fechaHora(h.fecha)}</span>${h.origen === "demo" ? '<span class="tag-sim">SIMULADO</span>' : '<span class="meta">sensor</span>'}</li>`;
+        return `<li><span class="chip-nivel nivel-${N.n}">${N.corto}</span><span>${fechaHora(h.fecha)}</span>${h.origen === "demo" ? '<span class="tag-sim">SIMULADO</span>' : ""}<span class="meta">${esc(h.fuente || (h.origen === "sensor" ? "maqueta" : "autoridad"))}</span></li>`;
       }).join("")
     : '<li class="meta">Aún no hay cambios de nivel registrados.</li>';
 }
@@ -1610,18 +1641,20 @@ function abrirAdmin() { $("#panelAdmin").hidden = false; renderAdmin(); }
 function renderAdmin() {
   if ($("#panelAdmin").hidden) return;
   const e = estadoEfectivo();
-  $$(".btn-nivel").forEach((b) => b.classList.toggle("actual", !!S.demo?.activo && Number(b.dataset.nivel) === Number(S.demo.nivel)));
+  const eb = estadoBase();
+  $$(".btn-nivel").forEach((b) => b.classList.toggle("actual", eb.nivel === Number(b.dataset.nivel) && eb.fuente !== "sinReportes"));
   $("#chkProximidad").checked = proximidadActiva();
   const al = alertaPorReportes();
-  $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Simulando: ${["seco", "bajo", "medio", "borde"][S.demo.nivel] || S.demo.nivel}` : "Mostrando el sensor real.")
+  $("#btnDemoOff").hidden = !S.demo?.activo;
+  $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Simulación activa: ${NIVELES[S.demo.nivel]?.corto || S.demo.nivel}` : eb.fuente === "autoridad" ? `Estado oficial: ${NIVELES[eb.nivel].corto} · ${eb.cita || "sin fuente"}` : "Sin estado oficial publicado.")
     + (al ? ` · Alerta por reporte de huaico: ${al.nivel === 3 ? "ROJO (verificado por autoridad)" : "NARANJA (3 vecinos)"}` : "");
   $("#adminConexion").innerHTML = Datos.modo === "firebase"
     ? `Conectado a Firebase · usuario anónimo <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`
     : `Modo LOCAL (sin Firebase): datos solo en este navegador · usuario <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`;
   const s = S.sensor;
   $("#adminSensor").innerHTML = s
-    ? `Sensor: nivel ${esc(s.nivel)} (${esc(s.estado)}) · n1=${esc(s.n1)} n2=${esc(s.n2)} n3=${esc(s.n3)} · ${fechaHora(Number(s.actualizado))}${e.fuente === "sensorOffline" ? " · <strong>SIN CONEXIÓN</strong>" : ""}`
-    : "Sensor: sin datos en /quebrada_san_ildefonso.";
+    ? `Último estado oficial: ${esc(NIVELES[s.nivel]?.corto ?? s.nivel)} · ${esc(s.fuente || "sin fuente")} · ${fechaHora(Number(s.actualizado))}`
+    : "Aún no se publicó un estado oficial.";
 
   const lista = Object.entries(S.reportes || {}).sort((a, b) => b[1].creado - a[1].creado);
   $("#adminReportes").innerHTML = lista.length ? lista.map(([id, r]) => {
@@ -1651,15 +1684,26 @@ function prepararAdmin() {
   $("#btnCerrarAdmin").onclick = () => ($("#panelAdmin").hidden = true);
   $$(".btn-nivel").forEach((b) => b.addEventListener("click", async () => {
     const n = Number(b.dataset.nivel);
+    const simular = $("#chkSimular").checked;
+    const fuente = $("#inputFuenteOficial").value.trim();
+    if (!simular && !fuente) { toast("Escribe la fuente: aviso SENAMHI, parte del COER o inspección."); $("#inputFuenteOficial").focus(); return; }
+    if (!simular && n === 3 && !confirm("Esto activa la alarma y la sirena física para toda la población. ¿Confirmas el desborde?")) return;
     try {
       Sirena.desbloquear();
-      await Datos.setDemo(true, n);
-      await Datos.addHistorial(`d_${ahora()}`, { nivel: n, estado: NIVELES[n].estado, fecha: ahora(), origen: "demo" });
-      toast(`Simulando nivel: ${["seco", "bajo", "medio", "borde"][n]}`);
-    } catch (e) { console.error(e); toast("No se pudo cambiar el nivel demo: " + e.message); }
+      if (simular) {
+        await Datos.setDemo(true, n, fuente || "Simulación");
+        await Datos.addHistorial(`d_${ahora()}`, { nivel: n, estado: NIVELES[n].estado, fecha: ahora(), origen: "demo", fuente: fuente || "Simulación" });
+        toast(`Simulando: ${NIVELES[n].corto}`);
+      } else {
+        if (S.demo?.activo) await Datos.setDemo(false, 0);
+        await Datos.publicarEstado(n, fuente);
+        await Datos.addHistorial(`a_${ahora()}`, { nivel: n, estado: NIVELES[n].estado, fecha: ahora(), origen: "autoridad", fuente });
+        toast(`Publicado: ${NIVELES[n].corto}`);
+      }
+    } catch (e) { console.error(e); toast("No se pudo cambiar el estado: " + e.message); }
   }));
   $("#btnDemoOff").onclick = async () => {
-    try { await Datos.setDemo(false, 0); toast("Demo desactivado: se muestra el sensor real."); }
+    try { await Datos.setDemo(false, 0); toast("Simulación terminada: se muestra el estado oficial."); }
     catch (e) { toast("Error: " + e.message); }
   };
   $("#chkProximidad").onchange = async (e) => {
@@ -1673,7 +1717,7 @@ function prepararAdmin() {
     if (!("Notification" in window)) return toast("Este navegador no soporta avisos.");
     if (Notification.permission === "default") await Notification.requestPermission();
     if (Notification.permission !== "granted") return toast("Avisos bloqueados en este navegador.");
-    notificar(2);
+    notificar(1);
   };
   $("#adminReportes").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-acc]"); if (!b) return;
@@ -1731,6 +1775,7 @@ async function iniciar() {
     const on = b.getAttribute("aria-pressed") !== "true";
     b.setAttribute("aria-pressed", String(on));
     if (!mapa) return;
+    if (b.dataset.capa === "satelite") { alternarSatelite(on, b); return; }
     const grupos = b.dataset.capa === "reportes" ? [capas.reportes, capas.bloqueos] : b.dataset.capa === "cauce" ? [capas.cauce] : [capas.zonas];
     grupos.forEach((g) => on ? g.addTo(mapa) : g.remove());
   }));

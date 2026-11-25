@@ -54,12 +54,12 @@
           <p id="estadoMensaje" class="estado-mensaje"></p>
           <p id="estadoMeta" class="estado-meta"></p>
         </div>
-        <!-- Regla de nivel: los electrodos de la estación -->
+        <!-- Escalera de estados: seco, en aumento, huaico (vecinos), desborde (autoridad) -->
         <div id="medidorNivel" class="regla" data-nivel="x" role="img" aria-label="Nivel de la quebrada">
-          <span class="regla-marca" data-n="3">Borde</span>
-          <span class="regla-marca" data-n="2">Medio</span>
-          <span class="regla-marca" data-n="1">Bajo</span>
-          <span class="regla-marca regla-base" data-n="0">Seca</span>
+          <span class="regla-marca" data-n="3">Desborde</span>
+          <span class="regla-marca" data-n="2">Huaico</span>
+          <span class="regla-marca" data-n="1">Aumento</span>
+          <span class="regla-marca regla-base" data-n="0">Seco</span>
         </div>
       </article>
 
@@ -110,6 +110,7 @@
           <button class="chip" data-capa="reportes" aria-pressed="true">Reportes</button>
           <button class="chip" data-capa="cauce" aria-pressed="false">Cauce</button>
           <button class="chip" data-capa="zonas" aria-pressed="false">Zonas de sirena</button>
+          <button class="chip" data-capa="satelite" aria-pressed="false">Satélite</button>
           <button class="chip chip-ico" id="btnCentrarme" aria-label="Mi ubicación">
             <svg class="ic" aria-hidden="true"><use href="#i-locate-fixed"/></svg></button>
         </div>
@@ -288,20 +289,22 @@
   <div id="panelAdmin" class="hoja-fondo" hidden>
     <div class="hoja hoja-admin">
       <div class="hoja-cab">
-        <h2>Centro de control</h2>
+        <h2>Panel de autoridad</h2>
         <button type="button" id="btnCerrarAdmin" class="cerrar" aria-label="Cerrar"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
 
       <section>
-        <h3>Simular nivel de la quebrada</h3>
-        <p class="meta">Muestra la cinta "MODO DEMO" en todos los celulares. La sirena física no se activa.</p>
-        <div class="botones-nivel">
+        <h3>Estado de la quebrada</h3>
+        <p class="meta">Lo publica Defensa Civil, el COER o la municipalidad. El huaico lo marcan los vecinos en el mapa.</p>
+        <label class="campo" for="inputFuenteOficial">Fuente</label>
+        <input id="inputFuenteOficial" class="input" type="text" maxlength="80" placeholder="Ej.: Aviso SENAMHI N° 049 · Parte COER 21:40">
+        <label class="fila-check"><input type="checkbox" id="chkSimular" checked> <span><strong>Simulación</strong>: muestra la cinta "MODO DEMO" y no activa la sirena física.</span></label>
+        <div class="botones-nivel botones-3">
           <button class="btn-nivel nivel-0" data-nivel="0">Seco</button>
-          <button class="btn-nivel nivel-1" data-nivel="1">Bajo</button>
-          <button class="btn-nivel nivel-2" data-nivel="2">Medio</button>
-          <button class="btn-nivel nivel-3" data-nivel="3">Borde</button>
+          <button class="btn-nivel nivel-1" data-nivel="1">En aumento</button>
+          <button class="btn-nivel nivel-3" data-nivel="3">Desborde</button>
         </div>
-        <button id="btnDemoOff" class="btn btn-secundario btn-ancho">Usar el sensor real</button>
+        <button id="btnDemoOff" class="btn btn-secundario btn-ancho" hidden>Terminar simulación</button>
         <p id="adminEstadoDemo" class="meta"></p>
       </section>
 
