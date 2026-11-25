@@ -16,6 +16,13 @@
         "tipo": { ".validate": "newData.val() === 'bloqueo' || newData.val() === 'inundacion' || newData.val() === 'huaico' || newData.val() === 'afectados' || newData.val() === 'otro'" }
       }
     },
+    "fotos": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null",
+        ".validate": "newData.isString() && newData.val().length < 400000"
+      }
+    },
     "historial_nivel": {
       ".read": true,
       ".indexOn": ["fecha"],

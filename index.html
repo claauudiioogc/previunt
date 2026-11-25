@@ -41,14 +41,14 @@
       <!-- Modo emergencia (solo nivel 3) -->
       <div id="bloqueEmergencia" class="bloque-emergencia" hidden>
         <div class="emergencia-icono" aria-hidden="true">🚨</div>
-        <h1>DESBORDE: EVACÚA AHORA</h1>
+        <h1 id="emergenciaTitulo">DESBORDE: EVACÚA AHORA</h1>
         <p class="emergencia-instr">Sal hacia una <strong>zona alta</strong>, alejándote del cauce de la quebrada. <strong>No cruces</strong> calles con agua o lodo.</p>
         <button id="btnRutaEmergencia" class="btn btn-blanco btn-grande">🧭 Ver ruta de evacuación</button>
         <div class="emergencia-sirena">
           <button id="btnSonidoSirena" class="btn btn-borde-blanco" hidden>🔊 Activar sonido de sirena</button>
           <button id="btnSilenciar" class="btn btn-borde-blanco" hidden>🔇 Silenciar sirena en este celular</button>
         </div>
-        <h2 class="emergencia-sub">Zonas con sirena activa</h2>
+        <h2 id="emergenciaSub" class="emergencia-sub">Zonas con sirena activa</h2>
         <ul id="listaZonasSirena" class="lista-zonas"></ul>
         <p id="emergenciaFuente" class="meta meta-blanco"></p>
       </div>

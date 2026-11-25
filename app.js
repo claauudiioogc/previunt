@@ -11,13 +11,13 @@
    ║ Si lo dejas vacío, la app funciona en MODO LOCAL (localStorage).   ║
    ╚═══════════════════════════════════════════════════════════════════╝ */
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  databaseURL: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyCz2TdIRYaPqdIgNW1I-mwOCFFwSzICORI",
+  authDomain: "previunt.firebaseapp.com",
+  databaseURL: "https://previunt-default-rtdb.firebaseio.com",
+  projectId: "previunt",
+  storageBucket: "previunt.firebasestorage.app",
+  messagingSenderId: "545446959528",
+  appId: "1:545446959528:web:9766edfa176b244b66a59d"
 };
 /* ═════════════════════════ FIN FIREBASE_CONFIG ═════════════════════ */
 
@@ -30,6 +30,7 @@ const TRUJILLO = { lat: -8.11, lng: -79.03, nombre: "Trujillo centro" };
 const SENSOR_MAX_EDAD_MS = 30_000;          // > 30 s ⇒ "Sensor sin conexión"
 const REPORTE_CADUCA_MS = 6 * 60 * 60 * 1000; // 6 h sin nuevas confirmaciones
 const VOTOS_MIN = 3;
+const RADIO_ALERTA_HUAICO_M = 1000;          // un huaico confirmado a menos de 1 km sube la alerta del usuario
 
 // Sistema de colores normado (igual en toda la app)
 const NIVELES = [
@@ -366,9 +367,23 @@ const Datos = {
       if (!lsSet("previunt_reportes", todos)) throw new Error("Memoria del navegador llena (fotos). Borra reportes antiguos.");
       this._emitLocal("reportes"); return id;
     }
-    const nuevo = this.fb.push(this.fb.ref(this.db, "reportes"));
-    await this.fb.set(nuevo, rep);
-    return nuevo.key;
+    // La foto va en /fotos/{id} (aparte) para que abrir la app no descargue todas las fotos;
+    // cada foto se baja solo cuando alguien abre ese reporte.
+    const key = this.fb.push(this.fb.ref(this.db, "reportes")).key;
+    const foto = rep.foto;
+    rep.foto = null;
+    rep.tieneFoto = !!foto;
+    const cambios = { [`reportes/${key}`]: rep };
+    if (foto) cambios[`fotos/${key}`] = foto;
+    try {
+      await this.fb.update(this.fb.ref(this.db), cambios);
+    } catch (e) {
+      // Si las reglas de /fotos aún no están publicadas, se guarda la foto dentro del reporte (no se pierde)
+      if (!foto) throw e;
+      console.warn("No se pudo usar /fotos, se guarda dentro del reporte:", e);
+      await this.fb.set(this.fb.ref(this.db, `reportes/${key}`), { ...rep, foto, tieneFoto: false });
+    }
+    return key;
   },
 
   /* voto: 1 = "Sigue ahí", -1 = "Ya no está". uidVoto permite votos SIMULADOS desde el centro de control. */
@@ -393,6 +408,17 @@ const Datos = {
     return tx.committed;
   },
 
+  _fotos: new Map(),
+  async getFoto(id, r) {
+    if (r && r.foto) return r.foto;                 // modo local o reportes antiguos
+    if (this.modo !== "firebase" || !r || !r.tieneFoto) return null;
+    if (this._fotos.has(id)) return this._fotos.get(id);
+    const snap = await this.fb.get(this.fb.ref(this.db, `fotos/${id}`));
+    const v = snap.val();
+    this._fotos.set(id, v);
+    return v;
+  },
+
   async actualizarReporte(id, cambios) {
     if (this.modo === "local") {
       const todos = lsGet("previunt_reportes", {});
@@ -407,7 +433,7 @@ const Datos = {
       const todos = lsGet("previunt_reportes", {}); delete todos[id];
       lsSet("previunt_reportes", todos); this._emitLocal("reportes"); return;
     }
-    await this.fb.remove(this.fb.ref(this.db, `reportes/${id}`));
+    await this.fb.update(this.fb.ref(this.db), { [`reportes/${id}`]: null, [`fotos/${id}`]: null });
   }
 };
 
@@ -420,11 +446,12 @@ const S = {
   reportes: {},
   historial: {},
   ubicacion: null,          // { lat, lng, precision }
-  nivelPrevio: undefined
+  nivelPrevio: undefined,
+  nivelBasePrevio: undefined
 };
 
-/* Nivel efectivo que muestra la app */
-function estadoEfectivo() {
+/* Nivel de la quebrada (sensor o demo). Es el que colorea el cauce y las zonas de sirena. */
+function estadoBase() {
   if (S.demo && S.demo.activo && nivelValido(Number(S.demo.nivel))) {
     return { nivel: Number(S.demo.nivel), fuente: "demo", ts: S.demo.actualizado };
   }
@@ -436,6 +463,39 @@ function estadoEfectivo() {
   }
   return { nivel: Number(s.nivel), fuente: "sensor", ts };
 }
+
+/* Alerta por reportes de huaico cerca del usuario (o en cualquier zona si no compartió su ubicación):
+   - verificado por la autoridad  → rojo (emergencia)
+   - confirmado por ≥ 3 vecinos   → naranja (prepárate)
+   Los reportes caducados o descartados no cuentan. */
+function alertaPorReportes() {
+  const p = S.ubicacion ? [S.ubicacion.lat, S.ubicacion.lng] : null;
+  let mejor = null;
+  for (const [id, r] of Object.entries(S.reportes || {})) {
+    if (!r || r.tipo !== "huaico" || typeof r.lat !== "number") continue;
+    if (estadoReporte(r) !== "confirmado") continue;
+    const dist = p ? distM(p, [r.lat, r.lng]) : null;
+    if (dist !== null && dist > RADIO_ALERTA_HUAICO_M) continue;
+    const nivel = r.verificadoAutoridad ? 3 : ((r.confirmaciones || 0) >= VOTOS_MIN ? 2 : null);
+    if (nivel !== null && (!mejor || nivel > mejor.nivel)) mejor = { nivel, id, r, dist };
+  }
+  return mejor;
+}
+
+/* Nivel efectivo que muestra la app: el mayor entre la quebrada y la alerta por reportes */
+function estadoEfectivo() {
+  const b = estadoBase();
+  const a = alertaPorReportes();
+  if (a && (b.nivel === null || a.nivel > b.nivel)) {
+    return {
+      nivel: a.nivel, fuente: a.nivel === 3 ? "reporteAutoridad" : "reporteVecinos",
+      ts: Math.max(a.r.verificadoEn || 0, a.r.ultimaConfirmacion || 0, a.r.creado || 0),
+      reporteId: a.id, reporte: a.r, dist: a.dist, base: b
+    };
+  }
+  return b;
+}
+const esPorReporte = (e) => e.fuente === "reporteAutoridad" || e.fuente === "reporteVecinos";
 
 /* ---------------------------------------------------------------------
    SIRENA (Web Audio API, sin archivos externos)
@@ -546,6 +606,18 @@ function renderInicio() {
       ? `<span class="tag-sim">SIMULADO</span> Nivel forzado en modo demo · ${hora(e.ts)}`
       : `Fuente: sensor de la estación San Ildefonso · última lectura ${hora(e.ts)}`;
     renderAcciones(N.acciones);
+    if (esPorReporte(e)) {
+      const donde = e.dist !== null && e.dist !== undefined ? ` a unos ${Math.round(e.dist)} m de ti` : " en la ciudad";
+      $("#estadoEtiqueta").textContent = "Huaico reportado" + donde;
+      $("#estadoMensaje").textContent = e.nivel === 3
+        ? "Huaico verificado por la autoridad. Evacúa ahora a zona alta"
+        : "Huaico confirmado por vecinos cerca de ti. Prepárate para evacuar";
+      const base = e.base.nivel !== null ? NIVELES[e.base.nivel].estado : "sin datos";
+      $("#estadoMeta").innerHTML = (e.nivel === 3
+        ? `Fuente: reporte ciudadano <strong>verificado por la autoridad</strong> · ${hora(e.ts)}`
+        : `Fuente: reporte ciudadano confirmado por ${e.reporte.confirmaciones || 0} vecinos · ${hora(e.ts)}`)
+        + ` · No es lectura del sensor (quebrada: ${base}).`;
+    }
   } else if (e.fuente === "sensorOffline") {
     const ult = NIVELES[e.ultimoNivel];
     $("#estadoIcono").textContent = "📡";
@@ -567,7 +639,16 @@ function renderInicio() {
   const rojo = e.nivel === 3;
   document.body.classList.toggle("emergencia", rojo);
   $("#bloqueEmergencia").hidden = !rojo;
-  if (rojo) {
+  if (rojo && esPorReporte(e)) {
+    // Emergencia por huaico verificado: las sirenas de la quebrada NO están activas, no se dice que lo estén
+    $("#emergenciaTitulo").textContent = "HUAICO: EVACÚA AHORA";
+    $("#emergenciaSub").textContent = "Dónde";
+    const donde = e.dist !== null && e.dist !== undefined ? `a unos ${Math.round(e.dist)} m de ti` : "en la ciudad (activa tu ubicación para ver la distancia)";
+    $("#listaZonasSirena").innerHTML = `<li>🪨 Huaico verificado por la autoridad ${esc(donde)}${e.reporte.descripcion ? ": " + esc(e.reporte.descripcion) : ""}</li>`;
+    $("#emergenciaFuente").innerHTML = `Reporte ciudadano verificado por la autoridad · ${hora(e.ts)} · las sirenas de la quebrada solo suenan con el sensor`;
+  } else if (rojo) {
+    $("#emergenciaTitulo").textContent = "DESBORDE: EVACÚA AHORA";
+    $("#emergenciaSub").textContent = "Zonas con sirena activa";
     $("#listaZonasSirena").innerHTML = ZONAS_SIRENA.map((z) => `<li>🔊 ${esc(z.nombre)} – sirena activa</li>`).join("");
     $("#emergenciaFuente").innerHTML = e.fuente === "demo" ? "SIMULADO · modo demo" : `Sensor San Ildefonso · ${hora(e.ts)}`;
   }
@@ -581,11 +662,15 @@ function renderAcciones(lista) {
 function alCambiarNivel() {
   const e = estadoEfectivo();
   const n = e.nivel;
+  const nb = esPorReporte(e) ? e.base.nivel : n;
+  if (nb !== S.nivelBasePrevio) { S.nivelBasePrevio = nb; if (mapa) pintarCauceYZonas(); }
   if (n === S.nivelPrevio) return;
   S.nivelPrevio = n;
 
   if (n === 3) Sirena.iniciar(); else Sirena.detener();
-  gestionarNotificacion(n);
+  // Regla del proyecto: los reportes ciudadanos no generan notificaciones. Sí notifica el sensor, el demo
+  // y un huaico verificado por la autoridad.
+  gestionarNotificacion(e.fuente === "reporteVecinos" ? e.base.nivel : n);
 
   // Registrar cambio de nivel del SENSOR real (los de demo se registran al forzarlos)
   if (e.fuente === "sensor") {
@@ -712,6 +797,17 @@ function iniciarMapa() {
   // Encuadre inicial: cauce + zonas de sirena
   mapa.fitBounds(L.latLngBounds(CAUCE_REFERENCIAL.concat(ZONAS_SIRENA.map((z) => z.centro))), { padding: [20, 20] });
 
+  // Fotos: se descargan solo al abrir el reporte
+  mapa.on("popupopen", async (ev) => {
+    const img = ev.popup.getElement()?.querySelector("img[data-foto-id]");
+    if (!img) return;
+    const id = img.dataset.fotoId;
+    try {
+      const f = await Datos.getFoto(id, S.reportes[id]);
+      if (f) img.src = f; else img.alt = "Foto no disponible";
+    } catch (e) { console.warn("Foto:", e); img.alt = "Foto no disponible"; }
+  });
+
   // Votos desde el popup (delegación de eventos)
   mapa.getContainer().addEventListener("click", async (ev) => {
     const b = ev.target.closest("[data-voto]");
@@ -727,13 +823,13 @@ function iniciarMapa() {
 }
 
 function colorNivelActual() {
-  const n = estadoEfectivo().nivel;
+  const n = estadoBase().nivel;
   return n === null ? "#9E9E9E" : NIVELES[n].color;
 }
 
 function pintarCauceYZonas() {
   if (!mapa) return;
-  const e = estadoEfectivo();
+  const e = estadoBase();
   const color = colorNivelActual();
   const txtNivel = e.nivel === null ? "Sin datos del sensor" : `${NIVELES[e.nivel].estado} · ${NIVELES[e.nivel].titulo}`;
   capas.cauce.clearLayers();
@@ -807,7 +903,7 @@ function htmlPopup(id, r, est) {
     <h4>${T.icono} ${esc(T.nombre)}</h4>
     <span class="estado-rep ${est === "confirmado" ? "confirmado" : ""}">${NOMBRE_ESTADO[est]}</span>
     ${r.verificadoAutoridad ? ' <span class="estado-rep confirmado">✔ Verificado por autoridad</span>' : ""}
-    ${r.foto ? `<img src="${esc(r.foto)}" alt="Foto del reporte">` : ""}
+    ${r.foto ? `<img src="${esc(r.foto)}" alt="Foto del reporte">` : r.tieneFoto ? `<img data-foto-id="${esc(id)}" alt="Foto del reporte (cargando…)">` : ""}
     ${r.descripcion ? `<p>${esc(r.descripcion)}</p>` : ""}
     <p class="meta">Reportado ${hace(r.creado)} (${hora(r.creado)}) · ✔ ${r.confirmaciones || 0} · ✖ ${r.negaciones || 0}</p>
     <p class="meta"><strong>¿Sigue ahí?</strong></p>
@@ -1156,7 +1252,9 @@ function renderAdmin() {
   if ($("#panelAdmin").hidden) return;
   const e = estadoEfectivo();
   $$(".btn-nivel").forEach((b) => b.classList.toggle("actual", !!S.demo?.activo && Number(b.dataset.nivel) === Number(S.demo.nivel)));
-  $("#adminEstadoDemo").textContent = S.demo?.activo ? `Demo ACTIVO · nivel ${S.demo.nivel} (${NIVELES[S.demo.nivel]?.estado})` : "Demo apagado: la app muestra el sensor real.";
+  const al = alertaPorReportes();
+  $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Demo ACTIVO · nivel ${S.demo.nivel} (${NIVELES[S.demo.nivel]?.estado})` : "Demo apagado: la app muestra el sensor real.")
+    + (al ? ` · Alerta por reporte de huaico: ${al.nivel === 3 ? "ROJO (verificado por autoridad)" : "NARANJA (3 vecinos)"}` : "");
   $("#adminConexion").innerHTML = Datos.modo === "firebase"
     ? `Conectado a Firebase · usuario anónimo <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`
     : `Modo LOCAL (sin Firebase): datos solo en este navegador · usuario <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`;
@@ -1270,7 +1368,7 @@ async function iniciar() {
 
   Datos.suscribir("sensor", (v) => { S.sensor = v; renderTodo(); });
   Datos.suscribir("demo", (v) => { S.demo = v || { activo: false, nivel: 0 }; renderTodo(); });
-  Datos.suscribir("reportes", (v) => { S.reportes = v || {}; pintarReportes(); renderAdmin(); });
+  Datos.suscribir("reportes", (v) => { S.reportes = v || {}; pintarReportes(); renderTodo(); });
   Datos.suscribir("historial", (v) => { S.historial = v || {}; renderRegistro(); });
 
   // Revisión periódica: antigüedad del sensor y caducidad de reportes
