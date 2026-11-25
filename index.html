@@ -94,7 +94,7 @@
       <div id="mapa" class="mapa"></div>
       <div id="mapaAviso" class="mapa-aviso" hidden></div>
       <div id="bannerElegir" class="banner-elegir" hidden>
-        <span>👆 Toca el mapa donde está el problema</span>
+        <span id="textoBannerElegir">👆 Toca el mapa donde está el problema</span>
         <button id="btnCancelarElegir" class="btn btn-borde">Cancelar</button>
       </div>
       <div id="panelEvac" class="panel-evac" hidden>
@@ -113,6 +113,7 @@
         <p><span class="sw sw-gris"></span>Sin validar (borde punteado)</p>
         <p><span class="sw" style="background:#455A64"></span>Confirmado (≥ 3 usuarios)</p>
         <p><span class="sw" style="background:#C62828;opacity:.5"></span>Calle bloqueada confirmada</p>
+        <p><span class="sw sw-linea"></span>Tramo de calle reportado (línea)</p>
         <p class="meta">Cauce y zonas de sirena: <strong>trazado referencial</strong>.</p>
       </div>
     </section>
@@ -219,9 +220,16 @@
 
       <fieldset>
         <legend>4. Ubicación</legend>
-        <div class="fila-botones">
+        <div class="selector-forma" role="group" aria-label="Forma del reporte">
+          <button type="button" class="opcion-forma" data-forma="punto" aria-pressed="true">📍 Un punto<small>Daño en un lugar</small></button>
+          <button type="button" class="opcion-forma" data-forma="tramo" aria-pressed="false">〰️ Tramo de calle<small>Calle bloqueada o inundada</small></button>
+        </div>
+        <div id="ubicPunto" class="fila-botones">
           <button type="button" id="btnGPS" class="btn btn-borde">📍 Usar mi GPS</button>
           <button type="button" id="btnElegirMapa" class="btn btn-borde">👆 Tocar en el mapa</button>
+        </div>
+        <div id="ubicTramo" class="fila-botones" hidden>
+          <button type="button" id="btnMarcarTramo" class="btn btn-borde">👆 Marcar inicio y fin en el mapa</button>
         </div>
         <p id="textoUbicacion" class="meta">Sin ubicación todavía.</p>
       </fieldset>

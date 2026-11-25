@@ -370,3 +370,12 @@ details.guia .cuerpo ul { margin: 0; padding-left: 20px; }
 .lista-ana { margin: 6px 0; padding-left: 20px; }
 .lista-ana li { margin-bottom: 6px; }
 .txt-alerta { color: #B23C00; font-size: .88rem; }
+
+.selector-forma { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.opcion-forma {
+  min-height: 56px; border-radius: 12px; border: 2px solid var(--borde); background: #fff;
+  font-weight: 700; padding: 8px 10px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 2px;
+}
+.opcion-forma small { font-weight: 500; font-size: .78rem; color: var(--texto-2); }
+.opcion-forma[aria-pressed="true"] { border-color: var(--marca); background: #EEF3FB; }
+.sw-linea { height: 5px; border-radius: 3px; background: repeating-linear-gradient(90deg, #9E9E9E 0 6px, transparent 6px 10px); }

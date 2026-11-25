@@ -30,7 +30,8 @@ const TRUJILLO = { lat: -8.11, lng: -79.03, nombre: "Trujillo centro" };
 const SENSOR_MAX_EDAD_MS = 30_000;          // > 30 s ⇒ "Sensor sin conexión"
 const REPORTE_CADUCA_MS = 6 * 60 * 60 * 1000; // 6 h sin nuevas confirmaciones
 const VOTOS_MIN = 3;
-const RADIO_ALERTA_HUAICO_M = 1000;          // un huaico confirmado a menos de 1 km sube la alerta del usuario
+const RADIO_ALERTA_HUAICO_M = 1000;
+const TRAMO_MAX_M = 2000;                    // un tramo reportado no puede medir más de 2 km          // un huaico confirmado a menos de 1 km sube la alerta del usuario
 
 // Sistema de colores normado (igual en toda la app)
 const NIVELES = [
@@ -259,6 +260,21 @@ function distM(a, b) {
   return Math.sqrt(x * x + y * y) * R;
 }
 
+/* Tramos de calle: Firebase puede devolver arreglos como objetos {0:…,1:…}; se normalizan aquí. */
+function trazoDe(r) {
+  if (!r || r.forma !== "tramo" || !r.trazo) return null;
+  const pts = (Array.isArray(r.trazo) ? r.trazo : Object.values(r.trazo))
+    .map((p) => (Array.isArray(p) ? p : Object.values(p || {})).map(Number))
+    .filter((p) => p.length === 2 && p.every(Number.isFinite));
+  return pts.length >= 2 ? pts : null;
+}
+/* Distancia de un punto al reporte: al punto, o al vértice más cercano del tramo */
+function distAReporte(p, r) {
+  const t = trazoDe(r);
+  if (t) return Math.min(...t.map((q) => distM(p, q)));
+  return distM(p, [r.lat, r.lng]);
+}
+
 /* ---------------------------------------------------------------------
    CAPA DE DATOS  (Firebase si hay config · localStorage si no)
 --------------------------------------------------------------------- */
@@ -474,7 +490,7 @@ function alertaPorReportes() {
   for (const [id, r] of Object.entries(S.reportes || {})) {
     if (!r || r.tipo !== "huaico" || typeof r.lat !== "number") continue;
     if (estadoReporte(r) !== "confirmado") continue;
-    const dist = p ? distM(p, [r.lat, r.lng]) : null;
+    const dist = p ? distAReporte(p, r) : null;
     if (dist !== null && dist > RADIO_ALERTA_HUAICO_M) continue;
     const nivel = r.verificadoAutoridad ? 3 : ((r.confirmaciones || 0) >= VOTOS_MIN ? 2 : null);
     if (nivel !== null && (!mejor || nivel > mejor.nivel)) mejor = { nivel, id, r, dist };
@@ -883,7 +899,16 @@ function pintarReportes(forzar = true) {
       html: `<div class="mk ${conf ? "" : "sin-validar"} ${r.verificadoAutoridad ? "verificado" : ""}" style="background:${T.color};position:relative">${T.icono}</div>`,
       iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -18]
     });
-    if (conf && r.tipo === "bloqueo") {
+    const tramo = trazoDe(r);
+    if (tramo) {
+      // Tramo de calle: línea que sigue las calles (gris punteada sin validar; color del tipo al confirmarse; bloqueo = rojo)
+      const colorT = conf ? (r.tipo === "bloqueo" ? "#C62828" : T.color) : "#9E9E9E";
+      L.polyline(tramo, { color: "#fff", weight: 11, opacity: 0.9 }).addTo(capas.bloqueos);
+      L.polyline(tramo, { color: colorT, weight: 7, opacity: 0.95, dashArray: conf ? null : "8 8" })
+        .bindTooltip(`${T.nombre} · tramo de ~${Math.round(r.largo || 0)} m · ${NOMBRE_ESTADO[est]}`)
+        .bindPopup(() => htmlPopup(id, r, est), { maxWidth: 280 })
+        .addTo(capas.bloqueos);
+    } else if (conf && r.tipo === "bloqueo") {
       L.circle([r.lat, r.lng], { radius: 70, color: "#C62828", weight: 3, fillColor: "#C62828", fillOpacity: 0.35 })
         .bindTooltip("Calle bloqueada (confirmada)").addTo(capas.bloqueos);
     }
@@ -905,6 +930,7 @@ function htmlPopup(id, r, est) {
     ${r.verificadoAutoridad ? ' <span class="estado-rep confirmado">✔ Verificado por autoridad</span>' : ""}
     ${r.foto ? `<img src="${esc(r.foto)}" alt="Foto del reporte">` : r.tieneFoto ? `<img data-foto-id="${esc(id)}" alt="Foto del reporte (cargando…)">` : ""}
     ${r.descripcion ? `<p>${esc(r.descripcion)}</p>` : ""}
+    ${trazoDe(r) ? `<p class="meta">〰️ Tramo de calle de ~${Math.round(r.largo || 0)} m · trazo: ${esc(r.metodoTrazo || "—")}</p>` : ""}
     <p class="meta">Reportado ${hace(r.creado)} (${hora(r.creado)}) · ✔ ${r.confirmaciones || 0} · ✖ ${r.negaciones || 0}</p>
     <p class="meta"><strong>¿Sigue ahí?</strong></p>
     <div class="votos">
@@ -977,26 +1003,32 @@ async function mostrarEvacuacion() {
 /* ---------------------------------------------------------------------
    NUEVO REPORTE
 --------------------------------------------------------------------- */
-const R = { tipo: null, foto: null, lat: null, lng: null, origenUbic: null };
+const R = { tipo: null, foto: null, lat: null, lng: null, origenUbic: null, forma: "punto", trazo: null, metodoTrazo: null, largo: null };
+let capaTemp = null; // vista previa del punto o tramo mientras se arma el reporte
 
 function abrirReporte() {
   $("#hojaReporte").hidden = false;
+  // Reporte nuevo: empezar desde arriba (si no, la cabecera fija tapa los primeros botones)
+  if (!R.tipo && R.lat === null && !R.trazo) $("#formReporte").scrollTop = 0;
   validarFormReporte();
 }
 function cerrarReporte(limpiar = true) {
   $("#hojaReporte").hidden = true;
   if (limpiar) {
-    Object.assign(R, { tipo: null, foto: null, lat: null, lng: null, origenUbic: null });
+    Object.assign(R, { tipo: null, foto: null, lat: null, lng: null, origenUbic: null, forma: "punto", trazo: null, metodoTrazo: null, largo: null });
+    elegirForma("punto");
     $("#formReporte").reset();
     $$(".opcion-tipo").forEach((b) => b.setAttribute("aria-pressed", "false"));
     $("#previewFoto").hidden = true;
     $("#contadorDesc").textContent = "0";
     $("#textoUbicacion").textContent = "Sin ubicación todavía.";
     if (marcadorTemp) { marcadorTemp.remove(); marcadorTemp = null; }
+    if (capaTemp) { capaTemp.remove(); capaTemp = null; }
   }
 }
 function validarFormReporte() {
-  $("#btnEnviarReporte").disabled = !(R.tipo && typeof R.lat === "number");
+  const ubicOK = R.forma === "tramo" ? !!(R.trazo && R.trazo.length >= 2) : typeof R.lat === "number";
+  $("#btnEnviarReporte").disabled = !(R.tipo && ubicOK);
 }
 function fijarUbicacionReporte(lat, lng, origen) {
   R.lat = lat; R.lng = lng; R.origenUbic = origen;
@@ -1012,7 +1044,15 @@ function fijarUbicacionReporte(lat, lng, origen) {
    aunque se toque encima del cauce, una zona o un marcador; se ignora si el usuario arrastró el mapa. */
 let elegir = null;
 function activarElegirEnMapa() {
+  capturarToque("👆 Toca el mapa donde está el problema", (ll) => {
+    fijarUbicacionReporte(ll.lat, ll.lng, "elegida en el mapa");
+    abrirReporte();
+  });
+}
+/* Captura un toque en el mapa (antes que Leaflet) y llama a cb(latlng) */
+function capturarToque(texto, cb) {
   terminarElegirEnMapa();
+  $("#textoBannerElegir").textContent = texto;
   $("#bannerElegir").hidden = false;
   const cont = mapa.getContainer();
   let inicio = null;
@@ -1023,8 +1063,7 @@ function activarElegirEnMapa() {
     ev.stopPropagation(); ev.preventDefault();
     const ll = mapa.mouseEventToLatLng(ev);
     terminarElegirEnMapa();
-    fijarUbicacionReporte(ll.lat, ll.lng, "elegida en el mapa");
-    abrirReporte();
+    cb(ll);
   };
   cont.addEventListener("pointerdown", down, true);
   cont.addEventListener("click", click, true);
@@ -1036,6 +1075,94 @@ function terminarElegirEnMapa() {
   elegir.cont.removeEventListener("pointerdown", elegir.down, true);
   elegir.cont.removeEventListener("click", elegir.click, true);
   elegir = null;
+}
+
+/* ---------- Tramo de calle (estilo Waze) ---------- */
+function elegirForma(forma) {
+  R.forma = forma;
+  $$(".opcion-forma").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.forma === forma)));
+  $("#ubicPunto").hidden = forma !== "punto";
+  $("#ubicTramo").hidden = forma !== "tramo";
+  R.lat = R.lng = null; R.trazo = null; R.metodoTrazo = null; R.largo = null;
+  if (marcadorTemp) { marcadorTemp.remove(); marcadorTemp = null; }
+  if (capaTemp) { capaTemp.remove(); capaTemp = null; }
+  $("#textoUbicacion").textContent = forma === "tramo"
+    ? "Marca dónde empieza y dónde termina el problema en la calle."
+    : "Sin ubicación todavía.";
+  validarFormReporte();
+}
+
+function largoDe(trazo) {
+  let d = 0;
+  for (let i = 1; i < trazo.length; i++) d += distM(trazo[i - 1], trazo[i]);
+  return d;
+}
+function simplificar(trazo, max = 150) {
+  if (trazo.length <= max) return trazo;
+  const k = Math.ceil(trazo.length / max);
+  const out = trazo.filter((_, i) => i % k === 0);
+  out.push(trazo[trazo.length - 1]);
+  return out;
+}
+
+/* Ruta por calles entre a y b con servicios gratuitos basados en OpenStreetMap.
+   Si ambos fallan o devuelven un desvío absurdo, se usa línea recta y se indica en el reporte. */
+async function rutaPorCalles(a, b) {
+  const coords = `${a.lng},${a.lat};${b.lng},${b.lat}`;
+  const recta = distM([a.lat, a.lng], [b.lat, b.lng]);
+  const fuentes = [
+    ["por calles (OpenStreetMap, a pie)", `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${coords}?overview=full&geometries=geojson`],
+    ["por calles (OSRM)", `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`]
+  ];
+  for (const [metodo, url] of fuentes) {
+    try {
+      const j = await fetchJSON(url, 8000);
+      const ruta = j.routes && j.routes[0];
+      if (j.code === "Ok" && ruta && ruta.distance <= recta * 2.5 + 300) {
+        const trazo = simplificar(ruta.geometry.coordinates.map(([x, y]) => [Number(y.toFixed(6)), Number(x.toFixed(6))]));
+        return { trazo, metodo, largo: largoDe(trazo) };
+      }
+    } catch (e) { console.warn("Ruta:", metodo, e); }
+  }
+  const trazo = [[a.lat, a.lng], [b.lat, b.lng]].map((p) => p.map((v) => Number(v.toFixed(6))));
+  return { trazo, metodo: "línea recta (no se pudo trazar por calles)", largo: recta };
+}
+
+function marcarTramo() {
+  cerrarReporte(false);
+  irATab("mapa");
+  if (!mapa) { abrirReporte(); return; }
+  if (marcadorTemp) { marcadorTemp.remove(); marcadorTemp = null; }
+  if (capaTemp) { capaTemp.remove(); capaTemp = null; }
+  // Acercar a nivel de calle para que los toques marquen cuadras, no kilómetros
+  if (mapa.getZoom() < 16) mapa.setView(S.ubicacion ? [S.ubicacion.lat, S.ubicacion.lng] : mapa.getCenter(), 16);
+  capturarToque("1/2 · Toca dónde EMPIEZA el problema en la calle", (a) => {
+    capaTemp = L.layerGroup().addTo(mapa);
+    L.circleMarker(a, { radius: 8, color: "#fff", weight: 3, fillColor: "#1565C0", fillOpacity: 1 }).bindTooltip("Inicio").addTo(capaTemp);
+    capturarToque("2/2 · Ahora toca dónde TERMINA", async (b) => {
+      L.circleMarker(b, { radius: 8, color: "#fff", weight: 3, fillColor: "#1565C0", fillOpacity: 1 }).bindTooltip("Fin").addTo(capaTemp);
+      $("#textoBannerElegir").textContent = "Trazando el tramo por las calles…";
+      $("#bannerElegir").hidden = false;
+      const res = await rutaPorCalles(a, b);
+      $("#bannerElegir").hidden = true;
+      if (res.largo > TRAMO_MAX_M) {
+        capaTemp.remove(); capaTemp = null;
+        R.trazo = null; R.lat = R.lng = null;
+        $("#textoUbicacion").textContent = `El tramo mide ~${(res.largo / 1000).toFixed(1)} km: es demasiado largo. Acerca el mapa y marca solo la calle afectada.`;
+        validarFormReporte();
+        abrirReporte();
+        return;
+      }
+      L.polyline(res.trazo, { color: "#1565C0", weight: 7, opacity: 0.85 }).addTo(capaTemp);
+      mapa.fitBounds(L.polyline(res.trazo).getBounds().pad(0.4));
+      R.trazo = res.trazo; R.metodoTrazo = res.metodo; R.largo = Math.round(res.largo);
+      const medio = res.trazo[Math.floor(res.trazo.length / 2)];
+      R.lat = medio[0]; R.lng = medio[1]; R.origenUbic = "tramo elegido en el mapa";
+      $("#textoUbicacion").textContent = `〰️ Tramo de ~${R.largo} m · trazado ${res.metodo}`;
+      validarFormReporte();
+      setTimeout(abrirReporte, 700); // deja ver el tramo un instante antes de volver al formulario
+    });
+  });
 }
 
 /* Compresión en el navegador: máx. 800 px, JPEG calidad 0.6 → base64 */
@@ -1088,12 +1215,14 @@ function prepararFormReporte() {
     activarElegirEnMapa();
   };
   $("#btnCancelarElegir").onclick = () => { terminarElegirEnMapa(); abrirReporte(); };
+  $$(".opcion-forma").forEach((b) => b.addEventListener("click", () => elegirForma(b.dataset.forma)));
+  $("#btnMarcarTramo").onclick = marcarTramo;
   $("#btnCerrarReporte").onclick = () => cerrarReporte(true);
   $("#hojaReporte").addEventListener("click", (e) => { if (e.target.id === "hojaReporte") cerrarReporte(false); });
 
   $("#formReporte").addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!(R.tipo && typeof R.lat === "number")) return;
+    if ($("#btnEnviarReporte").disabled) return;
     const btn = $("#btnEnviarReporte");
     btn.disabled = true; btn.textContent = "Enviando…";
     try {
@@ -1101,7 +1230,9 @@ function prepararFormReporte() {
         tipo: R.tipo,
         descripcion: $("#inputDesc").value.trim().slice(0, 200),
         lat: Number(R.lat.toFixed(6)), lng: Number(R.lng.toFixed(6)),
-        foto: R.foto || null
+        foto: R.foto || null,
+        forma: R.forma,
+        ...(R.forma === "tramo" ? { trazo: R.trazo, largo: R.largo, metodoTrazo: R.metodoTrazo } : {})
       });
       cerrarReporte(true);
       toast("Reporte enviado. Aparecerá en gris hasta que 3 vecinos lo confirmen.");
@@ -1267,7 +1398,7 @@ function renderAdmin() {
   $("#adminReportes").innerHTML = lista.length ? lista.map(([id, r]) => {
     const T = TIPOS_REPORTE[r.tipo] || TIPOS_REPORTE.otro;
     const est = estadoReporte(r);
-    return `<li><strong>${T.icono} ${esc(T.nombre)}</strong> · ${NOMBRE_ESTADO[est]}${r.verificadoAutoridad ? " · ✔ autoridad" : ""}<br>
+    return `<li><strong>${T.icono} ${esc(T.nombre)}</strong>${trazoDe(r) ? ` · tramo ~${Math.round(r.largo || 0)} m` : ""} · ${NOMBRE_ESTADO[est]}${r.verificadoAutoridad ? " · ✔ autoridad" : ""}<br>
       <span class="meta">${esc((r.descripcion || "").slice(0, 80))} · ${fechaHora(r.creado)} · ✔${r.confirmaciones || 0} ✖${r.negaciones || 0}</span>
       <div class="acciones">
         <button data-acc="verificar" data-id="${esc(id)}">${r.verificadoAutoridad ? "Quitar verificación" : "✔ Verificar (autoridad)"}</button>
