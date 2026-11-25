@@ -379,3 +379,5 @@ details.guia .cuerpo ul { margin: 0; padding-left: 20px; }
 .opcion-forma small { font-weight: 500; font-size: .78rem; color: var(--texto-2); }
 .opcion-forma[aria-pressed="true"] { border-color: var(--marca); background: #EEF3FB; }
 .sw-linea { height: 5px; border-radius: 3px; background: repeating-linear-gradient(90deg, #9E9E9E 0 6px, transparent 6px 10px); }
+.fila-check { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--borde); border-radius: 12px; margin: 8px 0; font-size: .88rem; cursor: pointer; }
+.fila-check input { width: 24px; height: 24px; flex: none; accent-color: var(--marca); }

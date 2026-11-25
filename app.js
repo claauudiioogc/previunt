@@ -31,7 +31,11 @@ const SENSOR_MAX_EDAD_MS = 30_000;          // > 30 s ⇒ "Sensor sin conexión"
 const REPORTE_CADUCA_MS = 6 * 60 * 60 * 1000; // 6 h sin nuevas confirmaciones
 const VOTOS_MIN = 3;
 const RADIO_ALERTA_HUAICO_M = 1000;
-const TRAMO_MAX_M = 2000;                    // un tramo reportado no puede medir más de 2 km          // un huaico confirmado a menos de 1 km sube la alerta del usuario
+const TRAMO_MAX_M = 2000;                    // un tramo reportado no puede medir más de 2 km
+/* Modo cercanía (se activa en el centro de control; apagado por defecto para la demo) */
+const RADIO_REPORTE_M = 500;                 // solo se puede reportar a menos de 500 m de donde estás
+const RADIO_VOTO_M = 1000;                   // solo validan quienes están a menos de 1 km del reporte
+const proximidadActiva = () => !!(S.demo && S.demo.proximidad);          // un huaico confirmado a menos de 1 km sube la alerta del usuario
 
 // Sistema de colores normado (igual en toda la app)
 const NIVELES = [
@@ -358,8 +362,13 @@ const Datos = {
 
   async setDemo(activo, nivel) {
     const valor = { activo, nivel: nivelValido(nivel) ? nivel : 0, actualizado: ahora() };
-    if (this.modo === "local") { lsSet("previunt_demo", valor); this._emitLocal("demo"); return; }
-    await this.fb.set(this.fb.ref(this.db, "demo"), valor);
+    if (this.modo === "local") { lsSet("previunt_demo", { ...lsGet("previunt_demo", {}), ...valor }); this._emitLocal("demo"); return; }
+    await this.fb.update(this.fb.ref(this.db, "demo"), valor);
+  },
+
+  async setProximidad(on) {
+    if (this.modo === "local") { lsSet("previunt_demo", { ...lsGet("previunt_demo", { activo: false, nivel: 0 }), proximidad: !!on }); this._emitLocal("demo"); return; }
+    await this.fb.update(this.fb.ref(this.db, "demo"), { proximidad: !!on });
   },
 
   async addHistorial(id, entrada) {
@@ -830,6 +839,15 @@ function iniciarMapa() {
     if (!b) return;
     ev.preventDefault();
     b.disabled = true;
+    if (proximidadActiva()) {
+      const u = await pedirUbicacion();
+      const r = S.reportes[b.dataset.id];
+      if (!u) { toast("Activa tu ubicación para validar este reporte."); b.disabled = false; return; }
+      const d = distAReporte([u.lat, u.lng], r);
+      if (d > RADIO_VOTO_M + Math.min(u.precision || 0, 100)) {
+        toast(`Solo validan quienes están a menos de ${RADIO_VOTO_M / 1000} km. Estás a ~${(d / 1000).toFixed(1)} km.`); return;
+      }
+    }
     try {
       const ok = await Datos.votar(b.dataset.id, Number(b.dataset.voto));
       toast(ok ? "¡Gracias! Tu validación ayuda a tus vecinos." : "No se pudo registrar el voto.");
@@ -923,7 +941,14 @@ function htmlPopup(id, r, est) {
   let nota = "";
   if (esMio) nota = "Es tu reporte: no puedes validarlo tú.";
   else if (yaVote) nota = "Ya validaste este reporte.";
-  const dis = esMio || yaVote ? "disabled" : "";
+  let lejos = false;
+  if (proximidadActiva() && !esMio && !yaVote && S.ubicacion) {
+    const d = distAReporte([S.ubicacion.lat, S.ubicacion.lng], r);
+    if (d > RADIO_VOTO_M) { lejos = true; nota = `Solo validan quienes están a menos de ${RADIO_VOTO_M / 1000} km (estás a ~${(d / 1000).toFixed(1)} km).`; }
+  } else if (proximidadActiva() && !esMio && !yaVote) {
+    nota = `Para validar se usará tu ubicación (solo vecinos a menos de ${RADIO_VOTO_M / 1000} km).`;
+  }
+  const dis = esMio || yaVote || lejos ? "disabled" : "";
   return `<div class="popup-rep">
     <h4>${T.icono} ${esc(T.nombre)}</h4>
     <span class="estado-rep ${est === "confirmado" ? "confirmado" : ""}">${NOMBRE_ESTADO[est]}</span>
@@ -1010,6 +1035,7 @@ function abrirReporte() {
   $("#hojaReporte").hidden = false;
   // Reporte nuevo: empezar desde arriba (si no, la cabecera fija tapa los primeros botones)
   if (!R.tipo && R.lat === null && !R.trazo) $("#formReporte").scrollTop = 0;
+  $("#avisoProximidad").hidden = !proximidadActiva();
   validarFormReporte();
 }
 function cerrarReporte(limpiar = true) {
@@ -1223,6 +1249,15 @@ function prepararFormReporte() {
   $("#formReporte").addEventListener("submit", async (e) => {
     e.preventDefault();
     if ($("#btnEnviarReporte").disabled) return;
+    if (proximidadActiva()) {
+      const u = await pedirUbicacion();
+      if (!u) { $("#textoUbicacion").textContent = "Activa tu ubicación: en modo cercanía solo puedes reportar cerca de donde estás."; return; }
+      const d = distAReporte([u.lat, u.lng], { lat: R.lat, lng: R.lng, forma: R.forma, trazo: R.trazo });
+      if (d > RADIO_REPORTE_M + Math.min(u.precision || 0, 100)) {
+        $("#textoUbicacion").textContent = `Solo puedes reportar a menos de ${RADIO_REPORTE_M} m de donde estás (este punto está a ~${Math.round(d)} m).`;
+        return;
+      }
+    }
     const btn = $("#btnEnviarReporte");
     btn.disabled = true; btn.textContent = "Enviando…";
     try {
@@ -1383,6 +1418,7 @@ function renderAdmin() {
   if ($("#panelAdmin").hidden) return;
   const e = estadoEfectivo();
   $$(".btn-nivel").forEach((b) => b.classList.toggle("actual", !!S.demo?.activo && Number(b.dataset.nivel) === Number(S.demo.nivel)));
+  $("#chkProximidad").checked = proximidadActiva();
   const al = alertaPorReportes();
   $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Demo ACTIVO · nivel ${S.demo.nivel} (${NIVELES[S.demo.nivel]?.estado})` : "Demo apagado: la app muestra el sensor real.")
     + (al ? ` · Alerta por reporte de huaico: ${al.nivel === 3 ? "ROJO (verificado por autoridad)" : "NARANJA (3 vecinos)"}` : "");
@@ -1432,6 +1468,12 @@ function prepararAdmin() {
   $("#btnDemoOff").onclick = async () => {
     try { await Datos.setDemo(false, 0); toast("Demo desactivado: se muestra el sensor real."); }
     catch (e) { toast("Error: " + e.message); }
+  };
+  $("#chkProximidad").onchange = async (e) => {
+    try {
+      await Datos.setProximidad(e.target.checked);
+      toast(e.target.checked ? `Cercanía activada: reportar a ≤ ${RADIO_REPORTE_M} m y validar a ≤ ${RADIO_VOTO_M / 1000} km.` : "Cercanía desactivada: se puede reportar y validar desde cualquier lugar.");
+    } catch (err) { toast("Error: " + err.message); }
   };
   $("#btnProbarSirena").onclick = () => Sirena.prueba(3000);
   $("#btnProbarNotif").onclick = async () => {

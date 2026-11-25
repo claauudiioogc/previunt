@@ -234,6 +234,7 @@
         <p id="textoUbicacion" class="meta">Sin ubicación todavía.</p>
       </fieldset>
 
+      <p id="avisoProximidad" class="meta" hidden>📍 Modo cercanía activo: solo puedes reportar a menos de 500 m de donde estás.</p>
       <p class="meta">Tu reporte aparecerá en gris hasta que otros 3 vecinos lo confirmen. No genera notificaciones.</p>
       <button type="submit" id="btnEnviarReporte" class="btn btn-primario btn-grande" disabled>Enviar reporte</button>
     </form>
@@ -272,6 +273,7 @@
 
       <section>
         <h3>Reportes ciudadanos</h3>
+        <label class="fila-check"><input type="checkbox" id="chkProximidad"> <span><strong>Exigir cercanía</strong>: reportar solo a menos de 500 m y validar solo a menos de 1 km del reporte. Apagado = desde cualquier lugar (útil para la demo).</span></label>
         <p class="meta">Los votos "simulados" sirven para mostrar la validación con un solo celular. Se guardan como votos de usuarios ficticios (SIMULADO).</p>
         <ul id="adminReportes" class="admin-reportes"></ul>
       </section>
