@@ -43,6 +43,9 @@ const RADIO_REPORTE_M = 500;                 // solo se puede reportar a menos d
 const RADIO_VOTO_M = 1000;                   // solo validan quienes están a menos de 1 km del reporte
 const proximidadActiva = () => !!(S.demo && S.demo.proximidad);          // un huaico confirmado a menos de 1 km sube la alerta del usuario
 
+// Acción de Inicio que abre el mapa con la ruta de evacuación desde tu ubicación
+const RUTA_EVAC = { ruta: true, texto: "Consulta tu ruta de evacuación" };
+
 // Sistema de colores normado (igual en toda la app)
 /* El estado NO viene de un sensor: lo publica la autoridad (Defensa Civil, COER La Libertad, municipalidad)
    desde el Panel de autoridad, citando su fuente (aviso SENAMHI, parte del COER, inspección en campo).
@@ -52,35 +55,40 @@ const NIVELES = [
   {
     n: 0, estado: "SECA", corto: "Seco", color: "#2E7D32", titulo: "Seco", icono: "circle-check",
     mensaje: "Sin avisos ni reportes de activación.",
-    acciones: ["Ten lista tu mochila de emergencia", "Conoce tu ruta a zona alta", "No arrojes basura al cauce"]
+    acciones: ["Ten lista tu mochila de emergencia", RUTA_EVAC, "No arrojes basura al cauce"]
   },
   {
     n: 1, estado: "EN AUMENTO", corto: "En aumento", color: "#F9A825", titulo: "En aumento", icono: "arrow-up",
     mensaje: "Lluvias y caudal en aumento. Prepárate.",
-    acciones: ["Prepara tu mochila", "Ubica a tu familia y tu ruta a zona alta", "Aléjate del cauce"]
+    acciones: ["Prepara tu mochila", RUTA_EVAC, "Aléjate del cauce"]
   },
   {
     n: 2, estado: "HUAICO", corto: "Huaico", color: "#EF6C00", titulo: "Huaico reportado", icono: "triangle-alert",
     mensaje: "Vecinos reportaron un huaico cerca. Cuidado al salir.",
-    acciones: ["Prepárate para evacuar", "Ubica a tu familia", "No cruces agua ni lodo"]
+    acciones: [RUTA_EVAC, "Prepárate para evacuar y ubica a tu familia", "No cruces agua ni lodo"]
   },
   {
     n: 3, estado: "DESBORDE", corto: "Desborde", color: "#C62828", titulo: "Desborde", icono: "siren",
     mensaje: "Confirmado por la autoridad. Evacúa ahora a zona alta.",
-    acciones: ["Evacúa ahora a zona alta", "Si no puedes salir, sube al piso más alto", "No cruces agua ni lodo"]
+    acciones: [{ ruta: true, texto: "Evacúa ahora: consulta tu ruta" }, "Si no puedes salir, sube al piso más alto", "No cruces agua ni lodo"]
   }
 ];
 // Estados que puede publicar la autoridad (el huaico lo marcan los vecinos)
 const NIVELES_AUTORIDAD = [0, 1, 3];
 
 /* Trazado REFERENCIAL del cauce de San Ildefonso (aguas arriba → mar).
-   Basado en descripciones de INGEMMET (dique de Las Canteras, ~4 km aguas arriba de El Porvenir), ANA (mapa de rutas de
-   evacuación 2015: calles Hipólito Unanue, Tomás Moscoso, Las Ánimas) y prensa (Mampuesto, av. 9 de Octubre, centro, Víctor Larco).
+   Tramo alto hasta el ápice (-8.0701, -79.0003): eje trazado por el equipo (J. 26/11/2026) sobre el "Mapa de rutas de
+   evacuación y zonas de refugio – Quebrada San Idelfonso" de la ANA (set. 2015), ±50–100 m. Pasa a menos de 100 m de los
+   puntos críticos oficiales (CENEPRED capa 25 "El Baden"; INGEMMET A7457). El trazado anterior quedaba 0,8–2,5 km al este.
+   Aguas abajo del ápice: trazado anterior (prensa: Mampuesto, av. 9 de Octubre, centro, Víctor Larco); no hay trazado oficial.
    TODO: verificar con fuente oficial el trazado exacto (ANA / Municipalidad Provincial de Trujillo – plan "Ruta del Agua"). */
+const CAUCE_TRAMO_ALTO = [
+  [-8.04438, -78.98747], [-8.04700, -78.98837], [-8.04961, -78.98993], [-8.05119, -78.99136], [-8.05302, -78.99292],
+  [-8.05499, -78.99462], [-8.05655, -78.99526], [-8.05812, -78.99617], [-8.05969, -78.99721], [-8.06126, -78.99812],
+  [-8.06296, -78.99877], [-8.06479, -78.99928], [-8.06688, -78.99974], [-8.06897, -79.00010], [-8.07014, -79.00030]
+];
 const CAUCE_REFERENCIAL = [
-  [-8.0560, -78.9620],
-  [-8.0650, -78.9780],
-  [-8.0740, -78.9930],
+  ...CAUCE_TRAMO_ALTO,
   [-8.0820, -79.0080],
   [-8.0920, -79.0180],
   [-8.1030, -79.0250],
@@ -100,19 +108,29 @@ const ZONAS_SIRENA = [
   { id: "larco",     nombre: "Víctor Larco",      centro: [-8.1360, -79.0450], radio: 1000 }
 ];
 
-/* Puntos seguros con coordenadas. Vacío a propósito: NO inventar.
-   El mapa oficial de la ANA (set. 2015) marca zonas seguras en El Porvenir (ver ZONAS_ANA_2015), pero el
-   Estadio Municipal de El Porvenir se inundó con la quebrada en marzo de 2023 (Canal N), así que no se publica como seguro.
-   TODO: verificar con fuente oficial (Defensa Civil de El Porvenir / COER La Libertad) y agregar con este formato:
-   { nombre: "…", lat: -8.0, lng: -79.0, fuente: "…" } */
-const PUNTOS_SEGUROS = [];
-const MAPA_ANA_2015 = "https://sigrid.cenepred.gob.pe/sigridv3/documento/311/descargar";
-const ZONAS_ANA_2015 = [
-  { nombre: "Estadio Municipal El Porvenir (1.2 ha)", alerta: "Se inundó con la quebrada en marzo de 2023: no usar sin confirmar con Defensa Civil.", fuenteAlerta: "https://canaln.pe/peru/trujillo-estadio-porvenir-continua-inundado-deslizamientos-quebrada-san-idelfonso-n459893" },
-  { nombre: "Parque y losa deportiva (0.3 ha)" },
-  { nombre: "Zona de parque (1.6 ha)" },
-  { nombre: "Terreno baldío (0.1 ha)" }
+/* Zonas de refugio OFICIALES: "Mapa de rutas de evacuación y zonas de refugio – Quebrada San Idelfonso", ANA, set. 2015
+   (SIGRID doc. 311). El PDF no trae coordenadas: el equipo lo georreferenció con su cuadrícula UTM 17S (±15–30 m).
+   Se dejan fuera a propósito:
+   - Estadio Municipal de El Porvenir: se inundó con la quebrada en marzo de 2023 (Canal N) y queda ~14 m bajo el ápice.
+   - Terreno baldío (0,1 ha): a ~160 m del eje del cauce y solo ~8 m más alto.
+   - Albergues del COER: son para alojarse después del huaico, no para evacuar en el momento.
+   TODO: confirmar vigencia con Defensa Civil de El Porvenir / COER La Libertad. */
+const MAPA_ANA_2015 = "https://sigrid.cenepred.gob.pe/sigridv3/documento/311";
+const ZONAS_REFUGIO = [
+  { id: "ana-parque", nombre: "Zona de parque", area: "1,6 ha", lat: -8.06841, lng: -78.99501, fuente: "ANA, set. 2015", url: MAPA_ANA_2015 },
+  { id: "ana-losa", nombre: "Parque y losa deportiva", area: "0,3 ha", lat: -8.08143, lng: -79.00910, fuente: "ANA, set. 2015", url: MAPA_ANA_2015 }
 ];
+
+/* Criterios de evacuación (propios del equipo, NO oficiales). TODO: validar con Defensa Civil. */
+const EVAC = {
+  cercaCauceM: 1000,     // a esta distancia del cauce (o de un huaico verificado) se propone evacuar
+  refugioMaxM: 1500,     // zona de refugio "cerca": ruta a pie de hasta 1,5 km (~20 min)
+  altaMinCauceM: 400,    // la zona alta debe quedar al menos a 400 m del cauce…
+  altaMinDesnivelM: 20,  // …y 20 m más alta que el punto del cauce más cercano
+  altaCalleMaxM: 60,     // la ruta debe terminar a menos de 60 m del punto (que se pueda llegar caminando)
+  franjaCauceM: 120,     // franja alrededor del cauce que la ruta evita
+  moverseM: 200          // se recalcula si la persona se movió más de 200 m
+};
 
 const TIPOS_REPORTE = {
   bloqueo:    { nombre: "Calle bloqueada",     icono: "construction", color: "#B71C1C" },
@@ -681,7 +699,8 @@ function textoFuente(e) {
   return e.fuente === "demo" ? `<span class="tag-sim">SIMULADO</span> ${cita}${h}` : `Fuente: ${cita}${h}`;
 }
 function renderAcciones(lista) {
-  $("#listaAcciones").innerHTML = lista.map((a) => `<li>${esc(a)}</li>`).join("");
+  $("#listaAcciones").innerHTML = lista.map((a) => typeof a === "string" ? `<li>${esc(a)}</li>`
+    : `<li class="accion-ruta"><button type="button" data-evac>${ic("route")}<span><strong>${esc(a.texto)}</strong><span class="sub">${esc(resumenEvacuacion())}</span></span>${ic("chevron-right")}</button></li>`).join("");
 }
 
 /* Se ejecuta cada vez que cambia el nivel efectivo */
@@ -953,6 +972,7 @@ function pedirUbicacion({ silencioso = false } = {}) {
         pintarYo();
         renderListas();
         renderTodo(); // la distancia al huaico reportado depende de la ubicación
+        setTimeout(precalcularEvacuacion, 1500); // ruta de evacuación lista antes de que haga falta
         resolve(S.ubicacion);
       },
       (err) => {
@@ -998,7 +1018,19 @@ function iniciarMapa() {
   capas.reportes = L.layerGroup().addTo(mapa);
   capas.evac = L.layerGroup().addTo(mapa);
   capas.seguros = L.layerGroup().addTo(mapa);
-  PUNTOS_SEGUROS.forEach((p) => L.marker([p.lat, p.lng]).bindPopup(`<strong>${esc(p.nombre)}</strong><br>Punto seguro · ${esc(p.fuente)}`).addTo(capas.seguros));
+  // Zonas de refugio oficiales (ANA 2015), con botón "Cómo llegar"
+  ZONAS_REFUGIO.forEach((z) => L.marker([z.lat, z.lng], {
+    icon: L.divIcon({ className: "", html: `<div class="mk mk-refugio">${ic("shield-check")}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] })
+  }).bindTooltip(`Zona de refugio · ${esc(z.nombre)}`)
+    .bindPopup(`<strong>Zona de refugio: ${esc(z.nombre)}</strong><br>${esc(z.area)} · oficial, <a href="${z.url}" target="_blank" rel="noopener">mapa ANA 2015</a>
+      <br><span class="cuenta">Ubicación aproximada (±30 m). Confirma su vigencia con Defensa Civil.</span>
+      <br><button class="btn btn-primario btn-chico" data-refugio="${z.id}">${ic("route")} Cómo llegar</button>`)
+    .addTo(capas.seguros));
+  mapa.attributionControl.addAttribution('Rutas: <a href="https://fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen" target="_blank" rel="noopener">FOSSGIS</a> · Elevación: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a>');
+  mapa.getContainer().addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-refugio]");
+    if (b) { ev.preventDefault(); mostrarEvacuacion({ refugioId: b.dataset.refugio }); }
+  });
   pintarCauceYZonas();
   pintarReportes();
   pintarYo();
@@ -1261,117 +1293,436 @@ function pintarYo() {
   } else marcadorYo.setLatLng(ll);
 }
 
-/* ---------- Dirección de evacuación referencial ---------- */
-function puntoMasCercanoEnCauce(p) {
-  // Proyección local en metros
-  const rad = Math.PI / 180, R = 6371000, cosLat = Math.cos(p[0] * rad);
-  const toXY = (q) => [(q[1] - p[1]) * rad * cosLat * R, (q[0] - p[0]) * rad * R];
+/* ---------- Evacuación: zona de refugio oficial (ANA 2015) o zona alta calculada con la topografía ----------
+   1. Si estás a más de 1 km del cauce: no se propone evacuar por la quebrada (se puede pedir el refugio más cercano).
+   2. Si hay una zona de refugio ANA de tu mismo lado del cauce a ≤ 1,5 km a pie: ruta a esa zona.
+   3. Si no: zona más alta cercana, del mismo lado del cauce, ≥ 400 m de él, ≥ 20 m más alta que el cauce y con calle.
+   4. Sin red: última ruta guardada (si estás a < 200 m de donde se calculó) o dirección para alejarse del cauce.
+   Rutas: Valhalla de FOSSGIS (a pie, evitando una franja de 120 m del cauce); respaldo OSRM a pie (FOSSGIS).
+   Ambos piden como máximo 1 consulta por segundo y no garantizan disponibilidad.
+   Elevación: AWS Terrain Tiles (Terrarium, SRTM ~30 m), sin clave. */
+const RAD = Math.PI / 180, R_TIERRA = 6371000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const moverLL = (p, este, norte) => [p[0] + norte / (R_TIERRA * RAD), p[1] + este / (R_TIERRA * RAD * Math.cos(p[0] * RAD))];
+
+/* Punto más cercano de una línea a p: distancia (m), punto (ll), segmento y lado (+1 / −1; 0 si está encima) */
+function puntoMasCercanoEnCauce(p, linea = CAUCE_REFERENCIAL) {
+  const cosLat = Math.cos(p[0] * RAD);
+  const toXY = (q) => [(q[1] - p[1]) * RAD * cosLat * R_TIERRA, (q[0] - p[0]) * RAD * R_TIERRA];
   let mejor = { d: Infinity, xy: null, seg: null };
-  for (let i = 0; i < CAUCE_REFERENCIAL.length - 1; i++) {
-    const a = toXY(CAUCE_REFERENCIAL[i]), b = toXY(CAUCE_REFERENCIAL[i + 1]);
+  for (let i = 0; i < linea.length - 1; i++) {
+    const a = toXY(linea[i]), b = toXY(linea[i + 1]);
     const ab = [b[0] - a[0], b[1] - a[1]];
     const t = Math.max(0, Math.min(1, (-a[0] * ab[0] - a[1] * ab[1]) / (ab[0] ** 2 + ab[1] ** 2)));
     const q = [a[0] + t * ab[0], a[1] + t * ab[1]];
     const d = Math.hypot(q[0], q[1]);
     if (d < mejor.d) mejor = { d, xy: q, seg: ab };
   }
-  return { ...mejor, cosLat };
+  const cruz = mejor.seg[1] * mejor.xy[0] - mejor.seg[0] * mejor.xy[1];
+  const lado = mejor.d < 30 ? 0 : Math.sign(cruz);
+  return { ...mejor, cosLat, lado, ll: moverLL(p, mejor.xy[0], mejor.xy[1]) };
 }
 
-/* Elevación del terreno: Open-Meteo Elevation API (Copernicus DEM GLO-90, 90 m). Hasta 100 puntos por consulta. */
-async function elevaciones(puntos) {
-  const url = `https://api.open-meteo.com/v1/elevation?latitude=${puntos.map((p) => p[0].toFixed(5)).join(",")}&longitude=${puntos.map((p) => p[1].toFixed(5)).join(",")}`;
-  const j = await fetchJSON(url, 8000);
-  if (!Array.isArray(j.elevation) || j.elevation.length !== puntos.length) throw new Error("Elevación incompleta");
-  return j.elevation;
+/* ---- Elevación: AWS Terrain Tiles (formato Terrarium) decodificados en un canvas ---- */
+const ELEV_Z = 12;                       // z12 = dato SRTM nativo (~38 m por píxel en Trujillo)
+const ELEV_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/";
+const _tilesElev = {};
+function tileElevacion(k) {
+  if (!_tilesElev[k]) {
+    _tilesElev[k] = new Promise((ok, fail) => {
+      const img = new Image();
+      const t = setTimeout(() => { img.src = ""; fail(new Error("Tiempo agotado: tile " + k)); }, 10000);
+      img.crossOrigin = "anonymous";     // el bucket responde Access-Control-Allow-Origin: *
+      img.onload = () => {
+        clearTimeout(t);
+        try {
+          const c = document.createElement("canvas");
+          c.width = c.height = 256;
+          const g = c.getContext("2d", { willReadFrequently: true });
+          g.drawImage(img, 0, 0);
+          ok(g.getImageData(0, 0, 256, 256).data);
+        } catch (e) { fail(e); }
+      };
+      img.onerror = () => { clearTimeout(t); fail(new Error("No cargó el tile " + k)); };
+      img.src = `${ELEV_URL}${k}.png`;
+    }).catch((e) => { delete _tilesElev[k]; throw e; });
+  }
+  return _tilesElev[k];
+}
+async function elevacion(p) {
+  const n = 2 ** ELEV_Z;
+  const xf = ((p[1] + 180) / 360) * n;
+  const yf = ((1 - Math.asinh(Math.tan(p[0] * RAD)) / Math.PI) / 2) * n;
+  const x = Math.floor(xf), y = Math.floor(yf);
+  const d = await tileElevacion(`${ELEV_Z}/${x}/${y}`);
+  const px = Math.min(255, Math.floor((xf - x) * 256)), py = Math.min(255, Math.floor((yf - y) * 256));
+  const i = (py * 256 + px) * 4;
+  return d[i] * 256 + d[i + 1] + d[i + 2] / 256 - 32768;   // fórmula Terrarium (m s. n. m.)
+}
+const elevaciones = (puntos) => Promise.all(puntos.map(elevacion));
+
+/* ---- Rutas a pie (FOSSGIS). Máximo 1 consulta por segundo entre todas. ---- */
+const VALHALLA_URL = "https://valhalla1.openstreetmap.de/route";
+const OSRM_PIE_URL = "https://routing.openstreetmap.de/routed-foot/route/v1/foot/";
+let _turnoRuta = 0;
+async function esperarTurnoRuta() {
+  const espera = _turnoRuta + 1100 - Date.now();
+  _turnoRuta = Math.max(Date.now(), _turnoRuta + 1100);
+  if (espera > 0) await sleep(espera);
+}
+function decodificarPolyline6(s) {
+  let i = 0, lat = 0, lng = 0; const out = [];
+  while (i < s.length) {
+    let b, sh = 0, r = 0;
+    do { b = s.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32);
+    lat += r & 1 ? ~(r >> 1) : r >> 1;
+    sh = 0; r = 0;
+    do { b = s.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32);
+    lng += r & 1 ? ~(r >> 1) : r >> 1;
+    out.push([lat / 1e6, lng / 1e6]);
+  }
+  return out;
+}
+/* Franja a evitar alrededor del cauce: UN polígono continuo por cada tramo seguido (Valhalla acepta como máximo
+   10 km de perímetro sumando todos los polígonos; el tramo alto de ~3,6 km da ~7,7 km). Se omiten los segmentos que
+   tocan el origen o el destino (si no, Valhalla no encuentra salida). Formato Valhalla: anillos de [lng, lat]. */
+function franjaEvitar(linea, anchoM, libres) {
+  const tramos = [];
+  let actual = [];
+  for (let i = 0; i < linea.length - 1; i++) {
+    const a = linea[i], b = linea[i + 1];
+    const libre = libres.some((q) => puntoMasCercanoEnCauce(q, [a, b]).d < anchoM + 80);
+    if (libre) { if (actual.length > 1) tramos.push(actual); actual = []; continue; }
+    if (!actual.length) actual.push(a);
+    actual.push(b);
+  }
+  if (actual.length > 1) tramos.push(actual);
+  return tramos.map((pts) => {
+    const m = pts[Math.floor(pts.length / 2)], cosLat = Math.cos(m[0] * RAD);
+    const xy = pts.map((q) => [(q[1] - m[1]) * RAD * cosLat * R_TIERRA, (q[0] - m[0]) * RAD * R_TIERRA]);
+    const dir = (k) => { const a = xy[Math.max(0, k - 1)], b = xy[Math.min(xy.length - 1, k + 1)]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+    const izq = [], der = [];
+    xy.forEach((P, k) => {
+      const u = dir(k), n = [-u[1], u[0]];
+      const ext = k === 0 ? -anchoM / 2 : k === xy.length - 1 ? anchoM / 2 : 0;   // se alarga un poco en los extremos
+      const B = [P[0] + u[0] * ext, P[1] + u[1] * ext];
+      izq.push([B[0] + n[0] * anchoM, B[1] + n[1] * anchoM]);
+      der.push([B[0] - n[0] * anchoM, B[1] - n[1] * anchoM]);
+    });
+    const anillo = izq.concat(der.reverse());
+    anillo.push(anillo[0]);
+    return anillo.map(([x, y]) => { const ll = moverLL(m, x, y); return [Number(ll[1].toFixed(6)), Number(ll[0].toFixed(6))]; });
+  });
+}
+function cuadradoEvitar(c, ladoM) {
+  const h = ladoM / 2;
+  return [[[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h]].map(([x, y]) => { const ll = moverLL(c, x, y); return [Number(ll[1].toFixed(6)), Number(ll[0].toFixed(6))]; })];
+}
+async function postJSON(url, cuerpo, ms = 10000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo), signal: ctl.signal });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(j.error || "HTTP " + r.status); e.status = r.status; throw e; }
+    return j;
+  } finally { clearTimeout(t); }
+}
+/* Ruta a pie con Valhalla evitando polígonos. null = no hay ruta; lanza error si el servicio no responde. */
+async function rutaValhalla(a, b, evitar) {
+  await esperarTurnoRuta();
+  let j;
+  try {
+    j = await postJSON(VALHALLA_URL, {
+      locations: [{ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }],
+      costing: "pedestrian", units: "kilometers", directions_type: "none",
+      ...(evitar && evitar.length ? { exclude_polygons: evitar } : {})
+    });
+  } catch (e) {
+    if (e.status === 400 && /no path|no suitable edges/i.test(e.message)) return null;   // de verdad no hay ruta
+    throw e;   // cualquier otro error: se usa el respaldo (OSRM a pie)
+  }
+  if (!j.trip || !j.trip.legs || !j.trip.legs[0]) return null;
+  const trazo = simplificar(decodificarPolyline6(j.trip.legs[0].shape).map((q) => q.map((v) => Number(v.toFixed(6)))));
+  return { trazo, largo: j.trip.summary.length * 1000, min: j.trip.summary.time / 60, metodo: "valhalla", evitaPeligro: !!(evitar && evitar.length) };
+}
+async function rutaOSRMPie(a, b) {
+  await esperarTurnoRuta();
+  const j = await fetchJSON(`${OSRM_PIE_URL}${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`, 8000);
+  const r = j.routes && j.routes[0];
+  if (j.code !== "Ok" || !r) return null;
+  const trazo = simplificar(r.geometry.coordinates.map(([x, y]) => [Number(y.toFixed(6)), Number(x.toFixed(6))]));
+  return { trazo, largo: r.distance, min: r.duration / 60, metodo: "osrm", evitaPeligro: false };
+}
+/* Valhalla evitando el peligro; si el servicio falla, OSRM a pie (no evita el cauce). */
+async function rutaAPie(a, b, evitar) {
+  try { return await rutaValhalla(a, b, evitar); }
+  catch (e) { console.warn("Valhalla:", e); }
+  try { return await rutaOSRMPie(a, b); }
+  catch (e) { console.warn("OSRM a pie:", e); return undefined; }   // undefined = sin servicio
 }
 
-/* Busca alrededor del usuario (300–1100 m, 16 direcciones) el punto más alto que además
-   quede más lejos del peligro que el usuario. Devuelve { destino, ganancia } o null si no hay datos. */
-async function buscarZonaAlta(p, distAlPeligro) {
-  const rad = Math.PI / 180, RT = 6371000, cosLat = Math.cos(p[0] * rad);
-  const dUsuario = distAlPeligro(p);
-  const cands = [];
-  for (const d of [300, 500, 800, 1100]) {
+/* El peligro del que hay que alejarse: el cauce, o un huaico verificado por la autoridad */
+function peligroActual() {
+  const e = estadoEfectivo();
+  if (esPorReporte(e) && e.reporte && Number.isFinite(e.reporte.lat)) {
+    const h = [e.reporte.lat, e.reporte.lng];
+    return {
+      tipo: "huaico", nombre: "huaico", clave: `h:${h[0].toFixed(4)},${h[1].toFixed(4)}`,
+      cerca: (q) => { const d = distM(q, h); return { d, ll: h, lado: 0 }; },
+      evitar: (libres) => libres.some((q) => distM(q, h) < 180) ? [] : cuadradoEvitar(h, 200)
+    };
+  }
+  return {
+    tipo: "cauce", nombre: "cauce", clave: "cauce-v2",
+    cerca: (q) => puntoMasCercanoEnCauce(q),
+    // La franja se aplica al tramo alto (trazado sobre el mapa ANA); aguas abajo el trazado es solo aproximado.
+    evitar: (libres) => franjaEvitar(CAUCE_TRAMO_ALTO, EVAC.franjaCauceM, libres)
+  };
+}
+
+/* Calcula la evacuación desde p. Nunca inventa: si no hay datos lo indica en el resultado. */
+async function calcularEvacuacion(p, { refugioId = null } = {}) {
+  const pel = peligroActual();
+  const base = { v: 2, origen: p, ts: Date.now(), peligro: pel.tipo, clave: pel.clave + (refugioId ? ":" + refugioId : "") };
+  const pc = pel.cerca(p);
+  base.distPeligro = Math.round(pc.d);
+  if (!refugioId && pel.tipo === "cauce" && pc.d > EVAC.cercaCauceM) return { ...base, tipo: "lejos" };
+
+  // Altitud de la persona (para mostrarla; si falla, se sigue sin ella)
+  let elevOrigen = null;
+  try { elevOrigen = await elevacion(p); } catch (e) { console.warn("Elevación:", e); }
+  base.elevOrigen = elevOrigen;
+
+  // 1) Zona de refugio oficial cercana
+  const refugios = (refugioId ? ZONAS_REFUGIO.filter((z) => z.id === refugioId) : ZONAS_REFUGIO)
+    .map((z) => ({ z, recta: distM(p, [z.lat, z.lng]) }))
+    .filter((x) => refugioId || x.recta <= EVAC.refugioMaxM)
+    // Nunca proponer un refugio al otro lado del cauce (habría que cruzarlo)
+    .filter((x) => refugioId || pel.tipo !== "cauce" || pc.lado === 0 || pel.cerca([x.z.lat, x.z.lng]).lado === pc.lado)
+    .sort((a, b) => a.recta - b.recta);
+  let sinServicio = false, mejorRef = null;
+  for (const { z } of refugios) {
+    const dz = [z.lat, z.lng];
+    const r = await rutaAPie(p, dz, pel.evitar([p, dz]));
+    if (r === undefined) { sinServicio = true; break; }
+    if (r && (!mejorRef || r.largo < mejorRef.ruta.largo)) mejorRef = { z, ruta: r };
+  }
+  if (mejorRef && (refugioId || mejorRef.ruta.largo <= EVAC.refugioMaxM)) {
+    let elevDestino = null;
+    try { elevDestino = await elevacion([mejorRef.z.lat, mejorRef.z.lng]); } catch {}
+    return { ...base, tipo: "refugio", destino: { ...mejorRef.z }, ruta: mejorRef.ruta, elevDestino };
+  }
+  // Sin servicio de rutas pero con un refugio cercano de tu lado: se marca la dirección en línea recta
+  if (sinServicio && !refugioId && refugios.length) {
+    const z = refugios[0].z;
+    let elevDestino = null;
+    try { elevDestino = await elevacion([z.lat, z.lng]); } catch {}
+    return { ...base, tipo: "refugio", destino: { ...z }, ruta: lineaRecta(p, [z.lat, z.lng]), elevDestino, sinServicio };
+  }
+  if (refugioId) {   // refugio pedido a mano y sin ruta por calles: se muestra la dirección en línea recta
+    const z = refugios[0].z;
+    return { ...base, tipo: "refugio", destino: { ...z }, ruta: lineaRecta(p, [z.lat, z.lng]), elevDestino: null, sinServicio };
+  }
+
+  // 2) Zona alta: mismo lado del peligro, más lejos que tú, ≥ 400 m y ≥ 20 m más alta que su punto más cercano del cauce
+  let cands = [];
+  for (const d of [300, 500, 750, 1000, 1300]) {
     for (let k = 0; k < 16; k++) {
       const a = (k * Math.PI) / 8;
-      const q = [p[0] + (Math.sin(a) * d) / (RT * rad), p[1] + (Math.cos(a) * d) / (RT * rad * cosLat)];
-      if (distAlPeligro(q) >= dUsuario + 150) cands.push({ q, d });
+      const q = moverLL(p, Math.cos(a) * d, Math.sin(a) * d);
+      const c = pel.cerca(q);
+      if (c.d < EVAC.altaMinCauceM || c.d < pc.d + 100) continue;
+      if (pel.tipo === "cauce" && pc.lado !== 0 && c.lado !== pc.lado) continue;   // no cruzar el cauce
+      cands.push({ q, d, c });
     }
   }
-  if (!cands.length) return null;
-  const elev = await elevaciones([p, ...cands.map((c) => c.q)]);
-  let mejor = null;
-  cands.forEach((c, i) => {
-    const ganancia = elev[i + 1] - elev[0];
-    const puntaje = ganancia - c.d / 250; // prefiere lo alto, pero también lo cercano
-    if (!mejor || puntaje > mejor.puntaje) mejor = { destino: { lat: c.q[0], lng: c.q[1] }, ganancia, puntaje };
-  });
-  return mejor;
+  let sinElevacion = false;
+  if (cands.length) {
+    try {
+      const eq = await elevaciones(cands.map((x) => x.q));
+      const ec = await elevaciones(cands.map((x) => x.c.ll));
+      cands.forEach((x, i) => { x.elev = eq[i]; x.desnivel = eq[i] - ec[i]; });
+      cands = cands.filter((x) => x.desnivel >= EVAC.altaMinDesnivelM);
+    } catch (e) { console.warn("Elevación:", e); sinElevacion = true; cands = []; }
+  }
+  // Las 3 más cercanas, separadas al menos 250 m entre sí
+  cands.sort((a, b) => a.d - b.d || b.desnivel - a.desnivel);
+  const elegidas = [];
+  for (const x of cands) { if (elegidas.every((y) => distM(x.q, y.q) >= 250)) elegidas.push(x); if (elegidas.length === 3) break; }
+  let mejorAlta = null;
+  if (!sinServicio) {
+    for (const x of elegidas) {
+      const r = await rutaAPie(p, x.q, pel.evitar([p, x.q]));
+      if (r === undefined) { sinServicio = true; break; }
+      if (!r || distM(r.trazo[r.trazo.length - 1], x.q) > EVAC.altaCalleMaxM) continue;   // no se llega por calle
+      if (!mejorAlta || r.largo < mejorAlta.ruta.largo) mejorAlta = { x, ruta: r };
+    }
+  }
+  if (!mejorAlta && sinServicio && elegidas.length) {   // sin rutas, pero sí relieve: dirección a la zona alta
+    const x = elegidas[0];
+    mejorAlta = { x, ruta: lineaRecta(p, x.q) };
+  }
+  if (mejorAlta) {
+    const { x } = mejorAlta;
+    return {
+      ...base, tipo: "alta", ruta: mejorAlta.ruta, elevDestino: x.elev, sinServicio,
+      destino: { lat: x.q[0], lng: x.q[1], desnivel: Math.round(x.desnivel), distPeligro: Math.round(x.c.d) }
+    };
+  }
+
+  // 3) Sin zona alta alcanzable: alejarse del peligro ~700 m, en perpendicular
+  let v;
+  if (pc.xy && pc.d > 25) v = [-pc.xy[0], -pc.xy[1]];          // desde el cauce hacia ti, y más allá
+  else if (pc.seg) v = [-pc.seg[1], pc.seg[0]];                 // encima del cauce: perpendicular
+  else v = [(p[1] - pc.ll[1]) * RAD * Math.cos(p[0] * RAD) * R_TIERRA, (p[0] - pc.ll[0]) * RAD * R_TIERRA];   // huaico
+  if (!Math.hypot(v[0], v[1])) v = [0, 1];
+  const len = Math.hypot(v[0], v[1]);
+  const lejos = moverLL(p, (v[0] / len) * 700, (v[1] / len) * 700);
+  let ruta = null;
+  if (!sinServicio) { const r = await rutaAPie(p, lejos, pel.evitar([p, lejos])); if (r) ruta = r; else if (r === undefined) sinServicio = true; }
+  return {
+    ...base, tipo: "alejarse", ruta: ruta || lineaRecta(p, lejos), destino: { lat: lejos[0], lng: lejos[1] },
+    sinElevacion, sinServicio, sinZonaAlta: !sinElevacion && !sinServicio
+  };
+}
+function lineaRecta(a, b) {
+  return { trazo: [a, b].map((q) => q.map((v) => Number(v.toFixed(6)))), largo: distM(a, b), min: distM(a, b) / 75, metodo: "recta", evitaPeligro: false };
 }
 
-async function mostrarEvacuacion() {
+/* Resultado guardado en el celular: sirve sin red si sigues a menos de 200 m de donde se calculó */
+const CLAVE_EVAC = "previunt_evac";
+function evacGuardada(p, clave) {
+  const g = lsGet(CLAVE_EVAC, null);
+  if (!g || g.v !== 2 || !p || !g.origen) return null;
+  if (clave && g.clave !== clave) return null;
+  return distM(p, g.origen) <= EVAC.moverseM ? g : null;
+}
+let _evacEnCurso = null;
+async function obtenerEvacuacion(p, opciones = {}) {
+  const pel = peligroActual();
+  const clave = pel.clave + (opciones.refugioId ? ":" + opciones.refugioId : "");
+  const g = evacGuardada(p, clave);
+  if (g && !opciones.forzar) return g;
+  if (_evacEnCurso && !opciones.refugioId) return _evacEnCurso;
+  const tarea = (async () => {
+    if (navigator.onLine === false && g) return { ...g, guardada: true };
+    const r = await calcularEvacuacion(p, opciones);
+    // Si no hubo servicio y había una ruta buena guardada, se prefiere la guardada
+    if ((r.sinServicio || r.sinElevacion) && g && g.tipo !== "alejarse") return { ...g, guardada: true };
+    if (!r.sinServicio && !opciones.refugioId) lsSet(CLAVE_EVAC, r);
+    return r;
+  })();
+  if (!opciones.refugioId) _evacEnCurso = tarea;
+  try { return await tarea; } finally { if (!opciones.refugioId) _evacEnCurso = null; }
+}
+/* Se calcula en segundo plano al conocer la ubicación, para que en una emergencia aparezca al instante */
+function precalcularEvacuacion() {
+  if (!S.ubicacion || _evacEnCurso) return;
+  const p = [S.ubicacion.lat, S.ubicacion.lng];
+  if (evacGuardada(p, peligroActual().clave)) return;
+  obtenerEvacuacion(p).then(() => renderInicio()).catch((e) => console.warn("Evacuación:", e));
+}
+
+const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1).replace(".", ",")} km`);
+const fmtMin = (min) => `${Math.max(1, Math.round(min))} min`;
+/* Resumen corto para la acción de Inicio (o null si aún no hay cálculo para tu ubicación) */
+function resumenEvacuacion() {
+  if (!S.ubicacion) return "Toca para ver la ruta desde tu ubicación";
+  const g = evacGuardada([S.ubicacion.lat, S.ubicacion.lng], peligroActual().clave);
+  if (!g) return "Toca para calcularla desde tu ubicación";
+  if (g.tipo === "lejos") return `Estás a ${fmtDist(g.distPeligro)} del cauce`;
+  const que = g.tipo === "refugio" ? g.destino.nombre : g.tipo === "alta" ? "Zona alta cercana" : "Alejarte del " + (g.peligro === "huaico" ? "huaico" : "cauce");
+  return `${que} · ${fmtDist(g.ruta.largo)} · ${fmtMin(g.ruta.min)} a pie`;
+}
+
+async function mostrarEvacuacion(opciones = {}) {
   cerrarAlarma();
   irATab("mapa");
   if (!mapa) return;
   $("#hojaMapa").dataset.abierta = "false";
+  mapa.closePopup();
   if (!S.ubicacion) await pedirUbicacion();
   capas.evac.clearLayers();
-  // Mostrar el cauce como referencia mientras se ve la ruta
   capas.cauce.addTo(mapa);
   $('.chip[data-capa="cauce"]')?.setAttribute("aria-pressed", "true");
   $("#panelEvac").hidden = false;
-  const nota = (extra = "") => `<p class="evac-nota">Ruta referencial${extra}. Confirma con Defensa Civil y sigue a los brigadistas.</p>`;
+  const pel = peligroActual();
   if (!S.ubicacion) {
-    $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("locate-fixed")} Activa tu ubicación</p><p>Mientras tanto: aléjate hacia los costados de la quebrada, nunca a lo largo del cauce.</p>`;
+    $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("locate-fixed")} Activa tu ubicación</p><p>Para calcular tu ruta necesitamos saber dónde estás. Mientras tanto: aléjate hacia los costados de la quebrada y sube, nunca camines a lo largo del cauce.</p>`;
     mapa.fitBounds(L.polyline(CAUCE_REFERENCIAL).getBounds(), { padding: [30, 30], animate: false });
     return;
   }
   const p = [S.ubicacion.lat, S.ubicacion.lng];
-  const e = estadoEfectivo();
-  const porHuaico = esPorReporte(e) && e.reporte;
-  const distAlPeligro = porHuaico
-    ? (q) => distM(q, [e.reporte.lat, e.reporte.lng])
-    : (q) => puntoMasCercanoEnCauce(q).d;
-  if (!porHuaico && distAlPeligro(p) > 2500) {
-    $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("circle-check")} Estás lejos del cauce</p><p>A ${(distAlPeligro(p) / 1000).toFixed(1)} km. Quédate en un lugar seguro y sigue las indicaciones oficiales.</p>`;
+  const guardada = evacGuardada(p, pel.clave + (opciones.refugioId ? ":" + opciones.refugioId : ""));
+  if (!guardada) $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("route")} Calculando tu ruta…</p><p class="evac-nota">Buscando zonas de refugio y zonas altas cerca de ti.</p>`;
+  let r;
+  try { r = await obtenerEvacuacion(p, opciones); }
+  catch (e) {
+    console.error("Evacuación:", e);
+    $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("circle-alert")} No se pudo calcular la ruta</p><p>Aléjate hacia los costados de la quebrada y sube. Si no puedes salir, sube al piso más alto.</p>`;
+    return;
+  }
+  if ($("#panelEvac").hidden) return;   // la persona cerró el panel mientras se calculaba
+  dibujarEvacuacion(r, p);
+  renderInicio();
+}
+
+function dibujarEvacuacion(r, p) {
+  capas.evac.clearLayers();
+  const del = r.peligro === "huaico" ? "huaico" : "cauce";
+  if (r.tipo === "lejos") {
+    $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("circle-check")} Estás a ${fmtDist(r.distPeligro)} del cauce</p>
+      <p>No estás junto a la quebrada. Si llueve fuerte, aléjate de las calles por donde baja el agua y sigue las indicaciones oficiales.</p>
+      <button class="btn btn-secundario btn-chico" id="btnRefugioCercano">${ic("shield-check")} Ver la zona de refugio más cercana</button>
+      <p class="evac-nota">Distancia al trazado referencial del cauce.</p>`;
+    $("#btnRefugioCercano").onclick = () => {
+      const z = ZONAS_REFUGIO.slice().sort((a, b) => distM(p, [a.lat, a.lng]) - distM(p, [b.lat, b.lng]))[0];
+      mostrarEvacuacion({ refugioId: z.id });
+    };
     mapa.setView(p, 14, { animate: false });
     return;
   }
-  $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("route")} Buscando la zona más alta cercana…</p>`;
-
-  let zona = null, sinElevacion = false;
-  try { zona = await buscarZonaAlta(p, distAlPeligro); } catch (err) { console.warn("Elevación:", err); sinElevacion = true; }
-  const hayZonaAlta = zona && zona.ganancia >= 5;
-  let destino;
-  if (hayZonaAlta) {
-    destino = zona.destino;
-  } else {
-    // Terreno plano o sin datos: alejarse del peligro 700 m (dirección perpendicular)
-    const rad = Math.PI / 180, RT = 6371000, cosLat = Math.cos(p[0] * rad);
-    let v;
-    if (porHuaico) v = [(p[1] - e.reporte.lng) * rad * cosLat * RT, (p[0] - e.reporte.lat) * rad * RT];
-    else { const pc = puntoMasCercanoEnCauce(p); v = pc.d > 25 ? [-pc.xy[0], -pc.xy[1]] : [-pc.seg[1], pc.seg[0]]; }
-    const len = Math.hypot(v[0], v[1]) || 1;
-    destino = { lat: p[0] + (v[1] / len * 700) / (RT * rad), lng: p[1] + (v[0] / len * 700) / (RT * rad * cosLat) };
-  }
-  const ruta = await rutaPorCalles({ lat: p[0], lng: p[1] }, destino);
-  const recta = ruta.metodo.startsWith("línea recta");
+  const ruta = r.ruta;
+  const recta = ruta.metodo === "recta";
   L.polyline(ruta.trazo, { color: "#fff", weight: 10, opacity: 0.9 }).addTo(capas.evac);
   L.polyline(ruta.trazo, { color: "#1565C0", weight: 6, dashArray: recta ? "10 8" : null }).addTo(capas.evac);
-  const fin = ruta.trazo[ruta.trazo.length - 1];
-  L.marker(fin, { icon: L.divIcon({ className: "", html: `<div class="mk" style="background:#1565C0">${ic(hayZonaAlta ? "arrow-up" : "navigation")}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] }) })
-    .bindTooltip(hayZonaAlta ? `Zona ${Math.round(zona.ganancia)} m más alta (referencial)` : "Punto alejado del peligro (referencial)").addTo(capas.evac);
-  const min = Math.max(1, Math.round(ruta.largo / 75)); // ~4,5 km/h caminando
-  const que = hayZonaAlta
-    ? `<p>Lleva a una zona <strong>${Math.round(zona.ganancia)} m más alta</strong>, lejos del ${porHuaico ? "huaico" : "cauce"}.</p>`
-    : sinElevacion
-      ? `<p>Sin datos de elevación: aléjate del ${porHuaico ? "huaico" : "cauce"} por esta ruta.</p>`
-      : `<p>Tu zona es plana: no hay un lugar más alto cerca. Aléjate del ${porHuaico ? "huaico" : "cauce"} y, si no puedes, sube al piso más alto.</p>`;
-  $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("footprints")} ${Math.round(ruta.largo)} m · ${min} min a pie</p>${que}`
-    + nota((recta ? ", en línea recta" : "") + (hayZonaAlta ? ". Elevación: Copernicus DEM vía Open-Meteo" : ""));
-  // Deja espacio para el panel de arriba y para el botón "Reportar" y la hoja de abajo
-  mapa.fitBounds(L.latLngBounds([p, fin].concat(ruta.trazo)), { paddingTopLeft: [30, 230], paddingBottomRight: [30, 170], animate: false });
+  const fin = r.tipo === "refugio" || r.tipo === "alta" ? [r.destino.lat, r.destino.lng] : ruta.trazo[ruta.trazo.length - 1];
+  const icono = r.tipo === "refugio" ? "shield-check" : r.tipo === "alta" ? "arrow-up" : "navigation";
+  const etiqueta = r.tipo === "refugio" ? `Zona de refugio: ${r.destino.nombre} (ANA 2015)`
+    : r.tipo === "alta" ? `Zona alta (calculada, referencial)` : `Dirección para alejarte del ${del}`;
+  L.marker(fin, { icon: L.divIcon({ className: "", html: `<div class="mk mk-destino">${ic(icono)}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] }), zIndexOffset: 900 })
+    .bindTooltip(etiqueta).addTo(capas.evac);
+
+  const alt = (v) => `~${Math.round(v)} m`;
+  let que;
+  if (r.tipo === "refugio") {
+    que = `<p><strong>Zona de refugio: ${esc(r.destino.nombre)}</strong><br>Oficial · <a href="${r.destino.url}" target="_blank" rel="noopener">mapa ANA 2015</a> · ubicación aprox.</p>`;
+  } else if (r.tipo === "alta") {
+    que = `<p><strong>Zona alta cercana</strong>: ~${r.destino.desnivel} m sobre el ${del}, a ${fmtDist(r.destino.distPeligro)} de él<br><span class="tag-ref">Calculada · no es un punto oficial</span></p>`;
+  } else if (r.sinElevacion || r.sinServicio) {
+    que = `<p><strong>Aléjate del ${del}</strong> en esta dirección${recta ? " (sin ruta por calles)" : ""}. No hay datos de ${r.sinElevacion ? "elevación" : "rutas"} ahora mismo.</p>`;
+  } else {
+    que = `<p><strong>Aléjate del ${del}</strong> por esta ruta. No hay una zona más alta cerca: si no puedes salir, sube al piso más alto.</p>`;
+  }
+  if (recta && (r.tipo === "refugio" || r.tipo === "alta")) que += `<p class="evac-aviso">${ic("triangle-alert")} Sin ruta por calles: la línea marca solo la dirección.</p>`;
+  const altitud = Number.isFinite(r.elevOrigen) && Number.isFinite(r.elevDestino)
+    ? `<p class="evac-alt">${ic("mountain")} Tú ${alt(r.elevOrigen)} → destino ${alt(r.elevDestino)} s. n. m.</p>` : "";
+  const aviso = !ruta.evitaPeligro && !recta
+    ? `<p class="evac-aviso">${ic("triangle-alert")} Esta ruta no evita el ${del}: no camines por él ni lo cruces.</p>` : "";
+  const servicio = recta ? "línea recta" : ruta.metodo === "valhalla" ? "Valhalla (FOSSGIS)" : "OSRM a pie (FOSSGIS)";
+  const fuentes = [`Ruta: ${servicio}`, Number.isFinite(r.elevDestino) || r.tipo === "alta" ? "Elevación: SRTM ~30 m (AWS)" : null,
+    `calculada ${hora(r.ts)}${r.guardada ? " (guardada, sin conexión)" : ""}`].filter(Boolean).join(" · ");
+  $("#textoEvac").innerHTML = `<p class="evac-titulo">${ic("footprints")} ${fmtDist(ruta.largo)} · ${fmtMin(ruta.min)} a pie</p>${que}${altitud}${aviso}
+    <p class="evac-nota">Referencial: sigue a Defensa Civil y los brigadistas.<br>${fuentes}</p>`;
+  const cerca = peligroActual().cerca(p);   // se incluye el punto del cauce más cercano, para ver de qué te alejas
+  encuadrarEvacuacion(L.latLngBounds([p, fin].concat(ruta.trazo, cerca.d < EVAC.cercaCauceM ? [cerca.ll] : [])));
+}
+/* Encuadra la ruta dejando libre el panel de arriba, los botones de la derecha y la hoja de abajo */
+function encuadrarEvacuacion(limites) {
+  const panel = $("#panelEvac");
+  const arriba = panel.hidden ? 70 : panel.offsetTop + panel.offsetHeight + 24;
+  mapa.fitBounds(limites, { paddingTopLeft: [36, arriba], paddingBottomRight: [70, 190], maxZoom: 17, animate: false });
 }
 
 function abrirVisor(src, pie) {
@@ -2020,7 +2371,8 @@ async function iniciar() {
     irATab(b.dataset.tab);
     if (b.dataset.tab === "mapa") centrarEnMi(true); // al entrar al mapa, como en Google Maps: te ubica en tu punto
   }));
-  $("#btnRutaEmergencia").onclick = mostrarEvacuacion;
+  $("#btnRutaEmergencia").onclick = () => mostrarEvacuacion();
+  $("#listaAcciones").onclick = (ev) => { if (ev.target.closest("[data-evac]")) mostrarEvacuacion(); };
   $("#btnCerrarAlarma").onclick = cerrarAlarma;
   $("#bannerEmergencia").onclick = abrirAlarma;
   $("#avisoVecinal").onclick = () => { const id = $("#avisoVecinal").dataset.rep; if (id) verReporteEnMapa(id); };
