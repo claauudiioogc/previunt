@@ -666,3 +666,23 @@ body.autoridad .barra { background: #1B2A3A; }
 .cc-datos .uv-barra { background: linear-gradient(90deg, #289500 0%, #F7E400 30%, #F85900 55%, #D8001D 78%, #6B49C8 100%); padding: 0; border-radius: 3px; backdrop-filter: none; height: 5px; }
 .cc-datos .cc-uv { text-align: left; }
 .cc-datos .cc-uv .k, .cc-datos .cc-uv .v { text-align: left; justify-content: flex-start; }
+
+/* =========================================================
+   Cabecera y barra inferior en crema (#F7F3E9) con el logo en sus colores originales
+   ========================================================= */
+:root { --crema: #F7F3E9; --teal: #123F40; --teal-suave: rgba(18,63,64,.10); }
+.barra { background: var(--crema); color: var(--teal); border-bottom: 1px solid #E6DFCC; }
+.logo { color: var(--teal); }
+.logo-texto { color: var(--teal); }
+.badge-conexion { background: var(--teal-suave); color: var(--teal); }
+.badge-conexion.local { color: #4A5A5A; }
+body.autoridad .barra { background: var(--crema); border-bottom: 3px solid #F9A825; }
+.nav-inferior { background: var(--crema); border-top: 1px solid #E6DFCC; box-shadow: 0 -2px 10px rgba(18,63,64,.06); }
+.nav-btn { color: #5E6B6B; }
+.nav-btn.activa { background: var(--teal); color: #fff; }
+/* En emergencia la cabecera se pone roja: el logo y el texto pasan a blanco */
+body.emergencia .barra { background: var(--rojo); border-bottom-color: var(--rojo); color: #fff; }
+body.emergencia .logo-texto { color: #fff; }
+body.emergencia .lm-circulo { fill: #fff; }
+body.emergencia .lm-rio { fill: #FFD0BF; }
+body.emergencia .badge-conexion { background: rgba(255,255,255,.18); color: #fff; }
