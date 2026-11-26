@@ -1,0 +1,117 @@
+<!doctype html><meta charset="utf-8"><button id="b">enviar</button><pre id="out"></pre>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import * as authM from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import * as dbM from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+const P = "demo-previunt3", EMU = "http://127.0.0.1:9099";
+const app = initializeApp({ projectId: P, apiKey: "fake-key", authDomain: "localhost", databaseURL: `http://127.0.0.1:9000?ns=${P}` });
+const auth = authM.getAuth(app); authM.connectAuthEmulator(auth, EMU, { disableWarnings: true }); auth.languageCode = "es";
+const db = dbM.getDatabase(app); dbM.connectDatabaseEmulator(db, "127.0.0.1", 9000);
+const Datos = { auth, authM, db, fb: dbM, uid: null };
+const S = { perfiles: {}, bloqueados: {} };
+// Se prueba el código real: el bloque "CUENTAS" de app.js
+const app = await (await fetch("../app.js", { cache: "no-store" })).text();
+const src = app.slice(app.indexOf("/* === CUENTAS (inicio)"), app.indexOf("/* === CUENTAS (fin) === */"));
+if (src.length < 1000) throw new Error("No se encontró el bloque CUENTAS en app.js");
+const { Cuenta, validarRegistro, correoLogin } = new Function("Datos", "S", src + "\nreturn { Cuenta, validarRegistro, correoLogin };")(Datos, S);
+const log = (s) => { document.getElementById("out").textContent += s + "\n"; console.log(s); };
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+const codigoSMS = async (tel) => (await (await fetch(`${EMU}/emulator/v1/projects/${P}/verificationCodes`)).json()).verificationCodes.filter((c) => c.phoneNumber === tel).pop().code;
+let ok = 0, bad = 0;
+const t = async (n, f) => { try { await f(); ok++; log("OK   " + n); } catch (e) { bad++; log("FALLA " + n + " → " + e.message); } };
+const debeFallar = async (f, texto) => { try { await f(); } catch (e) { if (!texto || e.message.includes(texto)) return; throw new Error("mensaje inesperado: " + e.message); } throw new Error("no falló"); };
+const rep = (autor, x = {}) => ({ tipo: "huaico", ambito: "ciudad", forma: "punto", lat: -8.06, lng: -79.0, autor, creado: Date.now(), tieneFoto: false, verificadoAutoridad: false, ...x });
+Cuenta.iniciar(); await espera(1500);
+
+await t("invitado: sesión anónima y no puede reportar", async () => { if (Cuenta.usuario?.tipo !== "invitado" || !Cuenta.motivoNoPuede("ciudad")) throw new Error(JSON.stringify(Cuenta.usuario)); });
+const ana = { nombres: "Ana", apellidos: "Mora Ríos", usuario: "ana_m", celular: "987654321", correo: "ana@gmail.com", dni: "12345678", clave: "secreta12", clave2: "secreta12", acepto: true };
+await t("usuario ocupado por un admin", () => debeFallar(() => Cuenta.registrarPersonal({ ...ana, usuario: "clau_udio" }, "b"), "ya está en uso"));
+await t("registro personal paso 1: cuenta + SMS", () => Cuenta.registrarPersonal(ana, "b"));
+await t("código incorrecto: se puede reintentar", () => debeFallar(() => Cuenta.confirmarRegistroPersonal("000000"), "no es correcto"));
+await t("registro personal paso 2: código correcto guarda datos", async () => {
+  await Cuenta.confirmarRegistroPersonal(await codigoSMS("+51987654321"));
+  const p = (await dbM.get(dbM.ref(db, `privado/${auth.currentUser.uid}`))).val();
+  if (p.dni !== "12345678" || p.celular !== "+51987654321" || p.tipo !== "personal") throw new Error(JSON.stringify(p));
+  if (!Cuenta.usuario.celularVerificado) throw new Error("sin celular verificado");
+});
+const uidAna = auth.currentUser.uid; S.perfiles[uidAna] = { usuario: "ana_m" };
+await t("ana: ciudad sí, campus no", async () => { if (Cuenta.motivoNoPuede("ciudad") !== null || !Cuenta.motivoNoPuede("unt")) throw new Error("permisos mal"); });
+await t("ana reporta en la ciudad (reglas)", () => dbM.set(dbM.ref(db, "reportes/r1"), rep(uidAna)));
+await t("salir → invitado", async () => { await Cuenta.salir(); await espera(1000); if (Cuenta.usuario?.tipo !== "invitado") throw new Error(JSON.stringify(Cuenta.usuario)); });
+await t("entrar con usuario y contraseña", async () => { await Cuenta.entrar("Ana_M", "secreta12"); await espera(800); if (auth.currentUser.uid !== uidAna || !Cuenta.usuario.celularVerificado) throw new Error("no"); });
+await t("contraseña incorrecta → mensaje claro", async () => { await Cuenta.salir(); await espera(800); await debeFallar(() => Cuenta.entrar("ana_m", "malamala"), "incorrectos"); });
+const beto = { ...ana, usuario: "beto_r", celular: "912345678", correo: "beto@gmail.com" };
+await t("DNI ya usado: falla y borra la cuenta a medio crear", async () => {
+  await Cuenta.registrarPersonal(beto, "b");
+  await debeFallar(async () => Cuenta.confirmarRegistroPersonal(await codigoSMS("+51912345678")), "DNI");
+  await espera(1000);
+  if (!auth.currentUser?.isAnonymous) throw new Error("no volvió a invitado");
+  await debeFallar(() => Cuenta.entrar("beto_r", ana.clave), "incorrectos");
+  await Cuenta.salir(); await espera(800);
+});
+await t("celular ya usado: falla y borra la cuenta", async () => {
+  await Cuenta.registrarPersonal({ ...beto, dni: "76543210", celular: "987654321" }, "b");
+  await debeFallar(async () => Cuenta.confirmarRegistroPersonal(await codigoSMS("+51987654321")), "celular ya está registrado");
+  await espera(1000);
+});
+await t("beto se registra bien", async () => {
+  await Cuenta.registrarPersonal({ ...beto, dni: "76543210" }, "b");
+  await Cuenta.confirmarRegistroPersonal(await codigoSMS("+51912345678"));
+  S.perfiles[auth.currentUser.uid] = { usuario: "beto_r" };
+});
+await t("beto vota el reporte de ana (reglas)", () => dbM.set(dbM.ref(db, `votos/r1/${auth.currentUser.uid}`), { v: 1, t: dbM.serverTimestamp() }));
+await Cuenta.salir(); await espera(800);
+await t("registro a medio terminar: entra con su usuario y lo completa", async () => {
+  const cami = { ...ana, usuario: "cami_t", celular: "944444444", correo: "c@gmail.com", dni: "44445555" };
+  await Cuenta.registrarPersonal(cami, "b");            // cierra la app sin poner el código
+  await Cuenta.salir(); await espera(800);
+  await Cuenta.entrar("cami_t", ana.clave); await espera(800);
+  if (Cuenta.registroCompleto()) throw new Error("debería estar incompleto");
+  const faltaCodigo = await Cuenta.completarRegistroPersonal(cami, "b");
+  if (!faltaCodigo) throw new Error("debería pedir código");
+  await Cuenta.confirmarRegistroPersonal(await codigoSMS("+51944444444"));
+  const p = (await dbM.get(dbM.ref(db, `perfiles/${auth.currentUser.uid}`))).val();
+  if (p.usuario !== "cami_t") throw new Error(JSON.stringify(p));
+  await Cuenta.salir(); await espera(800);
+});
+const luis = { nombres: "Luis", apellidos: "Paz", usuario: "luis_unt", celular: "955555555", correo: "luis@unitru.edu.pe", dni: "12345678", clave: "unitru123", clave2: "unitru123", acepto: true };
+await t("registro UNT: datos + enlace al correo UNT", async () => {
+  await Cuenta.registrarUNT(luis);
+  if (Cuenta.usuario.tipo !== "unt" || Cuenta.usuario.correoVerificado) throw new Error(JSON.stringify(Cuenta.usuario));
+  const oob = await (await fetch(`${EMU}/emulator/v1/projects/${P}/oobCodes`)).json();
+  if (!oob.oobCodes.some((c) => c.email === "luis@unitru.edu.pe" && c.requestType === "VERIFY_EMAIL")) throw new Error("no se envió el enlace");
+});
+const uidLuis = auth.currentUser.uid; S.perfiles[uidLuis] = { usuario: "luis_unt" };
+await t("UNT sin verificar no reporta", async () => { if (!Cuenta.motivoNoPuede("unt")?.includes("enlace")) throw new Error(Cuenta.motivoNoPuede("unt")); });
+await t("UNT abre el enlace y toca «Ya verifiqué»", async () => {
+  const oob = await (await fetch(`${EMU}/emulator/v1/projects/${P}/oobCodes`)).json();
+  const c = oob.oobCodes.filter((x) => x.email === "luis@unitru.edu.pe" && x.requestType === "VERIFY_EMAIL").pop();
+  await fetch(c.oobLink.replace(/^https?:\/\/[^/]+/, EMU));
+  if (!(await Cuenta.yaVerifique())) throw new Error("sigue sin verificar");
+  if (Cuenta.motivoNoPuede("unt") !== null || !Cuenta.motivoNoPuede("ciudad")) throw new Error("permisos mal");
+});
+await t("UNT reporta dentro del campus (reglas)", () => dbM.set(dbM.ref(db, "reportes/r2"), rep(uidLuis, { ambito: "unt", lat: -8.1135, lng: -79.037 })));
+await t("UNT entra con su correo UNT", async () => { await Cuenta.salir(); await espera(800); await Cuenta.entrar("luis@unitru.edu.pe", "unitru123"); await espera(800); if (Cuenta.usuario.tipo !== "unt") throw new Error("no"); });
+for (const [u, clave] of [["clau_udio", "clave-prueba-1"], ["joa_quin", "clave-prueba-2"], ["cris_thian", "clave-prueba-3"]]) {
+  await t(`admin ${u} entra y es admin`, async () => { await Cuenta.salir(); await espera(600); await Cuenta.entrar(u, clave); await espera(900); if (!Cuenta.usuario.esAdmin || Cuenta.motivoNoPuede("unt") !== null) throw new Error(JSON.stringify(Cuenta.usuario)); });
+}
+await t("admin cambia el nivel oficial (reglas)", () => dbM.set(dbM.ref(db, "quebrada_san_ildefonso"), { nivel: 1 }));
+await Cuenta.salir(); await espera(800);
+await t("olvidé contraseña (personal): SMS → nueva clave", async () => {
+  await Cuenta.recuperarPersonalEnviar("987654321", "b");
+  await Cuenta.recuperarPersonalConfirmar(await codigoSMS("+51987654321"), "nuevaClave9");
+  await Cuenta.salir(); await espera(800);
+  await Cuenta.entrar("ana_m", "nuevaClave9");
+});
+await Cuenta.salir(); await espera(800);
+await t("olvidé contraseña con celular sin cuenta: avisa y no deja cuenta vacía", async () => {
+  await Cuenta.recuperarPersonalEnviar("933333333", "b");
+  await debeFallar(async () => Cuenta.recuperarPersonalConfirmar(await codigoSMS("+51933333333"), "loquesea12"), "no tiene una cuenta");
+});
+await t("olvidé contraseña (UNT): envía enlace al correo", async () => {
+  await Cuenta.recuperarUNT("luis@unitru.edu.pe");
+  const oob = await (await fetch(`${EMU}/emulator/v1/projects/${P}/oobCodes`)).json();
+  if (!oob.oobCodes.some((c) => c.email === "luis@unitru.edu.pe" && c.requestType === "PASSWORD_RESET")) throw new Error("no llegó");
+});
+log(`\nFIN ${ok} OK, ${bad} fallas`);
+</script>

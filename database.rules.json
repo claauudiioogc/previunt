@@ -1,33 +1,168 @@
 {
   "rules": {
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+    "dispositivos": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+    "bloqueados": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      }
+    },
+    "nombres_usuario": {
+      "$u": {
+        ".read": true,
+        ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !data.exists() && newData.val() === auth.uid && $u.matches(/^[a-z0-9_]{3,20}$/) && (auth.token.email === $u + '@previunt.invalid' || auth.token.email.matches(/.*@unitru\\.edu\\.pe$/)) && newData.parent().parent().child('perfiles').child(auth.uid).child('usuario').val() === $u"
+      }
+    },
+    "perfiles": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".validate": "newData.hasChildren(['usuario', 'avatar', 'creado'])",
+        "usuario": {
+          ".validate": "(!data.exists() && newData.isString() && newData.parent().parent().parent().child('nombres_usuario').child(newData.val()).val() === $uid) || newData.val() === data.val()"
+        },
+        "avatar": {
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        },
+        "creado": {
+          ".validate": "(!data.exists() && newData.val() === now) || newData.val() === data.val()"
+        },
+        "$otro": {
+          ".validate": false
+        }
+      }
+    },
+    "privado": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        ".validate": "newData.hasChildren(['tipo', 'nombres', 'apellidos', 'dni', 'celular', 'correo', 'creado']) && newData.parent().parent().child('indice_dni').child(newData.child('tipo').val() + '_' + newData.child('dni').val()).val() === $uid",
+        "tipo": {
+          ".validate": "(newData.val() === 'personal' && auth.token.email.endsWith('@previunt.invalid')) || (newData.val() === 'unt' && auth.token.email.matches(/.*@unitru\\.edu\\.pe$/))"
+        },
+        "nombres": {
+          ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 60"
+        },
+        "apellidos": {
+          ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 60"
+        },
+        "dni": {
+          ".validate": "newData.isString() && newData.val().matches(/^[0-9]{8}$/) && (!data.exists() || newData.val() === data.val())"
+        },
+        "celular": {
+          ".validate": "newData.isString() && newData.val().matches(/^\\+519[0-9]{8}$/) && (newData.parent().child('tipo').val() !== 'personal' || newData.val() === auth.token.phone_number)"
+        },
+        "correo": {
+          ".validate": "newData.isString() && newData.val().length <= 100 && newData.val().matches(/^[^@ ]+@[^@ ]+\\.[^@ ]+$/) && (newData.parent().child('tipo').val() !== 'unt' || newData.val() === auth.token.email)"
+        },
+        "consentimiento": {
+          ".validate": "(!data.exists() && newData.val() === now) || newData.val() === data.val()"
+        },
+        "creado": {
+          ".validate": "(!data.exists() && newData.val() === now) || newData.val() === data.val()"
+        },
+        "$otro": {
+          ".validate": false
+        }
+      }
+    },
+    "indice_dni": {
+      "$k": {
+        ".write": "auth != null && !data.exists() && newData.val() === auth.uid && $k === newData.parent().parent().child('privado').child(auth.uid).child('tipo').val() + '_' + newData.parent().parent().child('privado').child(auth.uid).child('dni').val()"
+      }
+    },
     "quebrada_san_ildefonso": {
       ".read": true,
-      ".write": true
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('dispositivos').child(auth.uid).val() === true)"
     },
     "demo": {
       ".read": true,
-      ".write": "auth != null"
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+    "historial_nivel": {
+      ".read": true,
+      ".indexOn": [
+        "fecha"
+      ],
+      "$id": {
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('dispositivos').child(auth.uid).val() === true)"
+      }
     },
     "reportes": {
       ".read": true,
-      ".indexOn": ["creado"],
+      ".indexOn": [
+        "creado"
+      ],
       "$id": {
-        ".write": "auth != null",
-        "descripcion": { ".validate": "newData.isString() && newData.val().length <= 200" },
-        "tipo": { ".validate": "newData.val() === 'bloqueo' || newData.val() === 'inundacion' || newData.val() === 'huaico' || newData.val() === 'afectados' || newData.val() === 'otro'" }
+        ".write": "auth != null && !root.child('bloqueados').child(auth.uid).exists() && ((!data.exists() && newData.child('autor').val() === auth.uid && (root.child('admins').child(auth.uid).val() === true || (root.child('perfiles').child(auth.uid).exists() && ((newData.child('ambito').val() === 'ciudad' && (auth.token.phone_number != null && auth.token.email.endsWith('@previunt.invalid'))) || (newData.child('ambito').val() === 'unt' && (auth.token.email_verified === true && auth.token.email.matches(/.*@unitru\\.edu\\.pe$/))))))) || root.child('admins').child(auth.uid).val() === true || (data.exists() && !newData.exists() && data.child('autor').val() === auth.uid))",
+        ".validate": "newData.hasChildren(['tipo', 'ambito', 'forma', 'lat', 'lng', 'autor', 'creado'])",
+        "tipo": {
+          ".validate": "newData.val() === 'bloqueo' || newData.val() === 'inundacion' || newData.val() === 'huaico' || newData.val() === 'afectados' || newData.val() === 'otro'"
+        },
+        "ambito": {
+          ".validate": "newData.val() === 'ciudad' || (newData.val() === 'unt' && newData.parent().child('forma').val() === 'punto' && newData.parent().child('lat').val() >= -8.11935 && newData.parent().child('lat').val() <= -8.10985 && newData.parent().child('lng').val() >= -79.04413 && newData.parent().child('lng').val() <= -79.03460)"
+        },
+        "forma": {
+          ".validate": "newData.val() === 'punto' || newData.val() === 'tramo'"
+        },
+        "lat": {
+          ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+        },
+        "lng": {
+          ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+        },
+        "descripcion": {
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "tieneFoto": {
+          ".write": "auth != null && data.parent().child('autor').val() === auth.uid && !root.child('bloqueados').child(auth.uid).exists() && (newData.val() !== true || root.child('fotos').child($id).exists())",
+          ".validate": "newData.isBoolean()"
+        },
+        "fotoPendiente": {
+          ".write": "auth != null && data.parent().child('autor').val() === auth.uid && !root.child('bloqueados').child(auth.uid).exists()",
+          ".validate": "newData.isBoolean()"
+        },
+        "creado": {
+          ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() <= now + 60000 && newData.val() >= now - 7200000)"
+        },
+        "verificadoAutoridad": {
+          ".validate": "newData.val() === false || root.child('admins').child(auth.uid).val() === true"
+        },
+        "verificadoEn": {
+          ".validate": "root.child('admins').child(auth.uid).val() === true"
+        },
+        "gestion": {
+          ".validate": "root.child('admins').child(auth.uid).val() === true"
+        }
       }
     },
     "fotos": {
       ".read": true,
       "$id": {
-        ".write": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.parent().parent().child('reportes').child($id).child('autor').val() === auth.uid) || root.child('admins').child(auth.uid).val() === true || (data.exists() && !newData.exists() && root.child('reportes').child($id).child('autor').val() === auth.uid))",
         ".validate": "newData.isString() && newData.val().length < 400000"
       }
     },
-    "historial_nivel": {
+    "votos": {
       ".read": true,
-      ".indexOn": ["fecha"],
-      "$id": { ".write": "auth != null" }
+      "$id": {
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists() && !root.child('bloqueados').child(auth.uid).exists() && root.child('reportes').child($id).exists() && root.child('reportes').child($id).child('autor').val() !== auth.uid && (root.child('admins').child(auth.uid).val() === true || (root.child('perfiles').child(auth.uid).exists() && ((root.child('reportes').child($id).child('ambito').val() === 'ciudad' && (auth.token.phone_number != null && auth.token.email.endsWith('@previunt.invalid'))) || (root.child('reportes').child($id).child('ambito').val() === 'unt' && (auth.token.email_verified === true && auth.token.email.matches(/.*@unitru\\.edu\\.pe$/))))))",
+          ".validate": "newData.hasChildren(['v', 't']) && (newData.child('v').val() === 1 || newData.child('v').val() === -1) && newData.child('t').val() === now"
+        }
+      }
     }
   }
 }

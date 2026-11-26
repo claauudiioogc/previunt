@@ -355,12 +355,12 @@ fieldset { border: 0; padding: 0; margin: 0 0 14px; }
 legend { font-weight: 650; margin-bottom: 8px; }
 .opcional { font-weight: 400; color: var(--texto-2); font-size: .85rem; }
 .opciones-tipo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.opcion-tipo, .opcion-forma {
+.opcion-tipo, .opcion-forma, .opcion-sel {
   min-height: 52px; border-radius: 12px; border: 1.5px solid var(--linea); background: #fff;
   font-weight: 600; padding: 8px 10px; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 10px; font-size: .95rem;
 }
-.opcion-tipo .ic, .opcion-forma .ic { color: var(--marino); }
-.opcion-tipo[aria-pressed="true"], .opcion-forma[aria-pressed="true"] { border-color: var(--azul); background: var(--azul-suave); }
+.opcion-tipo .ic, .opcion-forma .ic, .opcion-sel .ic { color: var(--marino); }
+.opcion-tipo[aria-pressed="true"], .opcion-forma[aria-pressed="true"], .opcion-sel[aria-pressed="true"] { border-color: var(--azul); background: var(--azul-suave); }
 .opcion-tipo:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .selector-forma { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
 .preview-foto { margin-top: 8px; text-align: center; }
@@ -865,3 +865,55 @@ body.emergencia .badge-conexion.off, body.emergencia .badge-conexion.sync { back
 .pend-extra { font-size: .85rem; color: #4A4A4A; }
 .pend-botones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .pend-botones .btn-texto { min-height: 44px; }
+
+/* ---------- Cuentas (v18): botón de cuenta, avatares, hojas de registro y entrada ---------- */
+.btn-cuenta { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 3px 10px 3px 3px; border-radius: 999px; border: 1.5px solid #E0D7C2; background: #fff; color: var(--teal); font: inherit; font-size: .82rem; font-weight: 650; cursor: pointer; max-width: 46vw; }
+.btn-cuenta.invitado { padding-left: 8px; }
+.cuenta-texto { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.punto-aviso { position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%; background: #EF6C00; border: 2px solid #fff; }
+.avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; font-weight: 700; flex: none; background: var(--teal); text-transform: uppercase; }
+.avatar .ic { width: 60%; height: 60%; }
+.avatar-chico { width: 32px; height: 32px; font-size: .95rem; }
+.avatar-medio { width: 24px; height: 24px; font-size: .75rem; vertical-align: middle; }
+.avatar-grande { width: 64px; height: 64px; font-size: 1.8rem; }
+.btn-cuenta.invitado .avatar { background: transparent; color: var(--teal); width: 22px; height: 22px; }
+.avatares { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 10px; }
+.avatares button { width: 44px; height: 44px; border-radius: 50%; border: 3px solid transparent; padding: 0; cursor: pointer; background: none; }
+.avatares button .avatar { width: 100%; height: 100%; font-size: 1.1rem; }
+.avatares button[aria-checked="true"] { border-color: var(--azul); }
+.chip-campus { display: inline-flex; align-items: center; gap: 4px; font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #E8EAF6; color: #283593; white-space: nowrap; }
+.chip-campus .ic { width: 14px; height: 14px; }
+.hoja-cuenta .campo { margin-top: 10px; }
+.error-campo { color: #B3261E; font-size: .82rem; margin: 3px 0 0; min-height: 0; }
+.error-campo:empty { display: none; }
+.input[aria-invalid="true"] { border-color: #B3261E; }
+.error-form { color: #B3261E; font-weight: 600; font-size: .9rem; margin: 10px 0; }
+.error-form:empty, .ok-form:empty { display: none; }
+.ok-form { color: #155B45; font-weight: 600; font-size: .9rem; margin: 10px 0; }
+.estado-usuario { font-weight: 600; margin: 3px 0 0; }
+.estado-usuario.libre { color: #155B45; }
+.estado-usuario.ocupado { color: #B3261E; }
+.input-prefijo { display: flex; align-items: stretch; }
+.input-prefijo span { display: inline-flex; align-items: center; padding: 0 10px; border: 1.5px solid var(--linea); border-right: 0; border-radius: 12px 0 0 12px; background: var(--fondo); font-weight: 650; }
+.input-prefijo .input { border-radius: 0 12px 12px 0; }
+.input-codigo { font-size: 1.5rem; letter-spacing: .4em; text-align: center; font-variant-numeric: tabular-nums; }
+.fila-enlaces { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.aviso-cuenta { background: #FFF4D6; color: #5C4300; border-radius: 12px; padding: 10px 12px; font-size: .9rem; font-weight: 600; }
+.perfil-cab { display: flex; align-items: center; gap: 14px; margin: 4px 0 12px; }
+.perfil-cab p { margin: 0; }
+.perfil-usuario { font-size: 1.2rem; font-weight: 700; }
+.nivel-rep { display: inline-flex; align-items: center; gap: 4px; font-weight: 650; color: var(--teal); }
+.nivel-rep .ic { width: 15px; height: 15px; }
+.datos-privados { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0 0; font-size: .9rem; }
+.datos-privados dt { color: var(--texto-2); }
+.datos-privados dd { margin: 0; font-weight: 600; word-break: break-word; }
+.bloque-plano { border: 1px solid var(--linea); border-radius: 12px; padding: 8px 12px; margin: 10px 0; }
+.bloque-plano summary { cursor: pointer; font-weight: 650; min-height: 32px; display: flex; align-items: center; }
+.popup-autor { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--texto-2); margin: 4px 0 0; }
+.popup-autor strong { color: var(--texto); }
+.etiqueta-campus { display: inline-block; font-size: .7rem; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #E8EAF6; color: #283593; margin-left: 4px; vertical-align: middle; }
+.nota-voto { font-size: .82rem; color: var(--texto-2); margin: 6px 0 0; }
+.nota-voto .btn-texto { min-height: 32px; font-size: .85rem; }
+.opcion-sel:disabled { opacity: .45; cursor: not-allowed; }
+.estado-badge.bloqueado { background: #FDECEA; color: #8E1B1B; }
+@media (max-width: 380px) { .cuenta-texto { max-width: 70px; } .chip-campus span { display: none; } }

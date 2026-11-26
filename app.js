@@ -21,7 +21,7 @@ const FIREBASE_CONFIG = {
 };
 /* ═════════════════════════ FIN FIREBASE_CONFIG ═════════════════════ */
 
-const FIREBASE_SDK = "10.12.2";
+const FIREBASE_SDK = "10.14.1";
 
 /* ---------------------------------------------------------------------
    CONSTANTES
@@ -319,6 +319,7 @@ const VENTANA_REPORTES_MS = 72 * 3600 * 1000;  // el mapa solo pide reportes de 
 const MAX_REPORTES = 300;                       // y como máximo los 300 más recientes
 const MAX_HISTORIAL = 30;
 const LIMITE_FOTO_CHARS = 380000;               // las reglas de /fotos aceptan < 400 000 caracteres (~280 KB)
+const VENCE_COLA_MS = 2 * 3600 * 1000 - 120000;  // las reglas aceptan reportes de hasta 2 h atrás (se deja 2 min de margen)
 
 const Cache = {
   guardar(canal, v) { lsSet("previunt_cache_" + canal, { v, t: Date.now() }); },
@@ -375,7 +376,8 @@ const NOMBRE_COLA = {
   subiendo_foto: "Subiendo foto…",
   enviado: "Enviado",
   error: "Error; se reintentará",
-  otra_sesion: "Guardado con otra sesión"
+  otra_sesion: "Guardado con otra sesión",
+  vencido: "No se envió a tiempo"
 };
 
 const Cola = {
@@ -430,7 +432,8 @@ const Cola = {
     this._corriendo = true; renderBadgeConexion();
     try {
       for (const it of [...this.items]) {
-        if (it.estado === "otra_sesion") continue;
+        if (it.estado === "otra_sesion" || it.estado === "vencido") continue;
+        if (!it.datosOk && ahora() - it.creadoLocal > VENCE_COLA_MS) { it.estado = "vencido"; await this._guardar(it); continue; }
         if (it.estado === "error" && it.proximo > Date.now()) continue;
         if (!Red.conectado) break;
         if (it.uid && it.uid !== Datos.uid) { it.estado = "otra_sesion"; await this._guardar(it); continue; }
@@ -512,10 +515,12 @@ function renderPendientes() {
     if (it.estado === "pendiente" && Datos.modo === "firebase" && Red.conectado && !Datos.uid) estado = "Esperando sesión";
     if (it.estado === "pendiente" && !Red.conectado) extra = "Se enviará cuando vuelva la conexión.";
     if (it.estado === "error") extra = `${esc(it.error)} Próximo intento: ${hora(it.proximo)}.`;
-    if (it.estado === "otra_sesion") extra = "Se guardó con otra sesión de este celular. Puedes enviarlo con tu sesión actual o descartarlo.";
+    if (it.estado === "otra_sesion") extra = "Se guardó con otra cuenta de este celular. Puedes enviarlo con tu cuenta actual o descartarlo.";
+    if (it.estado === "vencido") extra = "Pasaron más de 2 horas sin señal: ya no se puede enviar como reporte actual. Si el problema sigue, haz un reporte nuevo.";
     if (it.datosOk && !it.fotoOk && it.estado !== "subiendo_foto") extra = "Los datos ya se enviaron; falta la foto. " + extra;
     const botones = it.estado === "otra_sesion"
-      ? `<button class="btn-texto btn-texto-chico" data-cola="sesion" data-id="${esc(it.id)}">Enviar con mi sesión actual</button><button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>`
+      ? `<button class="btn-texto btn-texto-chico" data-cola="sesion" data-id="${esc(it.id)}">Enviar con mi cuenta actual</button><button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>`
+      : it.estado === "vencido" ? `<button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>`
       : it.estado === "error" ? `<button class="btn-texto btn-texto-chico" data-cola="reintentar" data-id="${esc(it.id)}">Reintentar ahora</button><button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>` : "";
     return `<li class="pend-item pend-${it.estado}">
       <span class="item-foto">${it.foto ? `<img src="${esc(it.foto)}" alt="">` : ic(T.icono)}</span>
@@ -596,6 +601,7 @@ const Datos = {
     if (canal === "demo") return lsGet("previunt_demo", { activo: false, nivel: 0 });
     if (canal === "reportes") return lsGet("previunt_reportes", {});
     if (canal === "historial") return lsGet("previunt_historial", {});
+    return {}; // votos, perfiles y bloqueados: en modo local no hay cuentas (los votos van dentro del reporte)
   },
   _emitLocal(canal) { (this._subs[canal] || []).forEach((cb) => cb(this._leerLocal(canal))); },
   _subLocal(canal, cb) {
@@ -611,13 +617,22 @@ const Datos = {
       import(`${base}/firebase-auth.js`),
       import(`${base}/firebase-database.js`)
     ]);
-    const app = appM.getApps().length ? appM.getApp() : appM.initializeApp(FIREBASE_CONFIG);
+    /* Pruebas en la PC con los emuladores de Firebase (pruebas/LEEME.md): http://localhost:8000/?emu=1
+       Solo funciona en localhost; en GitHub Pages se ignora y siempre se usa el proyecto real. */
+    const emu = ["localhost", "127.0.0.1"].includes(location.hostname) && new URLSearchParams(location.search).get("emu") === "1";
+    const config = emu ? { ...FIREBASE_CONFIG, projectId: "demo-previunt3", databaseURL: "http://127.0.0.1:9000?ns=demo-previunt3" } : FIREBASE_CONFIG;
+    const app = appM.getApps().length ? appM.getApp() : appM.initializeApp(config);
     this.db = dbM.getDatabase(app);
+    if (emu && !this._emu) { dbM.connectDatabaseEmulator(this.db, "127.0.0.1", 9000); this._emu = true; console.warn("PREVIUNT: usando los EMULADORES de Firebase"); }
     this.fb = dbM;
     // Sesión anónima: Firebase la guarda en el celular y la recupera sin red.
     // Sin sesión no se escribe nada (las reglas exigen auth): la cola espera.
     const auth = authM.getAuth(app);
+    if (emu && !auth.emulatorConfig) authM.connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    auth.languageCode = "es"; // SMS, reCAPTCHA y correos en español
     this.auth = auth;
+    this.authM = authM;
+    // Espera la sesión guardada en el celular (anónima o de una cuenta) para no reemplazarla
     try { await conTiempo(auth.authStateReady(), 8000); } catch {}
     this.uid = auth.currentUser?.uid || null;
     authM.onAuthStateChanged(auth, (u) => {
@@ -625,22 +640,27 @@ const Datos = {
       this.uid = u?.uid || null;
       if (this.uid !== antes) { renderPendientes(); Cola.ejecutar(); }
     });
+    let anonEnCurso = null; // una sola sesión anónima a la vez (al abrir la app y al cerrar sesión)
     const iniciarSesion = async (intento = 1) => {
       if (auth.currentUser) return;
       if (navigator.onLine === false) { window.addEventListener("online", () => iniciarSesion(1), { once: true }); return; }
-      try { await conTiempo(authM.signInAnonymously(auth), 15000); }
+      if (anonEnCurso) return anonEnCurso;
+      try { anonEnCurso = conTiempo(authM.signInAnonymously(auth), 15000); await anonEnCurso; }
       catch (e) {
         console.warn("Sesión anónima:", e);
         if (e?.code === "auth/admin-restricted-operation" || e?.code === "auth/operation-not-allowed") {
           toast("Aviso: activa 'Anónimo' en Firebase Authentication."); return;
         }
         setTimeout(() => iniciarSesion(intento + 1), esperaReintento(intento));
-      }
+      } finally { anonEnCurso = null; }
     };
+    this._sesionAnonima = () => iniciarSesion(1);
     iniciarSesion();
     dbM.onValue(dbM.ref(this.db, ".info/serverTimeOffset"), (s) => { serverOffset = s.val() || 0; });
     dbM.onValue(dbM.ref(this.db, ".info/connected"), (s) => cambiarConexion(s.val() === true));
-    this._rutas = { sensor: "quebrada_san_ildefonso", demo: "demo", reportes: "reportes", historial: "historial_nivel" };
+    this._rutas = { sensor: "quebrada_san_ildefonso", demo: "demo", reportes: "reportes", historial: "historial_nivel",
+                    votos: "votos", perfiles: "perfiles", bloqueados: "bloqueados" };
+    Cuenta.iniciar(); // cuentas: sesión, tipo de cuenta y rol (evento "sesion")
   },
 
   /* ---------- API común ---------- */
@@ -661,7 +681,10 @@ const Datos = {
       if (canal === "sensor" || canal === "demo" || canal === "historial") Cache.guardar(canal, v);
       if (canal === "sensor" || canal === "demo") S.vivo[canal] = true;
       cb(v);
-    }, (err) => { console.error(canal, err); });
+    }, (err) => {
+      console.error(canal, err);
+      if (canal === "votos" || canal === "perfiles" || canal === "bloqueados") cb({});
+    });
   },
 
   async publicarEstado(nivel, fuente) {
@@ -730,8 +753,7 @@ const Datos = {
      ni pisa los votos que ya tenga. Se resuelve cuando el servidor confirma. */
   async crearReporte(it) {
     const rep = {
-      ...it.datos, autor: it.uid, creado: it.creadoLocal,
-      confirmaciones: 0, negaciones: 0, verificadoAutoridad: false,
+      ambito: "ciudad", ...it.datos, autor: it.uid, creado: it.creadoLocal, verificadoAutoridad: false,
       tieneFoto: false, ...(it.foto ? { fotoPendiente: true } : {})
     };
     const ref = this.fb.ref(this.db, `reportes/${it.id}`);
@@ -766,8 +788,21 @@ const Datos = {
       todos[id] = res; lsSet("previunt_reportes", todos); this._emitLocal("reportes"); return true;
     }
     this._exigirServidor();
-    const tx = await this.fb.runTransaction(this.fb.ref(this.db, `reportes/${id}`), aplicar);
-    return tx.committed;
+    // Un voto por persona en /votos/{id}/{uid}: las reglas impiden votar dos veces, el propio reporte o a nombre de otro
+    const r = S.reportes && S.reportes[id];
+    if (!r || r.autor === uidVoto) return false;
+    if (S.votos && S.votos[id] && S.votos[id][uidVoto]) return false;
+    try {
+      await this.fb.set(this.fb.ref(this.db, `votos/${id}/${uidVoto}`), { v: voto, t: this.fb.serverTimestamp() });
+      return true;
+    } catch (e) { console.warn("Voto rechazado:", e); return false; }
+  },
+
+  /* Bloquear (o desbloquear) al autor de reportes falsos: solo admins (reglas) */
+  async bloquear(uid, on) {
+    if (this.modo === "local") return;
+    this._exigirServidor();
+    await this.fb.set(this.fb.ref(this.db, `bloqueados/${uid}`), on ? true : null);
   },
 
   _fotos: new Map(),
@@ -797,9 +832,416 @@ const Datos = {
       lsSet("previunt_reportes", todos); this._emitLocal("reportes"); return;
     }
     this._exigirServidor();
-    await this.fb.update(this.fb.ref(this.db), { [`reportes/${id}`]: null, [`fotos/${id}`]: null });
+    await this.fb.update(this.fb.ref(this.db), { [`reportes/${id}`]: null, [`fotos/${id}`]: null, [`votos/${id}`]: null });
   }
 };
+
+/* === CUENTAS (inicio) ================================================
+   PREVIUNT · CUENTAS: registro con DNI y celular, SMS, login por usuario,
+   cuentas UNT con verificación por correo, recuperación de contraseña.
+   Usa Datos.auth / Datos.authM (Firebase Auth) y Datos.db / Datos.fb (Realtime Database).
+   Las pruebas de pruebas/ leen este bloque directamente de app.js (entre las marcas "CUENTAS").
+   ===================================================================== */
+
+/* Dominio de los correos internos de las cuentas personales (usuario@dominio).
+   .invalid es un dominio reservado: ningún correo llega ahí, así nadie puede pedir
+   un "restablecer contraseña" y recibirlo. NO cambiarlo después de crear cuentas. */
+const DOMINIO_CUENTAS = "previunt.invalid";
+/* Consentimiento de datos personales: apagado mientras la app sea una demo interna.
+   Antes de abrirla a gente real: poner true (aparece la casilla obligatoria y se guarda la fecha). */
+const PEDIR_CONSENTIMIENTO = false;
+const CORREO_DATOS = "t1533600121@unitru.edu.pe"; // a dónde se pide borrar la cuenta y los datos
+const RE_USUARIO = /^[a-z0-9_]{3,20}$/;
+const RE_UNT = /@unitru\.edu\.pe$/i;
+const RE_NOMBRE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]{2,60}$/;
+const RE_CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+const normalizarUsuario = (u) => String(u || "").trim().toLowerCase();
+/* Lo que la persona escribe en "Usuario o correo UNT" → correo con el que entra en Firebase */
+const correoLogin = (txt) => {
+  const s = String(txt || "").trim().toLowerCase();
+  return s.includes("@") ? s : `${s}@${DOMINIO_CUENTAS}`;
+};
+const celularE164 = (nueve) => "+51" + String(nueve || "").replace(/\D/g, "");
+
+/* Valida el formulario de registro. tipo = "personal" | "unt".
+   d = { nombres, apellidos, usuario, celular, correo, dni, clave, clave2, acepto }
+   (celular = 9 dígitos sin +51). completar = true cuando se retoma un registro (sin usuario ni contraseña).
+   Devuelve { campo: "mensaje" }; vacío si todo está bien. */
+function validarRegistro(d, tipo, completar = false) {
+  const e = {};
+  if (!RE_NOMBRE.test(String(d.nombres || "").trim())) e.nombres = "Escribe tus nombres (solo letras).";
+  if (!RE_NOMBRE.test(String(d.apellidos || "").trim())) e.apellidos = "Escribe tus apellidos (solo letras).";
+  if (!completar && !RE_USUARIO.test(normalizarUsuario(d.usuario))) e.usuario = "De 3 a 20 caracteres: letras minúsculas, números o _.";
+  if (!/^9\d{8}$/.test(String(d.celular || ""))) e.celular = "9 dígitos y empieza con 9.";
+  if (!/^\d{8}$/.test(String(d.dni || ""))) e.dni = "El DNI tiene 8 dígitos.";
+  const correo = String(d.correo || "").trim();
+  if (tipo === "unt") { if (!RE_UNT.test(correo)) e.correo = "Usa tu correo @unitru.edu.pe."; }
+  else if (!RE_CORREO.test(correo)) e.correo = "Escribe un correo válido.";
+  else if (RE_UNT.test(correo)) e.correo = "Para la cuenta personal usa un correo que no sea @unitru.edu.pe.";
+  if (!completar) {
+    if (String(d.clave || "").length < 8) e.clave = "Mínimo 8 caracteres.";
+    if (d.clave !== d.clave2) e.clave2 = "Las contraseñas no coinciden.";
+  }
+  if (PEDIR_CONSENTIMIENTO && !d.acepto) e.acepto = "Debes aceptar el tratamiento de tus datos para registrarte.";
+  return e;
+}
+
+/* Traduce errores de Firebase a mensajes para la persona */
+function mensajeError(err) {
+  const m = {
+    "auth/invalid-credential": "Usuario o contraseña incorrectos.",
+    "auth/invalid-login-credentials": "Usuario o contraseña incorrectos.",
+    "auth/wrong-password": "Usuario o contraseña incorrectos.",
+    "auth/user-not-found": "Usuario o contraseña incorrectos.",
+    "auth/invalid-email": "Usuario o contraseña incorrectos.",
+    "auth/missing-password": "Escribe tu contraseña.",
+    "auth/too-many-requests": "Demasiados intentos. Espera unos minutos.",
+    "auth/invalid-verification-code": "El código no es correcto.",
+    "auth/missing-verification-code": "Escribe el código de 6 dígitos.",
+    "auth/code-expired": "El código venció. Pide uno nuevo.",
+    "auth/credential-already-in-use": "Ese celular ya está registrado en otra cuenta.",
+    "auth/account-exists-with-different-credential": "Ese celular ya está registrado en otra cuenta.",
+    "auth/provider-already-linked": "Esta cuenta ya tiene un celular verificado.",
+    "auth/invalid-phone-number": "Número de celular no válido.",
+    "auth/quota-exceeded": "Se alcanzó el límite de SMS de hoy. Intenta más tarde.",
+    "auth/captcha-check-failed": "No se pudo comprobar que no eres un robot. Recarga la página.",
+    "auth/network-request-failed": "Sin conexión. Revisa tu internet.",
+    "auth/requires-recent-login": "Por seguridad, vuelve a pedir el código.",
+    "auth/operation-not-allowed": "Este tipo de cuenta aún no está activado en Firebase.",
+    "auth/weak-password": "La contraseña es muy débil (mínimo 8 caracteres)."
+  };
+  return m[err && err.code] || (err && err.message) || "Ocurrió un error.";
+}
+
+const Cuenta = {
+  usuario: null,       // { uid, tipo, esAdmin, celularVerificado, correoVerificado, correo, nombreUsuario, registrado }
+  _verificador: null,  // RecaptchaVerifier
+  _confirmacion: null, // ConfirmationResult del SMS
+  _pendiente: null,
+  _iniciado: false,
+
+  /* Llamar una vez, después de Datos.init(), solo en modo Firebase */
+  iniciar() {
+    if (this._iniciado) return;
+    this._iniciado = true;
+    Datos.authM.onIdTokenChanged(Datos.auth, (u) => this._actualizar(u).catch((e) => console.warn("Cuenta:", e)));
+  },
+
+  /* Sin señal (o mientras carga Firebase) se usa la última sesión conocida de este celular. Solo es
+     para la interfaz: las reglas de la base de datos deciden de verdad al enviar. */
+  cargarGuardada() {
+    if (typeof localStorage === "undefined") return;
+    try { const c = JSON.parse(localStorage.getItem("previunt_cuenta") || "null"); if (c && c.uid) this.usuario = c; } catch {}
+  },
+  _guardar() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      if (this.usuario && this.usuario.tipo !== "invitado") localStorage.setItem("previunt_cuenta", JSON.stringify(this.usuario));
+      else localStorage.removeItem("previunt_cuenta");
+    } catch {}
+  },
+
+  _seq: 0,
+  async _actualizar(u) {
+    const A = Datos.authM, F = Datos.fb;
+    const n = ++this._seq; // si llegan dos cambios seguidos, gana el último (no uno más lento y viejo)
+    if (!u) { // cerró sesión → vuelve a invitado
+      this.usuario = null; this._guardar();
+      try { await (Datos._sesionAnonima ? Datos._sesionAnonima() : A.signInAnonymously(Datos.auth)); } catch (e) { console.warn(e); }
+      return;
+    }
+    const antes = this.usuario && this.usuario.uid === u.uid ? this.usuario : null; // datos guardados de esta misma cuenta
+    const correo = String(u.email || "").toLowerCase();
+    const tipo = u.isAnonymous ? "invitado"
+      : RE_UNT.test(correo) ? "unt"
+      : correo.endsWith("@" + DOMINIO_CUENTAS) ? "personal" : "otro";
+    let celular = !!u.phoneNumber;
+    try { celular = celular || !!(await u.getIdTokenResult()).claims.phone_number; } catch {}
+    let esAdmin = antes ? !!antes.esAdmin : false, perfil = null, leido = false;
+    if (!u.isAnonymous) {
+      try {
+        const [a, p] = await Promise.all([F.get(F.ref(Datos.db, `admins/${u.uid}`)), F.get(F.ref(Datos.db, `perfiles/${u.uid}`))]);
+        esAdmin = a.val() === true; perfil = p.val(); leido = true;
+      } catch (e) { console.warn("Cuenta (sin conexión, se usa lo guardado):", e); }
+    }
+    if (n !== this._seq) return;
+    Datos.uid = u.uid;
+    this.usuario = {
+      uid: u.uid, tipo, esAdmin, correo, celularVerificado: celular, correoVerificado: !!u.emailVerified,
+      nombreUsuario: leido ? (perfil && perfil.usuario) || null : (antes && antes.nombreUsuario) || null,
+      registrado: leido ? !!perfil : !!(antes && antes.registrado)
+    };
+    this._guardar();
+    if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("sesion", { detail: this.usuario }));
+  },
+
+  registroCompleto() {
+    const u = this.usuario;
+    return !!(u && ((S.perfiles && S.perfiles[u.uid]) || u.registrado));
+  },
+
+  /* null si puede reportar/votar en ese ámbito ("ciudad" | "unt"); si no, el motivo para mostrar */
+  motivoNoPuede(ambito) {
+    const u = this.usuario;
+    if (!u || u.tipo === "invitado") return "Inicia sesión o crea tu cuenta para reportar.";
+    if (S.bloqueados && S.bloqueados[u.uid]) return "Tu cuenta fue bloqueada por la autoridad.";
+    if (u.esAdmin) return null;
+    if (!this.registroCompleto()) return "Completa tu registro.";
+    if (u.tipo === "personal") {
+      if (!u.celularVerificado) return "Verifica tu celular con el código SMS.";
+      if (ambito === "unt") return "Los reportes del campus se hacen con tu cuenta UNT.";
+      return null;
+    }
+    if (u.tipo === "unt") {
+      if (!u.correoVerificado) return "Abre el enlace que llegó a tu correo UNT y toca «Ya verifiqué».";
+      if (ambito !== "unt") return "Con tu cuenta UNT solo reportas dentro del campus. Para la ciudad usa tu cuenta personal.";
+      return null;
+    }
+    return "Esta cuenta no puede reportar.";
+  },
+
+  async usuarioLibre(usuario) {
+    const F = Datos.fb;
+    return !(await F.get(F.ref(Datos.db, `nombres_usuario/${normalizarUsuario(usuario)}`))).exists();
+  },
+
+  /* reCAPTCHA invisible en un contenedor propio (#recaptchaCaja), nuevo en cada envío: así se puede
+     reenviar el SMS sin el error "reCAPTCHA has already been rendered in this element". */
+  _nuevoVerificador() {
+    const A = Datos.authM;
+    if (this._verificador) { try { this._verificador.clear(); } catch {} }
+    let caja = document.getElementById("recaptchaCaja");
+    if (!caja) { caja = document.createElement("div"); caja.id = "recaptchaCaja"; document.body.appendChild(caja); }
+    caja.innerHTML = "";
+    const div = document.createElement("div");
+    div.id = "rc" + Date.now().toString(36);
+    caja.appendChild(div);
+    this._verificador = new A.RecaptchaVerifier(Datos.auth, div.id, { size: "invisible" });
+    return this._verificador;
+  },
+
+  /* ---------- Cuenta personal: 3 pasos ---------- */
+  /* Paso 1: crea la cuenta y envía el SMS. */
+  async registrarPersonal(d) {
+    const A = Datos.authM, usuario = normalizarUsuario(d.usuario);
+    if (!(await this.usuarioLibre(usuario))) throw new Error("Ese nombre de usuario ya está en uso.");
+    try { await A.createUserWithEmailAndPassword(Datos.auth, `${usuario}@${DOMINIO_CUENTAS}`, d.clave); }
+    catch (e) {
+      if (e.code === "auth/email-already-in-use") throw new Error("Ese nombre de usuario ya está en uso.");
+      throw new Error(mensajeError(e));
+    }
+    this._pendiente = { tipo: "personal", usuario, d };
+    try { await this.enviarSMS(celularE164(d.celular)); }
+    catch (e) { await this.cancelarRegistro(); throw new Error(mensajeError(e)); }
+  },
+  async enviarSMS(telefono) {
+    const A = Datos.authM;
+    this._confirmacion = await A.linkWithPhoneNumber(Datos.auth.currentUser, telefono, this._nuevoVerificador());
+  },
+  /* Paso 2: confirma el código y guarda los datos. Si algo falla, borra la cuenta recién creada. */
+  async confirmarRegistroPersonal(codigo) {
+    try { await this._confirmacion.confirm(String(codigo).trim()); }
+    catch (e) {
+      if (e.code === "auth/invalid-verification-code" || e.code === "auth/code-expired" || e.code === "auth/missing-verification-code") throw new Error(mensajeError(e)); // puede reintentar
+      await this.cancelarRegistro(); throw new Error(mensajeError(e));
+    }
+    const user = Datos.auth.currentUser;
+    await user.getIdToken(true); // el token nuevo trae phone_number
+    try { await this._guardarDatos(user, this._pendiente.usuario, "personal", this._pendiente.d); }
+    catch (e) { await this.cancelarRegistro(); throw new Error("Ese DNI ya tiene una cuenta personal, o el usuario se acaba de ocupar."); }
+    this._pendiente = null;
+    await this._actualizar(user);
+  },
+  /* Para quien creó la cuenta personal pero cerró la app antes del código SMS: entra con su usuario,
+     vuelve a llenar sus datos y llama esto. Devuelve true si falta el código (luego confirmarRegistroPersonal). */
+  async completarRegistroPersonal(d) {
+    const u = Datos.auth.currentUser;
+    const usuario = String(u.email || "").split("@")[0];
+    this._pendiente = { tipo: "personal", usuario, d: { ...d, usuario } };
+    if (this.usuario && this.usuario.celularVerificado) { // ya había verificado el SMS: solo guarda
+      try { await u.getIdToken(true); await this._guardarDatos(u, usuario, "personal", this._pendiente.d); }
+      catch (e) { throw new Error("Ese DNI ya tiene una cuenta personal, o ese celular no es el que verificaste."); }
+      this._pendiente = null; await this._actualizar(u); return false;
+    }
+    try { await this.enviarSMS(celularE164(d.celular)); } catch (e) { throw new Error(mensajeError(e)); }
+    return true;
+  },
+  /* Cuenta UNT a medio registrar (se creó la cuenta pero no se guardaron los datos) */
+  async completarRegistroUNT(d) {
+    const u = Datos.auth.currentUser;
+    try { await this._guardarDatos(u, normalizarUsuario(d.usuario), "unt", d); }
+    catch (e) { throw new Error("Ese DNI ya tiene una cuenta UNT, o el usuario ya está en uso."); }
+    if (!u.emailVerified) { try { await Datos.authM.sendEmailVerification(u); } catch {} }
+    await this._actualizar(u);
+  },
+  /* Borra la cuenta a medio crear (sin datos guardados) y vuelve a invitado */
+  async cancelarRegistro() {
+    const u = Datos.auth.currentUser;
+    this._pendiente = null;
+    if (u && !u.isAnonymous) { try { await Datos.authM.deleteUser(u); } catch (e) { console.warn(e); await this.salir().catch(() => {}); } }
+  },
+
+  /* ---------- Cuenta UNT: se crea y se verifica por correo ---------- */
+  async registrarUNT(d) {
+    const A = Datos.authM, usuario = normalizarUsuario(d.usuario), correo = String(d.correo).trim().toLowerCase();
+    if (!(await this.usuarioLibre(usuario))) throw new Error("Ese nombre de usuario ya está en uso.");
+    let cred;
+    try { cred = await A.createUserWithEmailAndPassword(Datos.auth, correo, d.clave); }
+    catch (e) {
+      if (e.code === "auth/email-already-in-use") throw new Error("Ya existe una cuenta con ese correo UNT. Inicia sesión.");
+      throw new Error(mensajeError(e));
+    }
+    try { await this._guardarDatos(cred.user, usuario, "unt", d); }
+    catch (e) { await this.cancelarRegistro(); throw new Error("Ese DNI ya tiene una cuenta UNT, o el usuario se acaba de ocupar."); }
+    await A.sendEmailVerification(cred.user); // enlace de verificación al correo UNT
+    await this._actualizar(cred.user);
+  },
+  async reenviarCorreoUNT() { await Datos.authM.sendEmailVerification(Datos.auth.currentUser); },
+  async yaVerifique() {
+    const u = Datos.auth.currentUser;
+    await u.reload(); await u.getIdToken(true); await this._actualizar(Datos.auth.currentUser);
+    return this.usuario.correoVerificado;
+  },
+
+  async _guardarDatos(user, usuario, tipo, d) {
+    const F = Datos.fb, ts = F.serverTimestamp();
+    await F.update(F.ref(Datos.db), {
+      [`nombres_usuario/${usuario}`]: user.uid,
+      [`perfiles/${user.uid}`]: { usuario, avatar: d.avatar || "ola-azul", creado: ts },
+      [`privado/${user.uid}`]: {
+        tipo,
+        nombres: String(d.nombres).trim(), apellidos: String(d.apellidos).trim(),
+        dni: String(d.dni), celular: celularE164(d.celular),
+        correo: tipo === "unt" ? String(user.email).toLowerCase() : String(d.correo).trim().toLowerCase(),
+        ...(PEDIR_CONSENTIMIENTO ? { consentimiento: ts } : {}), creado: ts
+      },
+      [`indice_dni/${tipo}_${d.dni}`]: user.uid
+    });
+  },
+
+  /* Datos privados de la propia cuenta (solo los lee su dueño) */
+  async misDatos() {
+    const F = Datos.fb, u = Datos.auth.currentUser;
+    if (!u || u.isAnonymous) return null;
+    return (await F.get(F.ref(Datos.db, `privado/${u.uid}`))).val();
+  },
+  async cambiarAvatar(avatar) {
+    const F = Datos.fb, u = Datos.auth.currentUser;
+    await F.update(F.ref(Datos.db, `perfiles/${u.uid}`), { avatar });
+  },
+
+  /* ---------- Entrar / salir ---------- */
+  async entrar(usuarioOCorreo, clave) {
+    try { await Datos.authM.signInWithEmailAndPassword(Datos.auth, correoLogin(usuarioOCorreo), clave); }
+    catch (e) { throw new Error(mensajeError(e)); }
+  },
+  async salir() { await Datos.authM.signOut(Datos.auth); }, // onIdTokenChanged(null) → invitado
+
+  /* ---------- Olvidé mi contraseña ---------- */
+  /* Personal: SMS al celular de la cuenta → nueva contraseña */
+  async recuperarPersonalEnviar(celular) {
+    const A = Datos.authM;
+    try { this._confirmacion = await A.signInWithPhoneNumber(Datos.auth, celularE164(celular), this._nuevoVerificador()); }
+    catch (e) { throw new Error(mensajeError(e)); }
+  },
+  async recuperarPersonalConfirmar(codigo, nuevaClave) {
+    const A = Datos.authM;
+    let r;
+    try { r = await this._confirmacion.confirm(String(codigo).trim()); } catch (e) { throw new Error(mensajeError(e)); }
+    if (!r.user.email) { // ese celular no tenía cuenta: Firebase creó una vacía → se borra
+      await A.deleteUser(r.user).catch(() => {});
+      throw new Error("Ese celular no tiene una cuenta personal.");
+    }
+    try { await A.updatePassword(r.user, nuevaClave); } catch (e) { throw new Error(mensajeError(e)); }
+  },
+  /* UNT: enlace de cambio de contraseña al correo UNT */
+  async recuperarUNT(correo) {
+    try { await Datos.authM.sendPasswordResetEmail(Datos.auth, String(correo).trim().toLowerCase()); }
+    catch (e) { throw new Error(mensajeError(e)); }
+  }
+};
+/* === CUENTAS (fin) === */
+
+/* === CAMPUS Y REPUTACIÓN (inicio) ====================================
+   Geocerca del campus UNT y reputación (usa VOTOS_MIN).
+   ===================================================================== */
+const CAMPUS_UNT = [ // [lng, lat], del hackaton.kmz (Google Earth), trazado por el equipo
+  [-79.038319, -8.109879], [-79.038604, -8.110462], [-79.038836, -8.111034],
+  [-79.039287, -8.111825], [-79.03953, -8.112344], [-79.039731, -8.113013],
+  [-79.040078, -8.113547], [-79.040518, -8.11414], [-79.040907, -8.114948],
+  [-79.041255, -8.115355], [-79.041436, -8.1155], [-79.041662, -8.115366],
+  [-79.041261, -8.114408], [-79.040912, -8.113474], [-79.041079, -8.113269],
+  [-79.041394, -8.11339], [-79.041885, -8.114034], [-79.044099, -8.1163],
+  [-79.040807, -8.119314], [-79.040658, -8.119209], [-79.040466, -8.119161],
+  [-79.040405, -8.119171], [-79.040303, -8.119171], [-79.038933, -8.117614],
+  [-79.037444, -8.11581], [-79.035991, -8.114105], [-79.03463, -8.112631],
+  [-79.03621, -8.111413], [-79.038319, -8.109879]
+];
+/* Rectángulo que contiene al polígono: es el mismo que usan las reglas de Firebase */
+const CAMPUS_BBOX = { latMin: -8.11935, latMax: -8.10985, lngMin: -79.04413, lngMax: -79.03460 };
+
+/* Punto dentro del polígono (ray casting). lat/lng en grados. */
+function dentroDelCampus(lat, lng) {
+  if (lat < CAMPUS_BBOX.latMin || lat > CAMPUS_BBOX.latMax || lng < CAMPUS_BBOX.lngMin || lng > CAMPUS_BBOX.lngMax) return false;
+  let dentro = false;
+  for (let i = 0, j = CAMPUS_UNT.length - 1; i < CAMPUS_UNT.length; j = i++) {
+    const [xi, yi] = CAMPUS_UNT[i], [xj, yj] = CAMPUS_UNT[j];
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) dentro = !dentro;
+  }
+  return dentro;
+}
+
+/* ---------- Reputación (se calcula en cada celular, igual para todos) ---------- */
+const PUNTOS = { confirmado: 10, porConfirmacion: 2, maxConfirmaciones: 5, autoridad: 20, descartado: -5 };
+const ANTIGUEDAD_MIN_MS = 0; // demo: 0. Uso real: 24 * 60 * 60 * 1000 (ignora votos de cuentas recién creadas)
+const NIVELES_REP = [
+  { min: 400, nombre: "Centinela de la quebrada", icono: "shield-user" },
+  { min: 150, nombre: "Guardián", icono: "badge-check" },
+  { min: 50, nombre: "Vigía", icono: "shield-check" },
+  { min: 10, nombre: "Vecino", icono: "eye" },
+  { min: 0, nombre: "Nuevo", icono: null }
+];
+const nivelDe = (puntos) => NIVELES_REP.find((n) => puntos >= n.min);
+
+/* Cuenta los votos de /votos/{id}. perfiles sirve para ignorar cuentas muy nuevas al dar puntos. */
+function contarVotos(votosReporte, perfiles = null) {
+  let c = 0, n = 0, ultimaConfirmacion = 0, cValidas = 0;
+  for (const [uid, x] of Object.entries(votosReporte || {})) {
+    if (!x || (x.v !== 1 && x.v !== -1)) continue;
+    if (x.v === 1) { c++; ultimaConfirmacion = Math.max(ultimaConfirmacion, x.t || 0); } else n++;
+    const p = perfiles && perfiles[uid];
+    const valida = !perfiles || uid.startsWith("sim_") || (p && (x.t || 0) - (p.creado || 0) >= ANTIGUEDAD_MIN_MS);
+    if (x.v === 1 && valida) cValidas++;
+  }
+  return { c, n, ultimaConfirmacion, cValidas };
+}
+
+/* Copia los conteos al reporte EN MEMORIA, para que estadoReporte() siga igual. */
+function mezclarVotos(reportes, votos) {
+  for (const [id, r] of Object.entries(reportes || {})) {
+    if (!r) continue;
+    const v = contarVotos(votos && votos[id]);
+    r.confirmaciones = v.c; r.negaciones = v.n;
+    if (v.ultimaConfirmacion) r.ultimaConfirmacion = v.ultimaConfirmacion;
+  }
+}
+
+/* Puntos de un autor. estado = la función estadoReporte(). */
+function puntosDe(uid, reportes, votos, perfiles, estado) {
+  let p = 0;
+  for (const [id, r] of Object.entries(reportes || {})) {
+    if (!r || r.autor !== uid) continue;
+    const v = contarVotos(votos && votos[id], perfiles);
+    const e = estado(r);
+    if (r.verificadoAutoridad) p += PUNTOS.autoridad;
+    if (v.c >= VOTOS_MIN) p += PUNTOS.confirmado;
+    p += PUNTOS.porConfirmacion * Math.min(v.cValidas, PUNTOS.maxConfirmaciones);
+    if (e === "descartado") p += PUNTOS.descartado;
+  }
+  return Math.max(0, p);
+}
+/* === CAMPUS Y REPUTACIÓN (fin) === */
 
 /* ---------------------------------------------------------------------
    ESTADO GLOBAL
@@ -808,6 +1250,9 @@ const S = {
   sensor: null,
   demo: { activo: false, nivel: 0 },
   reportes: {},
+  votos: {},                // /votos/{idReporte}/{uid} = { v: 1 | -1, t }
+  perfiles: {},             // /perfiles/{uid} = { usuario, avatar, creado } (lo único público de una cuenta)
+  bloqueados: {},
   historial: {},
   ubicacion: null,          // { lat, lng, precision }
   nivelPrevio: undefined,
@@ -1397,6 +1842,7 @@ function iniciarMapa() {
     if (b) { ev.preventDefault(); mostrarEvacuacion({ refugioId: b.dataset.refugio }); }
   });
   pintarCauceYZonas();
+  pintarCampus();
   pintarReportes();
   pintarYo();
   // Encuadre inicial: cauce + zonas de sirena
@@ -1425,9 +1871,13 @@ function iniciarMapa() {
 
   // Votos desde el popup (delegación de eventos)
   mapa.getContainer().addEventListener("click", async (ev) => {
+    const ir = ev.target.closest("[data-cuenta-ir]");
+    if (ir) { ev.preventDefault(); mapa.closePopup(); if (puertaCuenta(ir.dataset.cuentaIr)) abrirCuenta("micuenta"); return; }
     const b = ev.target.closest("[data-voto]");
     if (!b) return;
     ev.preventDefault();
+    const rv = S.reportes[b.dataset.id];
+    if (Datos.modo !== "local" && !puertaCuenta(rv && rv.ambito === "unt" ? "unt" : "ciudad")) { mapa.closePopup(); return; }
     b.disabled = true;
     if (proximidadActiva()) {
       const u = await pedirUbicacion();
@@ -1552,7 +2002,7 @@ function htmlItemDetalle(x) {
   return `<li><button class="item-reporte item-detalle" data-rep="${esc(x.id)}">
     <span class="item-foto" data-foto-item="${esc(x.id)}">${ic(T.icono)}</span>
     <span class="item-cuerpo">
-      <span class="item-titulo">${esc(T.nombre)}${trazoDe(x.r) ? ` (tramo de ${Math.round(x.r.largo || 0)} m)` : ""}</span>
+      <span class="item-titulo">${esc(T.nombre)}${trazoDe(x.r) ? ` (tramo de ${Math.round(x.r.largo || 0)} m)` : ""}${x.r.ambito === "unt" ? '<span class="etiqueta-campus">Campus UNT</span>' : ""}</span>
       ${x.r.descripcion ? `<span class="item-desc">${esc(x.r.descripcion)}</span>` : ""}
       <span class="item-meta">${dist ? `${ic("map-pin")}${dist} · ` : ""}${hace(x.r.creado)} · ${x.r.confirmaciones || 0} confirman</span>
       <span class="item-badges"><span class="estado-badge ${badge[0]}">${badge[1]}</span>${g === "en_atencion" ? '<span class="estado-badge gestion">La autoridad lo atiende</span>' : ""}</span>
@@ -1607,9 +2057,12 @@ function verReporteEnMapa(id) {
 function htmlPopup(id, r, est) {
   const T = TIPOS_REPORTE[r.tipo] || TIPOS_REPORTE.otro;
   const esMio = r.autor === Datos.uid;
-  const yaVote = !!(r.votos && r.votos[Datos.uid]);
+  const local = Datos.modo === "local";
+  const yaVote = local ? !!(r.votos && r.votos[Datos.uid]) : !!(S.votos && S.votos[id] && S.votos[id][Datos.uid]);
+  const amb = r.ambito === "unt" ? "unt" : "ciudad";
+  const motivo = local || esMio || yaVote ? null : Cuenta.motivoNoPuede(amb);
   let nota = "";
-  if (esMio) nota = "Es tu reporte: otros vecinos lo confirmarán.";
+  if (esMio) nota = "Es tu reporte: otros lo confirmarán.";
   else if (yaVote) nota = "Ya respondiste a este reporte.";
   let lejos = false;
   if (proximidadActiva() && !esMio && !yaVote && S.ubicacion) {
@@ -1622,17 +2075,18 @@ function htmlPopup(id, r, est) {
     <div class="popup-cab">
       ${r.foto || r.tieneFoto ? `<button type="button" class="popup-mini" aria-label="Ver foto en grande">
         <img ${r.foto ? `src="${esc(r.foto)}"` : `data-foto-id="${esc(id)}"`} alt="" data-pie="${esc(T.nombre)} · ${hace(r.creado)}">${ic("maximize")}</button>` : ""}
-      <div><h4>${ic(T.icono)} ${esc(T.nombre)}</h4>
+      <div><h4>${ic(T.icono)} ${esc(T.nombre)}${amb === "unt" ? '<span class="etiqueta-campus">Campus UNT</span>' : ""}</h4>
       <span class="cuenta">${estado} · ${hace(r.creado)}${trazoDe(r) ? ` · tramo de ${Math.round(r.largo || 0)} m` : ""}</span></div>
     </div>
+    ${htmlAutor(r)}
     ${r.fotoPendiente && !r.tieneFoto ? '<p class="cuenta">La foto se está subiendo.</p>' : ""}
     ${r.descripcion ? `<p class="popup-desc">${esc(r.descripcion)}</p>` : ""}
     ${gestionDe(r) === "en_atencion" ? `<p class="gestion-nota">${ic("shield-user")}La autoridad lo está atendiendo</p>` : ""}
     <p class="pregunta">¿Sigue este problema?</p>
-    <div class="votos">
+    ${motivo ? `<p class="nota-voto">${esc(motivo)} <button type="button" class="btn-texto" data-cuenta-ir="${amb}">${Cuenta.usuario && Cuenta.usuario.tipo !== "invitado" ? "Ver mi cuenta" : "Iniciar sesión"}</button></p>` : `<div class="votos">
       <button class="si" data-voto="1" data-id="${esc(id)}" ${dis}>${ic("check")}Confirmar</button>
       <button data-voto="-1" data-id="${esc(id)}" ${dis}>${ic("x")}Ya no está</button>
-    </div>
+    </div>`}
     <p class="cuenta">${r.confirmaciones || 0} confirman · ${r.negaciones || 0} dicen que ya no está</p>
     ${nota ? `<p class="cuenta">${nota}</p>` : ""}
   </div>`;
@@ -2093,7 +2547,7 @@ function cerrarVisor() { $("#visorFoto").hidden = true; $("#visorImg").removeAtt
 /* ---------------------------------------------------------------------
    NUEVO REPORTE
 --------------------------------------------------------------------- */
-const R = { tipo: null, foto: null, lat: null, lng: null, origenUbic: null, forma: "punto", trazo: null, metodoTrazo: null, largo: null };
+const R = { tipo: null, foto: null, lat: null, lng: null, origenUbic: null, forma: "punto", trazo: null, metodoTrazo: null, largo: null, ambito: null };
 let capaTemp = null; // vista previa del punto o tramo mientras se arma el reporte
 
 function abrirReporte() {
@@ -2109,7 +2563,7 @@ function abrirReporte() {
    permite reportar desde cualquier lugar (modo cercanía apagado). */
 function actualizarBotonesUbicacion() {
   const porGPS = typeof R.origenUbic === "string" && R.origenUbic.startsWith("GPS");
-  $("#btnElegirMapa").hidden = proximidadActiva();
+  $("#btnElegirMapa").hidden = proximidadActiva() || R.ambito === "unt"; // en el campus vale solo el GPS
   $("#btnGPS").hidden = porGPS || buscandoGPS;
 }
 let buscandoGPS = false;
@@ -2130,7 +2584,7 @@ async function usarGPSReporte() {
 function cerrarReporte(limpiar = true) {
   $("#hojaReporte").hidden = true;
   if (limpiar) {
-    Object.assign(R, { tipo: null, foto: null, lat: null, lng: null, origenUbic: null, forma: "punto", trazo: null, metodoTrazo: null, largo: null });
+    Object.assign(R, { tipo: null, foto: null, lat: null, lng: null, origenUbic: null, forma: "punto", trazo: null, metodoTrazo: null, largo: null, ambito: null });
     elegirForma("punto");
     $("#formReporte").reset();
     $$(".opcion-tipo").forEach((b) => b.setAttribute("aria-pressed", "false"));
@@ -2143,7 +2597,8 @@ function cerrarReporte(limpiar = true) {
 }
 function validarFormReporte() {
   const ubicOK = R.forma === "tramo" ? !!(R.trazo && R.trazo.length >= 2) : typeof R.lat === "number";
-  $("#btnEnviarReporte").disabled = !(R.tipo && ubicOK);
+  const campusOK = R.ambito !== "unt" || Geocerca.enCampus;
+  $("#btnEnviarReporte").disabled = !(R.tipo && ubicOK && campusOK);
 }
 function fijarUbicacionReporte(lat, lng, origen) {
   R.lat = lat; R.lng = lng; R.origenUbic = origen;
@@ -2337,6 +2792,11 @@ function prepararFormReporte() {
   };
   $("#btnCancelarElegir").onclick = () => { terminarElegirEnMapa(); abrirReporte(); };
   $$(".opcion-forma").forEach((b) => b.addEventListener("click", () => elegirForma(b.dataset.forma)));
+  $$(".opcion-ambito").forEach((b) => b.addEventListener("click", () => {
+    if (b.disabled || R.ambito === b.dataset.ambito) return;
+    elegirAmbito(b.dataset.ambito);
+    if (R.ambito === "ciudad" && R.lat === null) usarGPSReporte();
+  }));
   $("#btnMarcarTramo").onclick = marcarTramo;
   $("#btnCerrarReporte").onclick = () => cerrarReporte(true);
   $("#hojaReporte").addEventListener("click", (e) => { if (e.target.id === "hojaReporte") cerrarReporte(false); });
@@ -2344,6 +2804,20 @@ function prepararFormReporte() {
   $("#formReporte").addEventListener("submit", async (e) => {
     e.preventDefault();
     if ($("#btnEnviarReporte").disabled) return;
+    if (Datos.modo !== "local") {
+      const motivo = Cuenta.motivoNoPuede(R.ambito || "ciudad");
+      if (motivo) { cerrarReporte(false); puertaCuenta(R.ambito || "ciudad", abrirReporteNuevo); return; }
+      if (R.ambito === "unt") {
+        // Se comprueba otra vez al enviar: dentro del campus, lectura de menos de 60 s y precisión de 60 m o mejor
+        if (!lecturaCampusValida()) {
+          $("#textoUbicacion").textContent = Geocerca.enCampus
+            ? "Esperando una lectura reciente y precisa del GPS (60 m o mejor). Intenta en unos segundos."
+            : "Saliste del campus UNT: no puedes enviar este reporte.";
+          return;
+        }
+        R.lat = Geocerca.ultimo.lat; R.lng = Geocerca.ultimo.lng; R.forma = "punto"; R.trazo = null;
+      }
+    }
     if (proximidadActiva()) {
       const u = await pedirUbicacion();
       if (!u) { $("#textoUbicacion").textContent = "Activa tu ubicación: en modo cercanía solo puedes reportar cerca de donde estás."; return; }
@@ -2360,6 +2834,7 @@ function prepararFormReporte() {
       descripcion: $("#inputDesc").value.trim().slice(0, 200),
       lat: Number(R.lat.toFixed(6)), lng: Number(R.lng.toFixed(6)),
       forma: R.forma,
+      ambito: R.ambito === "unt" ? "unt" : "ciudad",
       ...(R.forma === "tramo" ? { trazo: R.trazo, largo: R.largo, metodoTrazo: R.metodoTrazo } : {})
     };
     try {
@@ -2539,7 +3014,11 @@ function renderCintaDemo() {
 
 /* Modo autoridad: se activa con ?admin=1 o 5 toques en el logo y queda guardado en este celular.
    Agrega la pestaña "Control" (estado de la quebrada y gestión de reportes). */
-const esAutoridad = () => lsGet("previunt_autoridad", false) === true;
+/* Con Firebase el rol es real: solo las cuentas marcadas en /admins (las reglas lo exigen). Sin Firebase (modo local)
+   se mantiene el acceso oculto para hacer la demo sin internet. */
+const esAutoridad = () => firebaseConfigurado()
+  ? !!(Cuenta.usuario && Cuenta.usuario.esAdmin)
+  : lsGet("previunt_autoridad", false) === true;
 let filtroGestion = "pendiente";
 function aplicarModoAutoridad() {
   const on = esAutoridad();
@@ -2547,8 +3026,9 @@ function aplicarModoAutoridad() {
   $(".nav-autoridad").hidden = !on;
   $("#badgeAutoridad").hidden = !on;
   if (!on && $("#tab-control").classList.contains("activa")) irATab("inicio");
+  $("#btnSalirAutoridad").lastChild.textContent = firebaseConfigurado() ? "Cerrar sesión" : "Salir";
 }
-function abrirAdmin() { lsSet("previunt_autoridad", true); aplicarModoAutoridad(); irATab("control"); renderAdmin(); }
+function abrirAdmin() { if (firebaseConfigurado()) return; lsSet("previunt_autoridad", true); aplicarModoAutoridad(); irATab("control"); renderAdmin(); }
 
 function renderAdmin() {
   if (!esAutoridad()) return;
@@ -2560,8 +3040,9 @@ function renderAdmin() {
   $("#btnDemoOff").hidden = !S.demo?.activo;
   $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Simulación activa: ${NIVELES[S.demo.nivel]?.corto || S.demo.nivel}` : eb.fuente === "autoridad" ? `Estado oficial: ${NIVELES[eb.nivel].corto} · ${eb.cita || "sin fuente"}` : "Sin estado oficial publicado.")
     + (al ? ` · Aviso "Cuidado al salir" activo por un huaico reportado` : "");
+  const yo = Cuenta.usuario && (perfilDe(Cuenta.usuario.uid)?.usuario || Cuenta.usuario.nombreUsuario);
   $("#adminConexion").innerHTML = Datos.modo === "firebase"
-    ? `Conectado a Firebase · usuario anónimo <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`
+    ? `Conectado como <strong>${esc(yo || "admin")}</strong> (admin)`
     : `Modo LOCAL (sin Firebase): datos solo en este navegador · usuario <code>${esc(String(Datos.uid).slice(0, 8))}…</code>`;
   const s = S.sensor;
   $("#adminSensor").innerHTML = s
@@ -2586,6 +3067,7 @@ function renderControlReportes() {
     .filter(([, r]) => filtroGestion === "todos" || gestionDe(r) === filtroGestion)
     .sort((a, b) => (b[1].creado || 0) - (a[1].creado || 0));
   const votosSim = lsGet("previunt_votosSim", false) === true;
+  const cuentas = firebaseConfigurado() && Datos.modo !== "local";
   const cont = $("#adminReportes");
   cont.innerHTML = lista.length ? lista.map(([id, r]) => {
     const T = TIPOS_REPORTE[r.tipo] || TIPOS_REPORTE.otro;
@@ -2600,14 +3082,15 @@ function renderControlReportes() {
         <div class="ctl-info">
           <strong>${esc(T.nombre)}${trazoDe(r) ? ` (tramo de ${Math.round(r.largo || 0)} m)` : ""}</strong>
           ${r.descripcion ? `<p>${esc(r.descripcion)}</p>` : ""}
-          <span class="meta">${fechaHora(r.creado)} · ${r.confirmaciones || 0} confirman, ${r.negaciones || 0} dicen que ya no está</span>
-          <span class="item-badges"><span class="estado-badge g-${g}">${NOMBRE_GESTION[g]}</span>${comunidad}${r.verificadoAutoridad ? '<span class="estado-badge autoridad">Verificado</span>' : ""}</span>
+          <span class="meta">${fechaHora(r.creado)} · ${r.confirmaciones || 0} confirman, ${r.negaciones || 0} dicen que ya no está${cuentas ? ` · por ${esc(perfilDe(r.autor)?.usuario || "cuenta sin perfil")}` : ""}</span>
+          <span class="item-badges"><span class="estado-badge g-${g}">${NOMBRE_GESTION[g]}</span>${comunidad}${r.verificadoAutoridad ? '<span class="estado-badge autoridad">Verificado</span>' : ""}${r.ambito === "unt" ? '<span class="etiqueta-campus">Campus UNT</span>' : ""}${cuentas && S.bloqueados[r.autor] ? '<span class="estado-badge bloqueado">Autor bloqueado</span>' : ""}</span>
         </div>
       </div>
       <div class="ctl-acciones">
         ${accionG}
         <button data-acc="mapa" data-id="${esc(id)}">${ic("map-pin")}Ver en mapa</button>
         <button data-acc="verificar" data-id="${esc(id)}">${ic("badge-check")}${r.verificadoAutoridad ? "Quitar verificación" : "Verificar"}</button>
+        ${cuentas && r.autor && r.autor !== Datos.uid ? `<button data-acc="bloquear" data-id="${esc(id)}">${ic("ban")}${S.bloqueados[r.autor] ? "Desbloquear autor" : "Bloquear autor"}</button>` : ""}
         <button data-acc="borrar" data-id="${esc(id)}" aria-label="Eliminar reporte">${ic("trash-2")}</button>
         ${votosSim ? `<button data-acc="si" data-id="${esc(id)}">+1 confirmar (demo)</button><button data-acc="no" data-id="${esc(id)}">+1 ya no está (demo)</button>` : ""}
       </div></li>`;
@@ -2616,17 +3099,23 @@ function renderControlReportes() {
 }
 
 function prepararAdmin() {
-  // Acceso oculto: 5 toques en el logo (en menos de 3 s) o ?admin=1
-  let toques = [];
-  $("#logo").addEventListener("click", () => {
-    const t = Date.now();
-    toques = toques.filter((x) => t - x < 3000).concat(t);
-    if (toques.length >= 5) { toques = []; abrirAdmin(); }
-  });
+  if (!firebaseConfigurado()) {
+    // Solo en modo local (sin Firebase): acceso oculto con 5 toques en el logo (en menos de 3 s) o ?admin=1
+    let toques = [];
+    $("#logo").addEventListener("click", () => {
+      const t = Date.now();
+      toques = toques.filter((x) => t - x < 3000).concat(t);
+      if (toques.length >= 5) { toques = []; abrirAdmin(); }
+    });
+    if (new URLSearchParams(location.search).get("admin") === "1") abrirAdmin();
+  } else localStorage.removeItem("previunt_autoridad"); // el modo autoridad viejo ya no vale: ahora es por cuenta
   aplicarModoAutoridad();
-  if (new URLSearchParams(location.search).get("admin") === "1") abrirAdmin();
 
-  $("#btnSalirAutoridad").onclick = () => {
+  $("#btnSalirAutoridad").onclick = async () => {
+    if (firebaseConfigurado()) {
+      if (!confirm("¿Cerrar sesión de tu cuenta de autoridad en este celular?")) return;
+      await Cuenta.salir(); irATab("inicio"); toast("Sesión cerrada."); return;
+    }
     if (!confirm("¿Salir del modo autoridad en este celular?")) return;
     lsSet("previunt_autoridad", false); aplicarModoAutoridad(); irATab("inicio");
   };
@@ -2687,8 +3176,517 @@ function prepararAdmin() {
       if (b.dataset.acc === "si") await Datos.votar(id, 1, "sim_" + idAleatorio().slice(0, 8));
       if (b.dataset.acc === "no") await Datos.votar(id, -1, "sim_" + idAleatorio().slice(0, 8));
       if (b.dataset.acc === "borrar" && confirm("¿Eliminar este reporte? No se puede deshacer.")) await Datos.borrarReporte(id);
+      if (b.dataset.acc === "bloquear") {
+        const bloq = !!S.bloqueados[r.autor], quien = perfilDe(r.autor)?.usuario || "este autor";
+        if (confirm(bloq ? `¿Desbloquear a ${quien}? Podrá volver a reportar y votar.` : `¿Bloquear a ${quien}? No podrá reportar ni votar. Sus reportes siguen visibles hasta que los elimines.`)) {
+          await Datos.bloquear(r.autor, !bloq); toast(bloq ? "Autor desbloqueado" : "Autor bloqueado");
+        }
+      }
     } catch (err) { console.error(err); toast("Error: " + err.message); }
   });
+}
+
+/* ---------------------------------------------------------------------
+   CUENTAS: interfaz (botón de cuenta, hojas de entrada y registro, puertas)
+   Solo en modo Firebase. En modo local (sin Firebase) la app funciona como antes, sin cuentas.
+--------------------------------------------------------------------- */
+const AVATARES = {
+  "ola-azul": "#1565C0", "monte-cafe": "#6D4C41", "gota-celeste": "#0277BD", "sol-ambar": "#9A5B00",
+  "hoja-verde": "#33691E", "faro-rojo": "#AD1457", "luna-indigo": "#3949AB", "escudo": "#123F40"
+};
+const conCuentas = () => firebaseConfigurado() && Datos.modo !== "local";
+const perfilDe = (uid) => (S.perfiles && S.perfiles[uid]) || null;
+
+function htmlAvatar(perfil, clase = "avatar-chico") {
+  const av = perfil && AVATARES[perfil.avatar] ? perfil.avatar : "ola-azul";
+  const dentro = av === "escudo" ? ic("shield-user") : esc(String((perfil && perfil.usuario) || "?").charAt(0));
+  return `<span class="avatar ${clase}" style="background:${AVATARES[av]}">${dentro}</span>`;
+}
+
+/* ---------- Reputación: puntos por autor (de los reportes que la app tiene cargados) ---------- */
+let REP = {};
+function recalcularReputacion() {
+  REP = {};
+  const autores = new Set(Object.values(S.reportes || {}).map((r) => r && r.autor).filter(Boolean));
+  for (const a of autores) REP[a] = puntosDe(a, S.reportes, S.votos, S.perfiles, estadoReporte);
+}
+const puntosCuenta = (uid) => REP[uid] || 0;
+function htmlNivel(uid, conPuntos = false) {
+  const p = puntosCuenta(uid), n = nivelDe(p);
+  return `<span class="nivel-rep">${n.icono ? ic(n.icono) : ""}${esc(n.nombre)}${conPuntos ? ` · ${p} pts` : ""}</span>`;
+}
+function htmlAutor(r) {
+  if (!r || !r.autor || String(r.autor).startsWith("sim_")) return "";
+  const p = perfilDe(r.autor);
+  if (!p) return "";
+  return `<p class="popup-autor">${htmlAvatar(p, "avatar-medio")}<span>Reportado por <strong>${esc(p.usuario)}</strong> · ${htmlNivel(r.autor)}</span></p>`;
+}
+
+/* ---------- Estado de la cuenta para la interfaz ---------- */
+function falta() { // qué le falta a la cuenta actual (null si nada)
+  const u = Cuenta.usuario;
+  if (!u || u.tipo === "invitado" || u.esAdmin) return null;
+  if (!Cuenta.registroCompleto()) return "registro";
+  if (u.tipo === "personal" && !u.celularVerificado) return "registro";
+  if (u.tipo === "unt" && !u.correoVerificado) return "correo";
+  return null;
+}
+function renderBotonCuenta() {
+  const b = $("#btnCuenta"); if (!b) return;
+  b.hidden = !firebaseConfigurado();
+  if (b.hidden) return;
+  const u = Cuenta.usuario, invitado = !u || u.tipo === "invitado";
+  b.classList.toggle("invitado", invitado);
+  $("#cuentaPunto").hidden = invitado || !falta();
+  if (invitado) {
+    $("#cuentaAvatar").outerHTML = `<span id="cuentaAvatar" class="avatar avatar-chico">${ic("log-in")}</span>`;
+    $("#cuentaTexto").textContent = "Entrar";
+    b.setAttribute("aria-label", "Iniciar sesión o crear cuenta");
+    return;
+  }
+  const p = perfilDe(u.uid) || (u.nombreUsuario ? { usuario: u.nombreUsuario } : null);
+  $("#cuentaAvatar").outerHTML = htmlAvatar(p).replace('<span class="avatar', '<span id="cuentaAvatar" class="avatar');
+  $("#cuentaTexto").textContent = p ? p.usuario : "Completa tu registro";
+  b.setAttribute("aria-label", p ? `Tu cuenta: ${p.usuario}, nivel ${nivelDe(puntosCuenta(u.uid)).nombre}` : "Completa tu registro");
+  b.title = p ? `${p.usuario} · ${nivelDe(puntosCuenta(u.uid)).nombre}` : "Completa tu registro";
+}
+
+/* Puerta: true si puede participar en ese ámbito; si no, abre la hoja que corresponde */
+function puertaCuenta(ambito, despues) {
+  if (!conCuentas() && Datos.modo === "local") return true;
+  const motivo = Cuenta.motivoNoPuede(ambito);
+  if (!motivo) return true;
+  const u = Cuenta.usuario;
+  if (!u || u.tipo === "invitado") abrirCuenta("login", { motivo, despues });
+  else if (falta() === "registro") abrirPendiente(motivo, despues);
+  else if (falta() === "correo") abrirCuenta("correo", { despues });
+  else toast(motivo, 5000);
+  return false;
+}
+function abrirPendiente(motivo, despues) {
+  const u = Cuenta.usuario; if (!u) return;
+  if (falta() === "correo") { abrirCuenta("correo", { despues }); return; }
+  HC.tipoReg = u.tipo === "unt" ? "unt" : "personal";
+  abrirCuenta("registro", { completar: true, motivo: motivo || "Te falta completar tu registro para reportar y votar.", despues });
+}
+
+/* ---------- Hoja de cuenta ---------- */
+const HC = { pantalla: null, tipoReg: "personal", completar: false, avatar: "ola-azul", olvTipo: "personal", olvPaso: 1, smsTel: "", reloj: null, despues: null };
+const TITULOS_CUENTA = { login: "Inicia sesión", registro: "Crear cuenta", sms: "Código SMS", correo: "Revisa tu correo UNT", olvido: "Olvidé mi contraseña", micuenta: "Mi cuenta" };
+
+function abrirCuenta(pantalla, o = {}) {
+  HC.pantalla = pantalla;
+  if ("despues" in o) HC.despues = o.despues || null;
+  if (pantalla === "registro") HC.completar = !!o.completar;
+  $("#hojaCuenta").hidden = false;
+  $$("#hojaCuenta [data-pantalla]").forEach((el) => (el.hidden = el.dataset.pantalla !== pantalla));
+  $("#cuentaTitulo").textContent = pantalla === "registro" && HC.completar ? "Completa tu registro" : TITULOS_CUENTA[pantalla];
+  $("#cuentaMotivo").hidden = !o.motivo;
+  $("#cuentaMotivo").textContent = o.motivo || "";
+  $$("#hojaCuenta .error-form, #hojaCuenta .ok-form").forEach((p) => (p.textContent = ""));
+  if (pantalla === "registro") prepararRegistro();
+  if (pantalla === "sms") prepararSMS();
+  if (pantalla === "correo") $("#correoTexto").innerHTML = `Abre el enlace que enviamos a <strong>${esc(Cuenta.usuario?.correo || "tu correo UNT")}</strong>. Hasta abrirlo no puedes reportar en el campus.`;
+  if (pantalla === "olvido") elegirOlvido(HC.olvTipo);
+  if (pantalla === "micuenta") renderMiCuenta();
+  $("#hojaCuenta .hoja").scrollTop = 0;
+  const primero = $(`#hojaCuenta [data-pantalla="${pantalla}"] input:not([type=checkbox])`);
+  if (primero && pantalla !== "micuenta") setTimeout(() => primero.focus({ preventScroll: true }), 60);
+}
+function cerrarCuenta() { $("#hojaCuenta").hidden = true; HC.pantalla = null; clearInterval(HC.reloj); }
+function terminarCuenta(msg) {
+  const despues = HC.despues; HC.despues = null;
+  cerrarCuenta();
+  if (msg) toast(msg, 4000);
+  renderBotonCuenta();
+  if (despues && !falta()) setTimeout(despues, 200);
+}
+/* Espera a que Cuenta termine de leer la sesión nueva (evento "sesion") */
+function esperarSesion(ms = 6000) {
+  return new Promise((ok) => {
+    const uid = Datos.auth?.currentUser?.uid;
+    if (Cuenta.usuario && Cuenta.usuario.uid === uid) { ok(Cuenta.usuario); return; }
+    const f = (e) => { if (!uid || e.detail.uid === uid) { document.removeEventListener("sesion", f); clearTimeout(t); ok(e.detail); } };
+    const t = setTimeout(() => { document.removeEventListener("sesion", f); ok(Cuenta.usuario); }, ms);
+    document.addEventListener("sesion", f);
+  });
+}
+async function conBoton(btn, texto, fn) {
+  const antes = btn.innerHTML; btn.disabled = true; btn.textContent = texto;
+  try { return await fn(); } finally { btn.disabled = false; btn.innerHTML = antes; }
+}
+
+/* Después de entrar: completar lo que falte o cerrar */
+async function despuesDeEntrar() {
+  const u = await esperarSesion();
+  if (!u || u.tipo === "invitado") return;
+  if (u.tipo === "otro") { toast("Esta cuenta no es de PREVIUNT."); await Cuenta.salir(); return; }
+  const f = falta();
+  if (f === "registro") { abrirPendiente(); return; }
+  if (f === "correo") { abrirCuenta("correo"); return; }
+  const p = perfilDe(u.uid);
+  terminarCuenta(`Hola, ${p?.usuario || u.nombreUsuario || "bienvenido"}.`);
+}
+
+function pintarAvatares(cont, elegido, alElegir) {
+  const admin = !!Cuenta.usuario?.esAdmin;
+  const nombre = HC.pantalla === "registro" ? normalizarUsuario($("#regUsuario").value) || "?" : (perfilDe(Cuenta.usuario?.uid)?.usuario || "?");
+  cont.innerHTML = Object.keys(AVATARES).filter((k) => k !== "escudo" || admin).map((k) =>
+    `<button type="button" role="radio" aria-checked="${k === elegido}" data-avatar="${k}" aria-label="Avatar ${k.replace("-", " ")}">${htmlAvatar({ usuario: nombre, avatar: k }, "")}</button>`).join("");
+  cont.onclick = (e) => { const b = e.target.closest("[data-avatar]"); if (b) alElegir(b.dataset.avatar); };
+}
+
+function prepararRegistro() {
+  const t = HC.tipoReg, comp = HC.completar, u = Cuenta.usuario;
+  $$("[data-tipo-cuenta]").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.tipoCuenta === t)); b.disabled = comp; });
+  $("#regExplica").textContent = comp
+    ? (t === "unt" ? "Tu cuenta UNT ya existe. Completa tus datos para usarla." : "Tu cuenta ya existe. Completa tus datos y verifica tu celular con el código SMS.")
+    : t === "unt"
+      ? "Con tu correo @unitru.edu.pe. Sirve para reportar y validar dentro del campus. Te enviaremos un enlace a ese correo."
+      : "Para reportar y validar en la ciudad. Verificamos tu celular con un código por SMS.";
+  // Al completar: la personal ya tiene usuario (es su login); la UNT elige uno ahora
+  $("#grupoUsuario").hidden = comp && t === "personal";
+  $("#grupoClaves").hidden = comp;
+  $("#regCorreo").placeholder = t === "unt" ? "tu@unitru.edu.pe" : "tu@gmail.com";
+  if (comp && t === "unt" && u?.correo) { $("#regCorreo").value = u.correo; $("#regCorreo").readOnly = true; } else $("#regCorreo").readOnly = false;
+  $("#btnCrearCuenta").textContent = comp ? (t === "personal" && !u?.celularVerificado ? "Enviar código SMS" : "Guardar mis datos") : t === "personal" ? "Crear cuenta y enviar código" : "Crear cuenta UNT";
+  $("#regConsentimiento").hidden = !PEDIR_CONSENTIMIENTO;
+  $("#regConsentimientoTexto").textContent = `Acepto que PREVIUNT trate mis datos (nombres, apellidos, DNI, celular y correo) solo para crear mi cuenta, verificar que soy una persona real y responder ante reportes falsos. Mis datos no se muestran a otros usuarios: en la app solo aparece mi nombre de usuario. Puedo pedir que borren mi cuenta y mis datos escribiendo a ${CORREO_DATOS}.`;
+  pintarAvataresRegistro();
+  mostrarErrores({});
+}
+function pintarAvataresRegistro() {
+  const elegir = (av) => { HC.avatar = av; pintarAvatares($("#regAvatares"), av, elegir); };
+  pintarAvatares($("#regAvatares"), HC.avatar, elegir);
+}
+function leerRegistro() {
+  return {
+    nombres: $("#regNombres").value, apellidos: $("#regApellidos").value, usuario: $("#regUsuario").value,
+    celular: $("#regCelular").value.replace(/\D/g, ""), correo: $("#regCorreo").value, dni: $("#regDni").value.replace(/\D/g, ""),
+    clave: $("#regClave").value, clave2: $("#regClave2").value, acepto: $("#regAcepto").checked, avatar: HC.avatar
+  };
+}
+function mostrarErrores(e) {
+  $$("#formRegistro [data-error]").forEach((p) => (p.textContent = e[p.dataset.error] || ""));
+  const ids = { nombres: "regNombres", apellidos: "regApellidos", usuario: "regUsuario", celular: "regCelular", correo: "regCorreo", dni: "regDni", clave: "regClave", clave2: "regClave2" };
+  Object.entries(ids).forEach(([k, id]) => $("#" + id).setAttribute("aria-invalid", String(!!e[k])));
+  const primero = Object.keys(ids).find((k) => e[k]);
+  if (primero) $("#" + ids[primero]).focus();
+}
+
+function prepararSMS() {
+  const n = String(HC.smsTel || "");
+  $("#smsTexto").innerHTML = `Te enviamos un código al <strong>+51 ${n.slice(0, 1)}•• ••• •${esc(n.slice(-2))}</strong>.`;
+  $("#smsCodigo").value = "";
+  clearInterval(HC.reloj);
+  let s = 60; const b = $("#btnReenviarSMS");
+  b.disabled = true; b.textContent = `Reenviar (${s} s)`;
+  HC.reloj = setInterval(() => { s--; if (s <= 0) { clearInterval(HC.reloj); b.disabled = false; b.textContent = "Reenviar"; } else b.textContent = `Reenviar (${s} s)`; }, 1000);
+}
+
+function elegirOlvido(t) {
+  HC.olvTipo = t;
+  $$("[data-olvido]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.olvido === t)));
+  $("#olvPersonal").hidden = t !== "personal";
+  $("#olvUNT").hidden = t !== "unt";
+  if (t === "personal" && HC.olvPaso === 1) $("#olvPaso2").hidden = true;
+  $("#btnOlvidoEnviar").textContent = t === "unt" ? "Enviar enlace" : HC.olvPaso === 2 ? "Cambiar contraseña" : "Enviar código";
+}
+
+async function renderMiCuenta() {
+  const u = Cuenta.usuario; if (!u) return;
+  const p = perfilDe(u.uid) || { usuario: u.nombreUsuario || "?", avatar: "ola-azul" };
+  $("#mcAvatar").outerHTML = htmlAvatar(p, "avatar-grande").replace('<span class="avatar', '<span id="mcAvatar" class="avatar');
+  $("#mcUsuario").textContent = p.usuario;
+  $("#mcNivel").innerHTML = `${htmlNivel(u.uid, true)}`;
+  $("#mcTipo").textContent = u.esAdmin ? "Cuenta de autoridad (admin)" : u.tipo === "unt" ? `Cuenta UNT · ${u.correo}` : "Cuenta personal";
+  const f = falta(), bloq = S.bloqueados && S.bloqueados[u.uid];
+  $("#mcAviso").hidden = !(f || bloq);
+  $("#mcAviso").textContent = bloq ? "Tu cuenta fue bloqueada por la autoridad: no puedes reportar ni votar." : f === "correo" ? "Falta abrir el enlace de tu correo UNT." : f ? "Falta completar tu registro." : "";
+  pintarAvatares($("#mcAvatares"), p.avatar, async (a) => {
+    if (!perfilDe(u.uid)) { toast("Completa tu registro para elegir avatar."); return; }
+    try { await Cuenta.cambiarAvatar(a); S.perfiles[u.uid] = { ...S.perfiles[u.uid], avatar: a }; renderMiCuenta(); renderBotonCuenta(); }
+    catch (e) { toast("No se pudo cambiar el avatar."); }
+  });
+  $("#mcDetalles").open = false;
+  $("#mcDatos").innerHTML = "<dt>Cargando…</dt>";
+  $("#mcBorrar").textContent = PEDIR_CONSENTIMIENTO ? `Para borrar tu cuenta y tus datos, escribe a ${CORREO_DATOS}.` : "";
+}
+async function cargarMisDatos() {
+  try {
+    const d = await Cuenta.misDatos();
+    $("#mcDatos").innerHTML = d
+      ? [["Nombres", d.nombres], ["Apellidos", d.apellidos], ["DNI", d.dni], ["Celular", d.celular], ["Correo", d.correo], ["Registro", fechaHora(d.creado)]]
+        .map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")
+      : `<dt>${Cuenta.usuario?.esAdmin ? "Cuenta de autoridad: no guarda datos personales en la app." : "Aún no hay datos guardados."}</dt>`;
+  } catch (e) { $("#mcDatos").innerHTML = "<dt>No se pudieron leer (¿sin conexión?).</dt>"; }
+}
+
+function prepararCuentas() {
+  if (!firebaseConfigurado()) return;
+  Cuenta.cargarGuardada();
+  renderBotonCuenta();
+  $("#btnCuenta").onclick = () => {
+    const u = Cuenta.usuario;
+    if (!u || u.tipo === "invitado") abrirCuenta("login", { despues: null });
+    else if (falta()) abrirPendiente(null, null);
+    else abrirCuenta("micuenta");
+  };
+  $("#btnCerrarCuenta").onclick = cerrarCuenta;
+  $("#hojaCuenta").addEventListener("click", (e) => {
+    if (e.target.id === "hojaCuenta" || e.target.closest("[data-cerrar-cuenta]")) { cerrarCuenta(); return; }
+    const ir = e.target.closest("[data-pantalla-ir]");
+    if (ir) { if (ir.dataset.pantallaIr === "registro") HC.completar = false; HC.olvPaso = 1; abrirCuenta(ir.dataset.pantallaIr); }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#hojaCuenta").hidden) cerrarCuenta(); });
+
+  // Entrar
+  $("#formLogin").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const usuario = $("#loginUsuario").value.trim(), clave = $("#loginClave").value;
+    if (!usuario || !clave) { $("#loginError").textContent = "Escribe tu usuario (o correo UNT) y tu contraseña."; return; }
+    $("#loginError").textContent = "";
+    try {
+      await conBoton($("#btnEntrar"), "Entrando…", () => Cuenta.entrar(usuario, clave));
+      $("#loginClave").value = "";
+      await despuesDeEntrar();
+    } catch (err) { $("#loginError").textContent = err.message; }
+  });
+
+  // Crear cuenta
+  $$("[data-tipo-cuenta]").forEach((b) => b.addEventListener("click", () => { HC.tipoReg = b.dataset.tipoCuenta; prepararRegistro(); }));
+  $("#regUsuario").addEventListener("input", (e) => { e.target.value = e.target.value.toLowerCase().replace(/\s/g, ""); $("#regUsuarioEstado").textContent = ""; });
+  $("#regUsuario").addEventListener("blur", async () => {
+    const u = normalizarUsuario($("#regUsuario").value), est = $("#regUsuarioEstado");
+    est.className = "meta estado-usuario"; est.textContent = "";
+    if (!RE_USUARIO.test(u)) return;
+    try {
+      const libre = await conTiempo(Cuenta.usuarioLibre(u), 8000);
+      est.textContent = libre ? "Disponible" : "Ya está en uso"; est.classList.add(libre ? "libre" : "ocupado");
+    } catch {}
+    pintarAvataresRegistro();
+  });
+  ["regCelular", "regDni", "olvCelular", "smsCodigo", "olvCodigo"].forEach((id) =>
+    $("#" + id).addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, ""); }));
+  $("#formRegistro").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (sinServidor("no se pudo crear la cuenta")) return;
+    const t = HC.tipoReg, comp = HC.completar, d = leerRegistro();
+    if (comp && t === "personal") d.usuario = String(Datos.auth.currentUser?.email || "").split("@")[0];
+    const errs = validarRegistro(d, t, comp && t === "personal");
+    if (comp && t === "unt" && !RE_USUARIO.test(normalizarUsuario(d.usuario))) errs.usuario = "De 3 a 20 caracteres: letras minúsculas, números o _.";
+    mostrarErrores(errs);
+    $("#regError").textContent = "";
+    if (Object.keys(errs).length) return;
+    const btn = $("#btnCrearCuenta");
+    try {
+      if (t === "personal" && !comp) {
+        await conBoton(btn, "Enviando código…", () => Cuenta.registrarPersonal(d));
+        HC.smsTel = d.celular; abrirCuenta("sms");
+      } else if (t === "personal") {
+        const faltaCodigo = await conBoton(btn, "Enviando…", () => Cuenta.completarRegistroPersonal(d));
+        if (faltaCodigo) { HC.smsTel = d.celular; abrirCuenta("sms"); } else terminarCuenta("¡Listo! Tu registro está completo.");
+      } else if (!comp) {
+        await conBoton(btn, "Creando cuenta…", () => Cuenta.registrarUNT(d));
+        abrirCuenta("correo");
+      } else {
+        await conBoton(btn, "Guardando…", () => Cuenta.completarRegistroUNT(d));
+        if (Cuenta.usuario?.correoVerificado) terminarCuenta("¡Listo! Tu registro está completo."); else abrirCuenta("correo");
+      }
+      $("#regClave").value = $("#regClave2").value = "";
+    } catch (err) { $("#regError").textContent = err.message; }
+  });
+
+  // Código SMS
+  $("#formSMS").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const c = $("#smsCodigo").value.trim();
+    if (!/^\d{6}$/.test(c)) { $("#smsError").textContent = "Escribe el código de 6 dígitos."; return; }
+    $("#smsError").textContent = "";
+    try {
+      await conBoton($("#btnConfirmarSMS"), "Verificando…", () => Cuenta.confirmarRegistroPersonal(c));
+      clearInterval(HC.reloj);
+      terminarCuenta("¡Listo! Tu celular está verificado. Ya puedes reportar y validar en la ciudad.");
+    } catch (err) {
+      if (/código/i.test(err.message)) { $("#smsError").textContent = err.message; return; }
+      // Celular o DNI ya usados: la cuenta a medio crear se borró. Vuelve al formulario con el motivo.
+      HC.completar = false; abrirCuenta("registro"); $("#regError").textContent = err.message;
+    }
+  });
+  $("#btnReenviarSMS").onclick = async () => {
+    try { await Cuenta.enviarSMS(celularE164(HC.smsTel)); toast("Te enviamos un código nuevo."); prepararSMS(); }
+    catch (err) { $("#smsError").textContent = mensajeError(err); }
+  };
+  $("#btnCancelarRegistro").onclick = async () => {
+    if (!confirm("¿Cancelar el registro? Se borrará la cuenta que empezaste a crear.")) return;
+    clearInterval(HC.reloj);
+    await Cuenta.cancelarRegistro();
+    cerrarCuenta(); toast("Registro cancelado.");
+  };
+
+  // Correo UNT
+  $("#btnYaVerifique").onclick = async () => {
+    $("#correoError").textContent = "";
+    try {
+      const ok = await conBoton($("#btnYaVerifique"), "Comprobando…", () => Cuenta.yaVerifique());
+      if (ok) terminarCuenta("¡Listo! Tu cuenta UNT está verificada. Ya puedes reportar dentro del campus.");
+      else $("#correoError").textContent = "Todavía no aparece verificado. Abre el enlace del correo y vuelve a tocar «Ya verifiqué».";
+    } catch (err) { $("#correoError").textContent = mensajeError(err); }
+  };
+  $("#btnReenviarCorreo").onclick = async () => {
+    try { await Cuenta.reenviarCorreoUNT(); toast("Te enviamos el correo otra vez."); }
+    catch (err) { $("#correoError").textContent = mensajeError(err); }
+  };
+
+  // Olvidé mi contraseña
+  $$("[data-olvido]").forEach((b) => b.addEventListener("click", () => { HC.olvPaso = 1; elegirOlvido(b.dataset.olvido); }));
+  $("#formOlvido").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("#olvError").textContent = ""; $("#olvOk").textContent = "";
+    const btn = $("#btnOlvidoEnviar");
+    try {
+      if (HC.olvTipo === "unt") {
+        const c = $("#olvCorreo").value.trim();
+        if (!RE_UNT.test(c)) { $("#olvError").textContent = "Usa tu correo @unitru.edu.pe."; return; }
+        await conBoton(btn, "Enviando…", () => Cuenta.recuperarUNT(c));
+        $("#olvOk").textContent = "Si hay una cuenta con ese correo, te llegará un enlace para cambiar la contraseña.";
+      } else if (HC.olvPaso === 1) {
+        const cel = $("#olvCelular").value;
+        if (!/^9\d{8}$/.test(cel)) { $("#olvError").textContent = "9 dígitos y empieza con 9."; return; }
+        await conBoton(btn, "Enviando código…", () => Cuenta.recuperarPersonalEnviar(cel));
+        HC.olvPaso = 2; $("#olvPaso2").hidden = false; elegirOlvido("personal"); $("#olvCodigo").focus();
+      } else {
+        const c = $("#olvCodigo").value.trim(), clave = $("#olvClave").value;
+        if (!/^\d{6}$/.test(c)) { $("#olvError").textContent = "Escribe el código de 6 dígitos."; return; }
+        if (clave.length < 8) { $("#olvError").textContent = "La contraseña nueva debe tener al menos 8 caracteres."; return; }
+        await conBoton(btn, "Cambiando…", () => Cuenta.recuperarPersonalConfirmar(c, clave));
+        HC.olvPaso = 1; $("#olvClave").value = "";
+        await despuesDeEntrar();
+        toast("Contraseña cambiada. Ya entraste con tu cuenta.", 4500);
+      }
+    } catch (err) {
+      $("#olvError").textContent = err.message;
+      if (/no tiene una cuenta/.test(err.message)) { HC.olvPaso = 1; $("#olvPaso2").hidden = true; elegirOlvido("personal"); }
+    }
+  });
+
+  // Mi cuenta
+  $("#mcDetalles").addEventListener("toggle", () => { if ($("#mcDetalles").open) cargarMisDatos(); });
+  $("#btnCambiarCuenta").onclick = async () => { await Cuenta.salir(); await esperarSesion(); abrirCuenta("login"); };
+  $("#btnCerrarSesion").onclick = async () => {
+    if (!confirm("¿Cerrar sesión en este celular?")) return;
+    await Cuenta.salir(); cerrarCuenta(); toast("Sesión cerrada. Sigues viendo la app como invitado.");
+  };
+
+  // Cada cambio de sesión repinta lo que depende de la cuenta
+  document.addEventListener("sesion", () => {
+    renderBotonCuenta();
+    aplicarModoAutoridad();
+    const u = Cuenta.usuario;
+    if (u && (u.tipo === "unt" || u.esAdmin) && document.visibilityState === "visible") Geocerca.iniciar(); else Geocerca.detener();
+    pintarCampus();
+    pintarReportes(); renderListas(); renderAdmin();
+    if (!$("#hojaReporte").hidden && Datos.modo !== "local" && Cuenta.motivoNoPuede(R.ambito || "ciudad")) cerrarReporte(false);
+  });
+  document.addEventListener("visibilitychange", () => {
+    const u = Cuenta.usuario;
+    if (document.visibilityState !== "visible") Geocerca.detener();
+    else if (u && (u.tipo === "unt" || u.esAdmin)) Geocerca.iniciar();
+  });
+  document.addEventListener("geocerca", alCambiarGeocerca);
+}
+
+/* ---------------------------------------------------------------------
+   GEOCERCA DEL CAMPUS UNT (cuentas UNT y admins, con la app abierta y visible)
+--------------------------------------------------------------------- */
+const Geocerca = {
+  enCampus: false, ultimo: null, _id: null, _pendiente: null, _racha: 0,
+  iniciar() {
+    if (this._id !== null || !navigator.geolocation) return;
+    this._id = navigator.geolocation.watchPosition((p) => this._leer(p), () => this._cambiar(false),
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
+  },
+  detener() {
+    if (this._id !== null) navigator.geolocation.clearWatch(this._id);
+    this._id = null; this._pendiente = null; this._racha = 0; this._cambiar(false);
+  },
+  _leer(p) {
+    const { latitude: lat, longitude: lng, accuracy } = p.coords;
+    this.ultimo = { lat, lng, precision: Math.round(accuracy), t: Date.now() };
+    const dentro = accuracy <= 60 && dentroDelCampus(lat, lng);
+    if (dentro === this._pendiente) this._racha++; else { this._pendiente = dentro; this._racha = 1; }
+    if (this._racha >= 2) this._cambiar(dentro); // 2 lecturas seguidas: evita parpadeos en el borde
+  },
+  _cambiar(v) {
+    if (v === this.enCampus) return;
+    this.enCampus = v;
+    document.dispatchEvent(new CustomEvent("geocerca", { detail: { enCampus: v } }));
+  }
+};
+function alCambiarGeocerca() {
+  $("#chipCampus").hidden = !Geocerca.enCampus;
+  if ($("#hojaReporte").hidden) return;
+  pintarAmbito();
+  if (R.ambito === "unt" && !Geocerca.enCampus) $("#textoUbicacion").textContent = "Saliste del campus UNT: no puedes enviar este reporte.";
+  else if (R.ambito === "unt" && Geocerca.ultimo) fijarUbicacionReporte(Geocerca.ultimo.lat, Geocerca.ultimo.lng, `GPS ±${Geocerca.ultimo.precision} m`);
+  validarFormReporte();
+}
+/* Lectura de GPS válida para enviar un reporte del campus: reciente, precisa y dentro */
+function lecturaCampusValida() {
+  const g = Geocerca.ultimo;
+  return !!(g && Date.now() - g.t < 60000 && g.precision <= 60 && dentroDelCampus(g.lat, g.lng));
+}
+function pintarCampus() {
+  if (!mapa) return;
+  if (!capas.campus) capas.campus = L.layerGroup().addTo(mapa);
+  capas.campus.clearLayers();
+  const u = Cuenta.usuario;
+  if (!u || !(u.tipo === "unt" || u.esAdmin)) return;
+  L.polygon(CAMPUS_UNT.map(([lng, lat]) => [lat, lng]), { color: "#283593", weight: 2, dashArray: "6 6", fillColor: "#283593", fillOpacity: 0.05, interactive: false })
+    .addTo(capas.campus);
+}
+
+/* ---------- Reporte: ámbito (ciudad / campus UNT) según la cuenta ---------- */
+function ambitosPosibles() {
+  const u = Cuenta.usuario;
+  if (Datos.modo === "local" || !firebaseConfigurado()) return ["ciudad"];
+  if (u && u.esAdmin) return ["ciudad", "unt"];
+  if (u && u.tipo === "unt") return ["unt"];
+  return ["ciudad"];
+}
+function abrirReporteNuevo() {
+  if (Datos.modo === "local") { R.ambito = "ciudad"; pintarAmbito(); abrirReporte(); return; }
+  const posibles = ambitosPosibles();
+  const amb = R.ambito && posibles.includes(R.ambito) ? R.ambito : posibles[0];
+  if (!puertaCuenta(amb, abrirReporteNuevo)) return;
+  if (amb === "unt" && !Cuenta.usuario.esAdmin && !Geocerca.enCampus) {
+    Geocerca.iniciar();
+    toast("Con tu cuenta UNT solo reportas dentro del campus. Si ya estás dentro, activa tu ubicación y espera unos segundos.", 6000);
+    return;
+  }
+  elegirAmbito(amb);
+  abrirReporte();
+}
+function elegirAmbito(amb) {
+  const cambio = R.ambito !== amb;
+  R.ambito = amb;
+  if (amb === "unt" && (cambio || R.forma !== "punto")) elegirForma("punto"); // el campus va como punto, con el GPS
+  pintarAmbito();
+  if (amb === "unt" && lecturaCampusValida()) fijarUbicacionReporte(Geocerca.ultimo.lat, Geocerca.ultimo.lng, `GPS ±${Geocerca.ultimo.precision} m`);
+}
+function pintarAmbito() {
+  const posibles = ambitosPosibles(), amb = R.ambito || "ciudad";
+  $("#fsAmbito").hidden = !(posibles.length > 1 || amb === "unt");
+  $$(".opcion-ambito").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.ambito === amb));
+    b.disabled = !posibles.includes(b.dataset.ambito) || (b.dataset.ambito === "unt" && !Geocerca.enCampus && amb !== "unt");
+  });
+  $("#textoAmbito").textContent = amb === "unt"
+    ? (Geocerca.enCampus ? "Estás dentro del campus. Se usa tu ubicación GPS; lo validan otras cuentas UNT." : "Fuera del campus: no puedes enviar un reporte del campus.")
+    : posibles.includes("unt") && !Geocerca.enCampus ? "Campus UNT: solo cuando estés dentro del campus." : "";
+  $("#selectorForma").hidden = amb === "unt";
+  $("#notaReporte").textContent = amb === "unt" ? "Se verá en gris hasta que 3 cuentas UNT lo confirmen." : "Se verá en gris hasta que 3 vecinos lo confirmen.";
+  actualizarBotonesUbicacion();
 }
 
 /* ---------------------------------------------------------------------
@@ -2748,7 +3746,7 @@ async function iniciar() {
   $("#btnCerrarAlarma").onclick = cerrarAlarma;
   $("#bannerEmergencia").onclick = abrirAlarma;
   $("#avisoVecinal").onclick = () => { const id = $("#avisoVecinal").dataset.rep; if (id) verReporteEnMapa(id); };
-  $("#btnReportarInicio").onclick = abrirReporte;
+  $("#btnReportarInicio").onclick = abrirReporteNuevo;
   $$("[data-ir]").forEach((b) => b.addEventListener("click", () => irATab(b.dataset.ir)));
   const listaClick = (ev) => { const b = ev.target.closest("[data-rep]"); if (b) verReporteEnMapa(b.dataset.rep); };
   $("#listaReportesInicio").addEventListener("click", listaClick);
@@ -2807,7 +3805,7 @@ async function iniciar() {
   let lluviaCargada = false;
   $("#detLluvia").addEventListener("toggle", () => { if ($("#detLluvia").open && !lluviaCargada) { lluviaCargada = true; cargarLluviaHistorica(); } });
   $("#btnCerrarEvac").onclick = () => { $("#panelEvac").hidden = true; capas.evac?.clearLayers(); };
-  $("#btnReportar").onclick = abrirReporte;
+  $("#btnReportar").onclick = abrirReporteNuevo;
   $("#btnSonidoSirena").onclick = () => Sirena.desbloquear();
   $("#btnSilenciar").onclick = () => Sirena.silenciar();
   $("#btnUbicacion").onclick = async (e) => { e.stopPropagation(); if (await pedirUbicacion()) cargarClima(); };
@@ -2819,6 +3817,7 @@ async function iniciar() {
   $("#btnHojaUbicacion").onclick = async () => { if (await pedirUbicacion()) { renderListas(); cargarClima(); } };
 
   prepararFormReporte();
+  prepararCuentas();
   prepararAdmin();
   prepararBotonNotif();
   renderLineaTiempo();
@@ -2832,7 +3831,11 @@ async function iniciar() {
     const b = ev.target.closest("[data-cola]"); if (!b) return;
     const id = b.dataset.id;
     if (b.dataset.cola === "descartar") { if (confirm("¿Descartar este reporte? Se borrará de tu celular sin enviarse.")) await Cola.descartar(id); }
-    if (b.dataset.cola === "sesion") await Cola.usarSesionActual(id);
+    if (b.dataset.cola === "sesion") {
+      const it = Cola.items.find((x) => x.id === id);
+      if (Datos.modo !== "local" && it && !puertaCuenta(it.datos.ambito || "ciudad")) return;
+      await Cola.usarSesionActual(id);
+    }
     if (b.dataset.cola === "reintentar") { const it = Cola.items.find((x) => x.id === id); if (it) { it.proximo = 0; Cola.ejecutar(); } }
   });
   await Cola.cargar();
@@ -2844,7 +3847,15 @@ async function iniciar() {
 
   Datos.suscribir("sensor", (v) => { S.sensor = v; renderTodo(); });
   Datos.suscribir("demo", (v) => { S.demo = v || { activo: false, nivel: 0 }; renderTodo(); });
-  Datos.suscribir("reportes", (v) => { S.reportes = v || {}; pintarReportes(); renderTodo(); renderListas(); });
+  // Los conteos de votos se calculan desde /votos (un voto por cuenta) y se copian al reporte en memoria
+  const alCambiarReportes = () => {
+    if (Datos.modo !== "local") mezclarVotos(S.reportes, S.votos);
+    recalcularReputacion(); pintarReportes(); renderTodo(); renderListas(); renderBotonCuenta();
+  };
+  Datos.suscribir("reportes", (v) => { S.reportes = v || {}; alCambiarReportes(); });
+  Datos.suscribir("votos", (v) => { S.votos = v || {}; alCambiarReportes(); });
+  Datos.suscribir("perfiles", (v) => { S.perfiles = v || {}; recalcularReputacion(); renderBotonCuenta(); pintarReportes(); renderAdmin(); });
+  Datos.suscribir("bloqueados", (v) => { S.bloqueados = v || {}; renderBotonCuenta(); renderAdmin(); });
   Datos.suscribir("historial", (v) => { S.historial = v || {}; renderRegistro(); });
 
   // Revisión periódica: antigüedad del sensor y caducidad de reportes
@@ -2858,6 +3869,7 @@ async function iniciar() {
   cargarClima();
   setInterval(() => { if (navigator.onLine !== false) cargarClima(); }, 10 * 60 * 1000);
   setInterval(renderListas, 60 * 1000); // refresca "hace X min" y caducidad
+  if (Datos._emu) window.PREVIUNT = { S, Datos, Cuenta, verReporteEnMapa, irATab }; // solo con ?emu=1 en localhost (pruebas)
 }
 
 if ("serviceWorker" in navigator) {

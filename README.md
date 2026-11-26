@@ -10,17 +10,19 @@ PWA estática (HTML + CSS + JS vanilla). No necesita compilar nada.
 | `app.js` | Toda la lógica. **Arriba está el bloque `FIREBASE_CONFIG`** |
 | `manifest.json`, `sw.js`, `icons/` | Instalación como app y funcionamiento sin conexión |
 | `database.rules.json` | Reglas para pegar en Firebase Realtime Database |
+| `pruebas/` | Pruebas con los emuladores de Firebase (ver `pruebas/LEEME.md`) |
+| `datos/` | Límite del campus UNT (`campus_unt.geojson`, `hackaton.kmz`, trazado por el equipo) |
 
 ## Probar en la PC
 ```bash
 cd previunt
 python -m http.server 8000
 ```
-Abrir `http://localhost:8000`. Centro de control: `http://localhost:8000/?admin=1` o 5 toques en el logo.
-Tip para la demo: abre el centro de control en una pestaña y la app en otra; en modo local se sincronizan.
+Abrir `http://localhost:8000`. Con Firebase configurado se usa el proyecto real: para probar sin tocarlo, usar los emuladores y abrir `http://localhost:8000/?emu=1` (ver `pruebas/LEEME.md`).
+Solo en **modo local** (sin `FIREBASE_CONFIG`) el centro de control se abre con `?admin=1` o 5 toques en el logo.
 
 ## Conectar Firebase (cuando tengan la config)
-1. Firebase console → Authentication → Método de acceso → habilitar **Anónimo**.
+1. Firebase console → Authentication → Método de acceso → habilitar **Anónimo**, **Correo electrónico/contraseña** y **Teléfono**.
 2. Realtime Database → Reglas → pegar `database.rules.json` → Publicar.
 3. Configuración del proyecto → Tus apps → Web (`</>`) → copiar `firebaseConfig` y pegarlo en `FIREBASE_CONFIG` (arriba de `app.js`). `databaseURL` debe ser la misma URL que usan los ESP32.
 4. Authentication → Configuración → Dominios autorizados → agregar `claauudiioogc.github.io`.
@@ -53,7 +55,22 @@ Después de cada cambio, si el celular muestra la versión vieja, recarga dos ve
 - Reportes: solo los de las últimas 72 h y como máximo 300 (`orderByChild("creado")`). Historial: últimos 30.
 - Requiere publicar en Firebase Console el índice `".indexOn": ["creado"]` de `database.rules.json`. Sin el índice la app funciona, pero Firebase descarga todos los reportes y filtra en el celular.
 
-**Pendientes de seguridad (no se cambiaron)**
-- `quebrada_san_ildefonso` tiene `.write: true`: cualquiera con la URL puede escribir el estado oficial y activar la sirena física. Hay que restringirlo (p. ej. a cuentas de autoridad y al ESP32 autenticado) antes de un uso real.
-- `reportes/$id` permite que cualquier usuario autenticado modifique cualquier reporte (necesario hoy para los votos) y no valida `autor === auth.uid`.
+## Cuentas y roles (v18)
+
+- **Invitado** (sesión anónima): ve todo, no reporta ni vota.
+- **Cuenta personal**: nombres, apellidos, usuario único, celular (código SMS), correo y DNI. Entra con **usuario + contraseña**. Reporta y vota en la **ciudad**.
+- **Cuenta UNT**: con el correo `@unitru.edu.pe` (enlace de verificación al correo). Entra con **correo UNT + contraseña**. Reporta y vota **solo dentro del campus** (geocerca con el GPS).
+- **Admin** (autoridad): cuentas creadas en la consola y marcadas en `/admins/{uid}`. Ven la pestaña **Control**, publican el estado, gestionan reportes y bloquean autores. Ya no existe `?admin=1` con Firebase.
+- El perfil público es solo `usuario` + avatar (`/perfiles`). Nombres, DNI, celular y correo van en `/privado/{uid}`: solo los lee su dueño (ni los admins desde la app).
+- Votos: uno por cuenta en `/votos/{reporte}/{uid}`. Reputación (Nuevo, Vecino, Vigía, Guardián, Centinela) calculada en cada celular con los reportes cargados (últimas 72 h).
+- Reportes sin conexión: las reglas aceptan reportes de hasta **2 h** atrás; pasado eso, la cola los marca "No se envió a tiempo".
+- Casilla de consentimiento de datos: **apagada** mientras sea una demo interna (`PEDIR_CONSENTIMIENTO` en `app.js`). Encenderla antes de abrir la app a gente real.
+- Diseño completo: documento "PREVIUNT · Cuentas con registro, roles, reputación y reportes del campus UNT (versión 3)". Contraseñas de prueba: `CUENTAS_DE_PRUEBA_NO_SUBIR.md` (fuera del repositorio, en `.gitignore`).
+
+**Seguridad: lo que ya se corrigió con las reglas de v18**
+- `quebrada_san_ildefonso`, `demo` e `historial_nivel` solo los escriben admins (y dispositivos en `/dispositivos`, preparado para la maqueta). La sirena física sigue **leyendo** `nivel` sin cambios.
+- Un reporte solo lo crea su autor con una cuenta verificada; nadie más lo modifica salvo los admins.
+
+**Pendientes**
+- Antes de usar la app con gente real: cambiar las contraseñas de los admins, quitar los números de prueba del SMS, poner `ANTIGUEDAD_MIN_MS` en 24 h y encender el consentimiento.
 - La sirena física (ESP32 #2) lee `nivel` desde Firebase por WiFi: **sin internet no suena**. Propuesta: que el ESP32 sensor active la sirena directamente (cable o radio LoRa/ESP-NOW) por umbral local definido por quien calibre la maqueta, y use Firebase solo para difundir el estado a la app.

@@ -1,0 +1,16 @@
+{
+  "name": "previunt-pruebas",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de PREVIUNT con los emuladores de Firebase (ver LEEME.md)",
+  "scripts": {
+    "campus": "node prueba_campus_reputacion.mjs",
+    "reglas": "node prueba_reglas.mjs",
+    "flujo": "node preparar_emuladores.mjs && python3 correr_prueba_flujo.py"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "10.14.1",
+    "firebase-tools": "^13.0.0"
+  }
+}

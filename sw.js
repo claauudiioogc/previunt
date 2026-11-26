@@ -7,7 +7,7 @@
      securetoken), Open-Meteo, rutas ni teselas del mapa. Esas peticiones van siempre directo a la red.
    - Elevación (AWS Terrain Tiles): caché primero. El relieve no cambia; así la ruta a zona alta funciona sin red.
    Sube VERSION cuando cambies la lista de archivos. */
-const VERSION = "previunt-v17";
+const VERSION = "previunt-v18";
 const APP = [
   "./",
   "./index.html",
@@ -26,7 +26,7 @@ const LIBS = [
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
 ];
 // Librería de Firebase usada por app.js (misma versión). Sin ella la app no puede reconectar al abrirse sin red.
-const FB_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
+const FB_SDK = "https://www.gstatic.com/firebasejs/10.14.1/";
 const FIREBASE = ["firebase-app.js", "firebase-auth.js", "firebase-database.js"].map((f) => FB_SDK + f);
 const ESPERA_RED_MS = 3000;
 let redLentaDesde = 0; // tras una espera agotada, 1 min sirviendo la copia primero (así no se espera 3 s por archivo)
@@ -77,7 +77,7 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  if (url.hostname === "www.gstatic.com" && url.pathname.startsWith("/firebasejs/10.12.2/")) {
+  if (url.hostname === "www.gstatic.com" && url.pathname.startsWith("/firebasejs/10.14.1/")) {
     e.respondWith((async () => {
       const hit = await caches.match(req.url);
       if (hit) return hit;

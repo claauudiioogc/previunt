@@ -1,0 +1,11 @@
+# Credenciales de prueba: NUNCA al repositorio
+CUENTAS_DE_PRUEBA_NO_SUBIR.md
+*NO_SUBIR*
+# Pruebas con emuladores
+node_modules
+pruebas/node_modules
+pruebas/firebase.json
+pruebas/*.log
+firebase-debug.log
+database-debug.log
+pruebas/capturas/
