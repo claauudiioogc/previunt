@@ -69,14 +69,11 @@
       </button>
 
       <!-- Clima, justo debajo del estado -->
-      <section id="tarjetaClima" class="clima-card" aria-label="Clima de tu zona">
-        <div id="climaCielo" class="cielo" aria-hidden="true"></div>
-        <div class="clima-contenido">
-          <div id="climaCuerpo"><p class="clima-cargando">Cargando clima…</p></div>
-          <div class="clima-pie">
-            <span id="climaFuente" class="fuente"></span>
-            <button id="btnUbicacion" class="btn-texto btn-texto-chico">Usar mi ubicación</button>
-          </div>
+      <section id="tarjetaClima" class="cw-card" aria-label="Clima de tu zona">
+        <div id="climaCuerpo"></div>
+        <div class="cw-pie">
+          <span id="climaFuente" class="fuente"></span>
+          <button id="btnUbicacion" class="btn-texto btn-texto-chico">Usar mi ubicación</button>
         </div>
         <p id="climaLugar" hidden></p>
       </section>
@@ -118,8 +115,6 @@
           <button class="chip" data-capa="reportes" aria-pressed="true">Reportes</button>
           <button class="chip" data-capa="cauce" aria-pressed="false">Cauce</button>
           <button class="chip" data-capa="zonas" aria-pressed="false">Zonas de sirena</button>
-          <button class="chip chip-ico" id="btnCentrarme" aria-label="Mi ubicación">
-            <svg class="ic" aria-hidden="true"><use href="#i-locate-fixed"/></svg></button>
         </div>
 
         <div id="bannerElegir" class="banner-elegir" hidden>
@@ -131,6 +126,9 @@
             <svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
           <div id="textoEvac"></div>
         </div>
+
+        <button id="btnCentrarme" class="btn-centrar" aria-label="Ir a mi ubicación" title="Ir a mi ubicación">
+          <svg class="ic" aria-hidden="true"><use href="#i-locate-fixed"/></svg></button>
 
         <button id="btnReportar" class="fab">
           <svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Reportar</button>

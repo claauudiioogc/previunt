@@ -775,6 +775,7 @@ function ponerCielo(el, tipo, grande) {
 }
 
 async function cargarClima() {
+  if (!S.clima) $("#climaCuerpo").innerHTML = cwHtmlCargando();
   const lat = S.ubicacion ? S.ubicacion.lat.toFixed(3) : TRUJILLO.lat;
   const lng = S.ubicacion ? S.ubicacion.lng.toFixed(3) : TRUJILLO.lng;
   $("#climaLugar").textContent = S.ubicacion ? "Tu ubicación" : TRUJILLO.nombre;
@@ -805,29 +806,136 @@ async function cargarClima() {
   } catch (e) {
     console.warn("Clima:", e);
     S.clima = null;
-    ponerCielo($("#climaCielo"), "nubes", false);
-    $("#climaCuerpo").innerHTML = `<div class="sin-datos">Sin datos disponibles</div>`;
+    $("#climaCuerpo").innerHTML = cwHtmlError();
     $("#climaFuente").textContent = `Open-Meteo no respondió · ${hora(Date.now())}`;
   }
 }
 const fmt = (x, u, dec = 1) => (x === null || x === undefined ? "s/d" : `${Number(x).toFixed(dec)}${u}`);
 
+/* ---------------------------------------------------------------------
+   CLIMA COMPACTO · opción C3
+   Fila con icono animado según el estado del tiempo. Usa las funciones que
+   ya existen en app.js: $, ic, esc, fmt, uvCategoria, htmlUvBarra, CODIGOS_WMO.
+--------------------------------------------------------------------- */
+
+/* Estado visual a partir del código WMO de Open-Meteo.
+   Estados: despejado, parcial, nublado, niebla, llovizna, lluvia-leve, lluvia,
+   lluvia-fuerte, tormenta, noche.
+   mm = current.precipitation (mm). Sube la intensidad si cae mucha agua:
+   >= 2.5 mm pasa de leve a lluvia, >= 7.6 mm pasa de lluvia a fuerte (escala usual de mm/h). */
+function cwEstado(code, esDia, mm) {
+  let e;
+  if (code >= 95) e = "tormenta";
+  else if ([51, 53, 55, 56, 57].includes(code)) e = "llovizna";
+  else if ([61, 66, 80].includes(code)) e = "lluvia-leve";
+  else if ([63, 67, 81].includes(code)) e = "lluvia";
+  else if ([65, 82].includes(code)) e = "lluvia-fuerte";
+  else if (code === 45 || code === 48) e = "niebla";
+  else if (code === 3 || (code >= 71 && code <= 77)) e = "nublado";
+  else if (code === 1 || code === 2) e = esDia ? "parcial" : "noche";
+  else e = esDia ? "despejado" : "noche";
+  if (typeof mm === "number") {
+    if (e === "lluvia-leve" && mm >= 2.5) e = "lluvia";
+    if (e === "lluvia" && mm >= 7.6) e = "lluvia-fuerte";
+  }
+  return e;
+}
+
+/* Piezas del icono (todo es HTML/CSS/SVG en línea, sin imágenes) */
+const CW_NUBE_D = "M13 33a8 8 0 0 1 1-15.9 10 10 0 0 1 19.2 2.3A6.8 6.8 0 0 1 33 33Z";
+const cwNube = (cls = "", estilo = "") => `<svg class="cw-nube ${cls}" style="${estilo}" viewBox="0 0 48 48" aria-hidden="true"><path d="${CW_NUBE_D}"/></svg>`;
+const cwGota = (x, dur, del = 0, cls = "") => `<i class="cw-g ${cls}" style="--x:${x}px;--dur:${dur}s;--del:${del}s"></i>`;
+const cwSalpica = (x, dur, del = 0) => `<i class="cw-s" style="--x:${x}px;--dur:${dur}s;--del:${del}s"></i>`;
+const cwRaya = (x, dur, del) => `<i class="cw-raya" style="--x:${x}px;--dur:${dur}s;--del:${del}s"></i>`;
+const cwEstrella = (x, y, del) => `<i class="cw-est" style="--x:${x}px;--y:${y}px;--del:${del}s"></i>`;
+const cwBruma = (x, y, w, dur, del) => `<i class="cw-bruma" style="--x:${x}px;--y:${y}px;--w:${w}px;--dur:${dur}s;--del:${del}s"></i>`;
+const CW_LUNA_D = "M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401Z";
+const cwLuna = (cls = "") => `<svg class="cw-luna ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${CW_LUNA_D}"/></svg>`;
+const cwSol = (cls = "") => `<i class="cw-sol ${cls}"><i class="cw-rayos"></i><i class="cw-disco"></i></i>`;
+const CW_RAYO_D = "M13 2 4.5 13.5H10L9 22l9.5-12H13z";
+
+/* Contenido del icono para cada estado. Para cambiar una animación, edita solo su línea. */
+const CW_ICONOS = {
+  despejado: () => cwSol(),
+  parcial: () => cwSol("cw-sol-p") + cwNube("cw-fl", "left:1px;top:6px;width:38px;height:38px"),
+  nublado: (noche) => (noche ? cwLuna("cw-luna-ch") : "") +
+    cwNube("cw-n-fondo", "left:14px;top:-4px;width:30px;height:30px") + cwNube("cw-fl", "left:2px;top:6px;width:38px;height:38px"),
+  niebla: () => cwNube("cw-fl", "top:-3px") + cwBruma(9, 26, 26, 5, 0) + cwBruma(7, 32, 30, 7, -2) + cwBruma(13, 38, 22, 6, -4),
+  llovizna: () => cwNube("cw-fl cw-n-claro", "top:-3px") +
+    cwGota(14, 2.4, 0, "cw-fina") + cwGota(20, 2.4, 0.8, "cw-fina") + cwGota(26, 2.4, 1.5, "cw-fina") + cwGota(32, 2.4, 0.4, "cw-fina"),
+  "lluvia-leve": () => cwNube("cw-fl", "top:-2px") +
+    cwGota(18, 1.8, 0) + cwSalpica(18, 1.8, 0) + cwGota(28, 1.8, 0.9) + cwSalpica(28, 1.8, 0.9),
+  lluvia: () => cwNube("cw-fl", "top:-2px") +
+    cwGota(15, 1.4, 0) + cwSalpica(15, 1.4, 0) + cwGota(23, 1.4, 0.5) + cwSalpica(23, 1.4, 0.5) + cwGota(31, 1.4, 1) + cwSalpica(31, 1.4, 1),
+  "lluvia-fuerte": () => cwRaya(14, 0.9, 0) + cwRaya(24, 0.9, 0.3) + cwRaya(34, 0.9, 0.6) + cwRaya(44, 0.9, 0.15) +
+    cwNube("cw-fl cw-n-oscura", "top:-2px") +
+    cwGota(12, 0.9, 0) + cwSalpica(12, 0.9, 0) + cwGota(18, 1, 0.25) + cwGota(24, 0.9, 0.5) + cwSalpica(24, 0.9, 0.5) +
+    cwGota(30, 1, 0.15) + cwGota(36, 0.9, 0.4) + cwSalpica(36, 0.9, 0.4),
+  tormenta: () => `<i class="cw-flash"></i>` + cwNube("cw-fl cw-n-oscura", "top:-4px") +
+    `<svg class="cw-rayo" viewBox="0 0 24 24" aria-hidden="true"><path d="${CW_RAYO_D}"/></svg>` +
+    cwGota(10, 0.8, 0) + cwGota(36, 0.8, 0.4),
+  noche: () => cwLuna() + cwEstrella(33, 9, 0) + cwEstrella(38, 22, 1.1) + cwEstrella(8, 8, 2) + cwEstrella(30, 36, 0.6) + cwEstrella(13, 38, 1.7)
+};
+function cwTile(estado, esDia) {
+  const f = CW_ICONOS[estado] || CW_ICONOS.nublado;
+  const noche = !esDia && estado !== "noche" ? " cw-noche" : "";
+  return `<span class="cw-tile cw-e-${estado}${noche}" aria-hidden="true">${f(!esDia)}</span>`;
+}
+
+/* Texto del estado: el de CODIGOS_WMO, pero la lluvia se nombra por intensidad */
+const CW_INTENSIDAD = { "lluvia-leve": "Lluvia leve", lluvia: "Lluvia moderada", "lluvia-fuerte": "Lluvia fuerte" };
+const cwEtiqueta = (estado, desc0) => (/^Lluvia( fuerte)?$/.test(desc0) && CW_INTENSIDAD[estado]) || desc0;
+
+/* Tarjeta: fila + detalle que se despliega */
+function cwHtmlFila(K) {
+  const c = K.c, esDia = c.is_day !== 0;
+  const estado = cwEstado(c.weather_code, esDia, c.precipitation);
+  const desc = cwEtiqueta(estado, (CODIGOS_WMO[c.weather_code] || [null, "—"])[1]);
+  const uv = K.uv, cat = uv === null ? null : uvCategoria(uv);
+  const prob = K.probMax === null ? "s/d" : `${K.probMax}%`;
+  const abierto = !!S.cwAbierto;
+  return `
+    <button type="button" class="cw-fila" data-cw="alternar" aria-expanded="${abierto}" aria-controls="cwDetalle">
+      ${cwTile(estado, esDia)}
+      <span class="cw-textos">
+        <span class="cw-l1"><span class="cw-t">${fmt(c.temperature_2m, "°", 0)}</span><span class="cw-desc">${esc(desc)}</span></span>
+        <span class="cw-l2">${fmt(c.precipitation, " mm")} ahora · ${prob} en 6 h</span>
+      </span>
+      ${uv === null ? "" : `<span class="cw-uvpill" style="--uvc:${cat.color}"><i></i>UV ${Math.round(uv)}</span>`}
+      ${ic("chevron-down", "cw-chev")}
+    </button>
+    <div id="cwDetalle" class="cw-detalle${abierto ? " abierto" : ""}"><div class="cw-detalle-in">
+      <div class="cw-datos">
+        <div><span class="k">Lluvia hoy</span><span class="v">${fmt(K.hoy, " mm")}</span></div>
+        <div><span class="k">Humedad</span><span class="v">${fmt(c.relative_humidity_2m, "%", 0)}</span></div>
+      </div>
+      ${uv === null ? "" : `<div class="cw-uv"><span class="k">UV ${esc(cat.nombre.toLowerCase())}</span><span class="v">${Math.round(uv)}</span>${htmlUvBarra(uv)}</div>`}
+    </div></div>`;
+}
+/* Mientras carga: esqueleto con brillo y nube que late */
+const cwHtmlCargando = () => `
+  <div class="cw-fila cw-quieta" role="status">
+    <span class="cw-sr">Cargando clima…</span>
+    <span class="cw-tile cw-e-cargando" aria-hidden="true">${cwNube("cw-fl")}</span>
+    <span class="cw-textos" aria-hidden="true"><span class="cw-esq" style="width:84px;height:20px"></span><span class="cw-esq" style="width:140px;height:12px;margin-top:6px"></span></span>
+    <span class="cw-esq" aria-hidden="true" style="width:52px;height:24px;border-radius:10px"></span>
+  </div>`;
+/* Si Open-Meteo no responde: toque para reintentar */
+const cwHtmlError = () => `
+  <button type="button" class="cw-fila" data-cw="reintentar">
+    <span class="cw-tile cw-e-error" aria-hidden="true">${cwNube()}<svg class="cw-tachar" viewBox="0 0 46 46"><path d="M12 35 34 11"/></svg></span>
+    <span class="cw-textos"><span class="cw-l1"><span class="cw-desc cw-fuerte">Sin datos de clima</span></span><span class="cw-l2">Toca para reintentar</span></span>
+  </button>`;
+function cwAlternar() {
+  S.cwAbierto = !S.cwAbierto;
+  $("#climaCuerpo .cw-fila[data-cw='alternar']")?.setAttribute("aria-expanded", String(S.cwAbierto));
+  $("#cwDetalle")?.classList.toggle("abierto", S.cwAbierto);
+}
+
 function renderClima() {
   const K = S.clima; if (!K) return;
-  const c = K.c;
-  const [ico, desc] = CODIGOS_WMO[c.weather_code] || ["thermometer", "—"];
-  ponerCielo($("#climaCielo"), K.tipo, false);
-  const uv = K.uv, cat = uv === null ? null : uvCategoria(uv);
-  $("#climaCuerpo").innerHTML = `
-    <div class="cc-temp"><span class="cc-t">${fmt(c.temperature_2m, "°", 0)}</span><span class="cc-desc">${ic(ico)}${esc(desc)}</span></div>
-    <div class="cc-datos">
-      <div><span class="k">Lluvia ahora</span><span class="v">${fmt(c.precipitation, " mm")}</span></div>
-      <div><span class="k">Prob. 6 h</span><span class="v">${K.probMax === null ? "s/d" : K.probMax + "%"}</span></div>
-      <div><span class="k">Hoy</span><span class="v">${fmt(K.hoy, " mm")}</span></div>
-      <div><span class="k">Humedad</span><span class="v">${fmt(c.relative_humidity_2m, "%", 0)}</span></div>
-      <div class="cc-uv"><span class="k">UV ${uv === null ? "" : esc(cat.nombre.toLowerCase())}</span><span class="v">${uv === null ? "s/d" : Math.round(uv)}</span>${uv === null ? "" : htmlUvBarra(uv)}</div>
-    </div>`;
-  $("#climaFuente").textContent = `Open-Meteo · ${c.time.slice(11, 16)}`;
+  $("#climaCuerpo").innerHTML = cwHtmlFila(K);
+  $("#climaFuente").textContent = `Open-Meteo · ${K.c.time.slice(11, 16)}`;
 }
 
 
@@ -872,6 +980,7 @@ function iniciarMapa() {
     return;
   }
   mapa = L.map("mapa", { zoomControl: true, attributionControl: true, zoomSnap: 0.5 }).setView([-8.100, -79.020], 13);
+  mapa.on("dragstart", () => $("#btnCentrarme").classList.remove("centrado")); // al mover el mapa deja de estar centrado en ti
   if (CARTO_KEY) {
     L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_KEY)}`, {
       maxNativeZoom: 18, maxZoom: 20,
@@ -1128,6 +1237,19 @@ function htmlPopup(id, r, est) {
     <p class="cuenta">${r.confirmaciones || 0} confirman · ${r.negaciones || 0} dicen que ya no está</p>
     ${nota ? `<p class="cuenta">${nota}</p>` : ""}
   </div>`;
+}
+
+/* Centra el mapa en la persona. Al entrar a la pestaña usa la última ubicación conocida
+   de inmediato y luego la actualiza; con el botón la vuelve a pedir. */
+async function centrarEnMi(alEntrar) {
+  if (!mapa) return;
+  const ir = (u) => { if (u && mapa) mapa.setView([u.lat, u.lng], Math.max(mapa.getZoom(), 16), { animate: !alEntrar }); };
+  if (alEntrar && S.ubicacion) ir(S.ubicacion);
+  $("#btnCentrarme").classList.add("buscando");
+  const u = await pedirUbicacion({ silencioso: alEntrar });
+  $("#btnCentrarme").classList.remove("buscando");
+  if (u) { ir(u); $("#btnCentrarme").classList.add("centrado"); }
+  else if (!alEntrar) toast("No se pudo usar tu ubicación. Revisa el permiso del navegador.");
 }
 
 function pintarYo() {
@@ -1894,7 +2016,10 @@ function renderTodo() {
 
 async function iniciar() {
   // Navegación
-  $$(".nav-btn").forEach((b) => b.addEventListener("click", () => irATab(b.dataset.tab)));
+  $$(".nav-btn").forEach((b) => b.addEventListener("click", () => {
+    irATab(b.dataset.tab);
+    if (b.dataset.tab === "mapa") centrarEnMi(true); // al entrar al mapa, como en Google Maps: te ubica en tu punto
+  }));
   $("#btnRutaEmergencia").onclick = mostrarEvacuacion;
   $("#btnCerrarAlarma").onclick = cerrarAlarma;
   $("#bannerEmergencia").onclick = abrirAlarma;
@@ -1950,7 +2075,7 @@ async function iniciar() {
     const grupos = b.dataset.capa === "reportes" ? [capas.reportes, capas.bloqueos] : b.dataset.capa === "cauce" ? [capas.cauce] : [capas.zonas];
     grupos.forEach((g) => on ? g.addTo(mapa) : g.remove());
   }));
-  $("#btnCentrarme").onclick = async () => { const u = await pedirUbicacion(); if (u && mapa) mapa.setView([u.lat, u.lng], 16, { animate: false }); };
+  $("#btnCentrarme").onclick = () => centrarEnMi(false);
   $("#guiaNiveles").addEventListener("click", (ev) => {
     const b = ev.target.closest(".nivel-sel"); if (!b) return;
     nivelGuia = Number(b.dataset.n); renderGuia();
@@ -1962,6 +2087,11 @@ async function iniciar() {
   $("#btnSonidoSirena").onclick = () => Sirena.desbloquear();
   $("#btnSilenciar").onclick = () => Sirena.silenciar();
   $("#btnUbicacion").onclick = async (e) => { e.stopPropagation(); if (await pedirUbicacion()) cargarClima(); };
+  $("#climaCuerpo").innerHTML = cwHtmlCargando();
+  $("#climaCuerpo").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-cw]"); if (!b) return;
+    if (b.dataset.cw === "alternar") cwAlternar(); else if (b.dataset.cw === "reintentar") cargarClima();
+  });
   $("#btnHojaUbicacion").onclick = async () => { if (await pedirUbicacion()) { renderListas(); cargarClima(); } };
 
   prepararFormReporte();
