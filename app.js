@@ -33,6 +33,7 @@ const VOTOS_MIN = 3;
 const RADIO_ALERTA_HUAICO_M = 1000;
 const TRAMO_MAX_M = 2000;
 const RADIO_CERCANOS_M = 1000;
+const RADIO_LISTA_M = 2000;                  // lista del mapa: solo reportes a menos de 2 km
 /* Mapa base más limpio (CARTO Voyager). Clave gratuita, sin cuenta: https://carto.com/basemaps/apikey
    (uso no comercial gratis hasta 5 millones de teselas al mes; hay que mantener visible "© OpenStreetMap, © CARTO").
    Vacía = se usa OpenStreetMap estándar. */
@@ -128,9 +129,12 @@ const NUMEROS_EMERGENCIA = [
   { nombre: "Bomberos",               numero: "116" },
   { nombre: "SAMU (ambulancia)",      numero: "106" },
   { nombre: "Policía Nacional",       numero: "105" },
+  { nombre: "COER La Libertad", numero: "991480550", mostrar: "991 480 550" },
+  { nombre: "COER La Libertad", numero: "991480611", mostrar: "991 480 611" },
   { nombre: "Municipalidad de Trujillo", numero: "044484240", mostrar: "(044) 484240" }
   // Central de la MPT: Plan de Contingencia ante Lluvias Intensas, Región La Libertad 2025-2026 (Anexo 5).
-  // TODO: verificar con fuente oficial el teléfono público del COER La Libertad (no figura en el directorio del plan regional).
+  // COER La Libertad: números entregados por el equipo el 26/11/2026.
+  // TODO: verificar con fuente oficial (no figuran en el Plan de Operaciones de Emergencia Regional 2025-2026).
 ];
 
 /* Mochila para emergencias – "Combo de Supervivencia" de INDECI (cartilla OGRD del Congreso, 2025).
@@ -725,38 +729,181 @@ async function fetchJSON(url, ms = 12000) {
     return await r.json();
   } finally { clearTimeout(t); }
 }
+/* Escala del índice UV (OMS): bajo, moderado, alto, muy alto, extremo */
+const UV_ESCALA = [
+  { max: 2, nombre: "Bajo", color: "#289500", consejo: "Puedes estar al aire libre sin protección especial." },
+  { max: 5, nombre: "Moderado", color: "#F7E400", consejo: "Usa bloqueador y busca sombra al mediodía." },
+  { max: 7, nombre: "Alto", color: "#F85900", consejo: "Protégete: bloqueador, gorro, lentes y sombra entre las 10 y las 16 h." },
+  { max: 10, nombre: "Muy alto", color: "#D8001D", consejo: "Evita el sol del mediodía y protégete con bloqueador, gorro y lentes." },
+  { max: 99, nombre: "Extremo", color: "#6B49C8", consejo: "Evita salir al sol al mediodía. Protección máxima." }
+];
+const uvCategoria = (u) => UV_ESCALA.find((c) => u <= c.max + 0.49) || UV_ESCALA[4];
+const uvPos = (u) => Math.max(0, Math.min(100, (u / 11) * 100));
+const htmlUvBarra = (u) => `<div class="uv-barra"><i style="left:${uvPos(u).toFixed(1)}%;border-color:${uvCategoria(u).color}">${Math.round(u)}</i></div>`;
+
+/* Fondo animado según el tiempo: sol, parcial, nubes, lluvia, tormenta o noche */
+function tipoCielo(code, esDia) {
+  if (code >= 95) return "tormenta";
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "lluvia";
+  if (code === 3 || code === 45 || code === 48) return "nubes";
+  if (!esDia) return "noche";
+  if (code === 2) return "parcial";
+  return "sol";
+}
+function htmlCielo(tipo, grande = false) {
+  const azar = (a, b) => (a + Math.random() * (b - a)).toFixed(2);
+  const nubes = (n) => Array.from({ length: n }, (_, k) => `<span class="nube nube-${k + 1}"></span>`).join("");
+  const gotas = (n) => Array.from({ length: n }, () => `<i class="gota" style="left:${azar(0, 100)}%;animation-delay:-${azar(0, 1.2)}s;animation-duration:${azar(0.55, 0.95)}s"></i>`).join("");
+  const estrellas = (n) => Array.from({ length: n }, () => `<i class="estrella" style="left:${azar(2, 98)}%;top:${azar(4, 70)}%;animation-delay:-${azar(0, 3)}s"></i>`).join("");
+  const sol = '<span class="sol"><span class="sol-rayos"></span><span class="sol-disco"></span></span>';
+  const k = grande ? 2.5 : 1;
+  const html = {
+    sol: sol,
+    parcial: sol + nubes(1),
+    nubes: nubes(3),
+    lluvia: nubes(2) + gotas(Math.round(16 * k)),
+    tormenta: nubes(3) + gotas(Math.round(20 * k)) + '<span class="destello"></span>',
+    noche: '<span class="luna"></span>' + estrellas(Math.round(10 * k))
+  }[tipo] || "";
+  return html;
+}
+function ponerCielo(el, tipo, grande) {
+  if (el.dataset.tipo === tipo) return; // no se reinicia la animación si no cambió
+  el.dataset.tipo = tipo;
+  el.className = `cielo cielo-${tipo}${grande ? " cielo-grande" : ""}`;
+  el.innerHTML = htmlCielo(tipo, grande);
+}
+
 async function cargarClima() {
   const lat = S.ubicacion ? S.ubicacion.lat.toFixed(3) : TRUJILLO.lat;
   const lng = S.ubicacion ? S.ubicacion.lng.toFixed(3) : TRUJILLO.lng;
-  $("#climaLugar").textContent = S.ubicacion ? `Tu ubicación (${lat}, ${lng})` : `${TRUJILLO.nombre} (no compartiste tu ubicación)`;
+  $("#climaLugar").textContent = S.ubicacion ? "Tu ubicación" : TRUJILLO.nombre;
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
-    `&current=temperature_2m,precipitation,rain,weather_code,wind_speed_10m` +
-    `&hourly=precipitation,precipitation_probability&daily=precipitation_sum&timezone=America/Lima&forecast_days=2`;
+    `&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,weather_code,wind_speed_10m` +
+    `&hourly=temperature_2m,precipitation,precipitation_probability,uv_index&daily=precipitation_sum,uv_index_max&timezone=America/Lima&forecast_days=2`;
   try {
     const d = await fetchJSON(url);
     const c = d.current;
     if (!c || typeof c.temperature_2m !== "number") throw new Error("Respuesta incompleta");
-    // Próximas 6 horas desde la hora actual
-    const idx = d.hourly.time.findIndex((t) => t >= c.time.slice(0, 13) + ":00");
+    const H = d.hourly || {};
+    const serie = (k) => Array.isArray(H[k]) ? H[k] : [];
+    // Hora actual dentro de la serie horaria
+    const idx = serie("time").findIndex((t) => t >= c.time.slice(0, 13) + ":00");
     const desde = idx < 0 ? 0 : idx;
-    const probs = d.hourly.precipitation_probability.slice(desde, desde + 6).filter((v) => v !== null);
-    const lluv6 = d.hourly.precipitation.slice(desde, desde + 6).filter((v) => v !== null);
-    const probMax = probs.length ? Math.max(...probs) : null;
-    const suma6 = lluv6.length ? lluv6.reduce((a, b) => a + b, 0) : null;
-    const hoy = d.daily?.precipitation_sum?.[0];
-    const [ico, desc] = CODIGOS_WMO[c.weather_code] || ["thermometer", "—"];
-    const v = (x, u, dec = 1) => (x === null || x === undefined ? "s/d" : `${Number(x).toFixed(dec)}${u}`);
-    $("#climaCuerpo").innerHTML = `
-      <div class="clima-dato">${ic(ico)}<span class="v">${v(c.temperature_2m, "°", 0)}</span><span class="k">${esc(desc)}</span></div>
-      <div class="clima-dato">${ic("droplets")}<span class="v">${v(c.precipitation, " mm")}</span><span class="k">Lluvia ahora</span></div>
-      <div class="clima-dato">${ic("umbrella")}<span class="v">${probMax === null ? "s/d" : probMax + "%"}</span><span class="k">Prob. 6 h</span></div>
-      <div class="clima-dato">${ic("cloud-rain")}<span class="v">${v(hoy, " mm")}</span><span class="k">Hoy</span></div>`;
-    $("#climaFuente").textContent = `Open-Meteo · ${c.time.slice(11, 16)}`;
+    const probs = serie("precipitation_probability").slice(desde, desde + 6).filter((v) => v !== null);
+    const uvAhora = serie("uv_index")[desde];
+    const uvMaxHoy = d.daily?.uv_index_max?.[0];
+    S.clima = {
+      c, desde, hourly: H, consultado: Date.now(), lugar: $("#climaLugar").textContent,
+      probMax: probs.length ? Math.max(...probs) : null,
+      hoy: d.daily?.precipitation_sum?.[0],
+      uv: typeof uvAhora === "number" ? uvAhora : null,
+      uvMax: typeof uvMaxHoy === "number" ? uvMaxHoy : null,
+      tipo: tipoCielo(c.weather_code, c.is_day !== 0)
+    };
+    renderClima();
+    if (!$("#climaDetalle").hidden) renderClimaDetalle();
   } catch (e) {
     console.warn("Clima:", e);
+    S.clima = null;
+    ponerCielo($("#climaCielo"), "nubes", false);
     $("#climaCuerpo").innerHTML = `<div class="sin-datos">Sin datos disponibles</div>`;
     $("#climaFuente").textContent = `Open-Meteo no respondió · ${hora(Date.now())}`;
   }
+}
+const fmt = (x, u, dec = 1) => (x === null || x === undefined ? "s/d" : `${Number(x).toFixed(dec)}${u}`);
+
+function renderClima() {
+  const K = S.clima; if (!K) return;
+  const c = K.c;
+  const [ico, desc] = CODIGOS_WMO[c.weather_code] || ["thermometer", "—"];
+  ponerCielo($("#climaCielo"), K.tipo, false);
+  const uv = K.uv, cat = uv === null ? null : uvCategoria(uv);
+  $("#climaCuerpo").innerHTML = `
+    <div class="cc-top">
+      <div class="cc-temp"><span class="cc-t">${fmt(c.temperature_2m, "°", 0)}</span><span class="cc-desc">${ic(ico)}${esc(desc)}</span></div>
+      <span class="cc-mas">Ver más ${ic("chevron-right")}</span>
+    </div>
+    <div class="cc-datos">
+      <div><span class="k">Lluvia ahora</span><span class="v">${fmt(c.precipitation, " mm")}</span></div>
+      <div><span class="k">Prob. 6 h</span><span class="v">${K.probMax === null ? "s/d" : K.probMax + "%"}</span></div>
+      <div><span class="k">Hoy</span><span class="v">${fmt(K.hoy, " mm")}</span></div>
+      <div><span class="k">Humedad</span><span class="v">${fmt(c.relative_humidity_2m, "%", 0)}</span></div>
+    </div>
+    <div class="cc-uv">
+      <span class="k">${ic("sun")}Índice UV</span>
+      <span class="v">${uv === null ? "s/d" : `${cat.nombre}`}</span>
+      ${uv === null ? "" : htmlUvBarra(uv)}
+    </div>`;
+  $("#climaFuente").textContent = `Open-Meteo · ${c.time.slice(11, 16)}`;
+}
+
+/* Pantalla ampliada del clima: animación grande y tarjetas deslizables */
+function abrirClimaDetalle() {
+  if (!S.clima) { toast("Sin datos de clima disponibles."); return; }
+  $("#climaDetalle").hidden = false;
+  document.body.classList.add("sin-scroll");
+  renderClimaDetalle();
+  $("#cdSlides").scrollLeft = 0;
+  $("#btnCerrarClima").focus();
+}
+function cerrarClimaDetalle() {
+  $("#climaDetalle").hidden = true;
+  document.body.classList.remove("sin-scroll");
+  $("#climaDetalleCielo").dataset.tipo = "";
+  $("#climaDetalleCielo").innerHTML = "";
+}
+function renderClimaDetalle() {
+  const K = S.clima; if (!K) return;
+  const c = K.c, H = K.hourly || {};
+  const [ico, desc] = CODIGOS_WMO[c.weather_code] || ["thermometer", "—"];
+  ponerCielo($("#climaDetalleCielo"), K.tipo, true);
+  $("#cdLugar").innerHTML = `${ic("map-pin")}${esc(K.lugar)}`;
+  $("#cdTemp").textContent = fmt(c.temperature_2m, "°", 0);
+  $("#cdDesc").innerHTML = `${ic(ico)}${esc(desc)}`;
+  const serie = (k) => Array.isArray(H[k]) ? H[k] : [];
+  const horas = serie("time").slice(K.desde, K.desde + 12);
+  const probH = serie("precipitation_probability").slice(K.desde, K.desde + 12);
+  const tempH = serie("temperature_2m").slice(K.desde, K.desde + 12);
+  const uv = K.uv, cat = uv === null ? null : uvCategoria(uv);
+  const barras = horas.map((t, i) => {
+    const p = probH[i];
+    return `<div class="cd-barra"><span class="cd-barra-v" style="height:${p === null || p === undefined ? 0 : Math.max(4, p)}%"></span><span class="cd-barra-h">${t.slice(11, 13)}</span></div>`;
+  }).join("");
+  const slides = [
+    `<article class="cd-slide"><h3>${ic("thermometer")}Ahora</h3>
+      <div class="cd-filas">
+        <div><span>Sensación térmica</span><strong>${fmt(c.apparent_temperature, "°", 0)}</strong></div>
+        <div><span>Viento</span><strong>${fmt(c.wind_speed_10m, " km/h", 0)}</strong></div>
+        <div><span>Humedad</span><strong>${fmt(c.relative_humidity_2m, "%", 0)}</strong></div>
+        <div><span>Lluvia ahora</span><strong>${fmt(c.precipitation, " mm")}</strong></div>
+      </div></article>`,
+    `<article class="cd-slide"><h3>${ic("cloud-rain")}Lluvia</h3>
+      <div class="cd-filas cd-filas-3">
+        <div><span>Prob. 6 h</span><strong>${K.probMax === null ? "s/d" : K.probMax + "%"}</strong></div>
+        <div><span>Acumulado hoy</span><strong>${fmt(K.hoy, " mm")}</strong></div>
+        <div><span>Ahora</span><strong>${fmt(c.precipitation, " mm")}</strong></div>
+      </div>
+      <p class="cd-sub">Probabilidad de lluvia, próximas 12 horas</p>
+      <div class="cd-barras">${barras || '<p class="cd-sub">Sin datos disponibles</p>'}</div></article>`,
+    `<article class="cd-slide"><h3>${ic("sun")}Índice UV</h3>
+      ${uv === null ? '<p class="cd-grande">s/d</p><p class="cd-sub">Sin datos disponibles</p>' : `
+      <p class="cd-grande">${Math.round(uv)} <span>${cat.nombre}</span></p>
+      ${htmlUvBarra(uv)}
+      <div class="uv-escala"><span>Bajo</span><span>Moderado</span><span>Alto</span><span>Muy alto</span><span>Extremo</span></div>
+      <p class="cd-consejo">${esc(cat.consejo)}</p>
+      ${K.uvMax === null ? "" : `<p class="cd-sub">Máximo previsto hoy: ${Math.round(K.uvMax)} (${uvCategoria(K.uvMax).nombre})</p>`}`}
+    </article>`,
+    `<article class="cd-slide"><h3>${ic("droplet")}Humedad</h3>
+      <p class="cd-grande">${fmt(c.relative_humidity_2m, "%", 0)}</p>
+      <div class="hum-barra"><i style="width:${Math.max(0, Math.min(100, c.relative_humidity_2m || 0))}%"></i></div>
+      <p class="cd-sub">Humedad relativa del aire en tu zona.</p></article>`,
+    `<article class="cd-slide"><h3>${ic("clock")}Próximas horas</h3>
+      <ul class="cd-horas">${horas.slice(0, 8).map((t, i) => `<li><span>${t.slice(11, 16)}</span><strong>${fmt(tempH[i], "°", 0)}</strong><span>${ic("umbrella")}${probH[i] === null || probH[i] === undefined ? "s/d" : probH[i] + "%"}</span></li>`).join("") || "<li>Sin datos disponibles</li>"}</ul></article>`
+  ];
+  $("#cdSlides").innerHTML = slides.join("");
+  $("#cdPuntos").innerHTML = slides.map((_, i) => `<i class="${i === 0 ? "activo" : ""}"></i>`).join("");
+  $("#cdFuente").textContent = `Open-Meteo · ${c.time.slice(11, 16)} · Escala UV de la OMS`;
 }
 
 /* ---------------------------------------------------------------------
@@ -893,6 +1040,7 @@ function pintarCauceYZonas() {
 }
 
 function estadoReporte(r) {
+  if (r.gestion === "atendido") return "atendido"; // resuelto por la autoridad: deja de mostrarse a los vecinos
   const c = r.confirmaciones || 0, n = r.negaciones || 0;
   if (c + n >= VOTOS_MIN && n > c) return "descartado";
   const ultimo = Math.max(r.creado || 0, r.ultimaConfirmacion || 0, r.verificadoEn || 0);
@@ -900,7 +1048,9 @@ function estadoReporte(r) {
   if (r.verificadoAutoridad || c >= VOTOS_MIN) return "confirmado";
   return "sinValidar";
 }
-const NOMBRE_ESTADO = { sinValidar: "Sin validar", confirmado: "Confirmado", descartado: "Descartado", caducado: "Caducado" };
+const NOMBRE_ESTADO = { sinValidar: "Sin validar", confirmado: "Confirmado", descartado: "Descartado", caducado: "Caducado", atendido: "Atendido" };
+const NOMBRE_GESTION = { pendiente: "Por atender", en_atencion: "En atención", atendido: "Atendido" };
+const gestionDe = (r) => r.gestion || "pendiente";
 
 let firmaReportes = "";
 function pintarReportes(forzar = true) {
@@ -915,7 +1065,7 @@ function pintarReportes(forzar = true) {
   Object.entries(S.reportes || {}).forEach(([id, r]) => {
     if (typeof r?.lat !== "number" || typeof r?.lng !== "number") return;
     const est = estadoReporte(r);
-    if (est === "descartado" || est === "caducado") return; // se ocultan
+    if (est === "descartado" || est === "caducado" || est === "atendido") return; // se ocultan
     const T = TIPOS_REPORTE[r.tipo] || TIPOS_REPORTE.otro;
     const conf = est === "confirmado";
     const icono = L.divIcon({
@@ -961,6 +1111,22 @@ function htmlItemReporte(x) {
       <span class="item-meta">${hace(x.r.creado)}${dist}</span></span>
     <span class="estado-badge ${badge[0]}">${badge[1]}</span></button></li>`;
 }
+/* Tarjeta con más detalle para la hoja del mapa: descripción, distancia, votos y gestión */
+function htmlItemDetalle(x) {
+  const T = TIPOS_REPORTE[x.r.tipo] || TIPOS_REPORTE.otro;
+  const badge = x.r.verificadoAutoridad ? ["autoridad", "Verificado"] : x.est === "confirmado" ? ["confirmado", "Confirmado"] : ["sinValidar", "Sin validar"];
+  const dist = x.dist === null ? "" : x.dist < 1000 ? `${Math.round(x.dist / 10) * 10} m` : `${(x.dist / 1000).toFixed(1)} km`;
+  const g = gestionDe(x.r);
+  return `<li><button class="item-reporte item-detalle" data-rep="${esc(x.id)}">
+    <span class="item-foto" data-foto-item="${esc(x.id)}">${ic(T.icono)}</span>
+    <span class="item-cuerpo">
+      <span class="item-titulo">${esc(T.nombre)}${trazoDe(x.r) ? ` (tramo de ${Math.round(x.r.largo || 0)} m)` : ""}</span>
+      ${x.r.descripcion ? `<span class="item-desc">${esc(x.r.descripcion)}</span>` : ""}
+      <span class="item-meta">${dist ? `${ic("map-pin")}${dist} · ` : ""}${hace(x.r.creado)} · ${x.r.confirmaciones || 0} confirman</span>
+      <span class="item-badges"><span class="estado-badge ${badge[0]}">${badge[1]}</span>${g === "en_atencion" ? '<span class="estado-badge gestion">La autoridad lo atiende</span>' : ""}</span>
+    </span>
+    ${ic("chevron-right", "item-ir")}</button></li>`;
+}
 async function cargarMiniaturas(cont, max = 10) {
   const spans = [...cont.querySelectorAll("[data-foto-item]")].slice(0, max);
   for (const sp of spans) {
@@ -980,12 +1146,20 @@ function renderListas() {
   const ini = $("#listaReportesInicio");
   ini.innerHTML = cerca.slice(0, 3).map(htmlItemReporte).join("");
   cargarMiniaturas(ini, 3);
-  const conf = items.filter((x) => x.est === "confirmado").length;
-  const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
-  $("#resumenReportes").textContent = items.length ? `${pl(items.length, "activo", "activos")} · ${pl(conf, "confirmado", "confirmados")}` : "ninguno activo";
-  const fil = items.filter((x) => filtroMapa === "todos" || x.est === filtroMapa);
+  // Hoja del mapa: solo reportes a menos de 2 km de la persona (no los de toda la ciudad)
   const lm = $("#listaReportesMapa");
-  lm.innerHTML = fil.length ? fil.map(htmlItemReporte).join("") : '<li class="lista-vacia">No hay reportes con este filtro.</li>';
+  const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+  $("#hojaAviso").hidden = !!S.ubicacion;
+  $(".hoja-mapa .filtros").hidden = !S.ubicacion;
+  if (!S.ubicacion) {
+    $("#resumenReportes").textContent = "activa tu ubicación";
+    lm.innerHTML = "";
+    return;
+  }
+  const cercaLista = items.filter((x) => x.dist !== null && x.dist <= RADIO_LISTA_M);
+  $("#resumenReportes").textContent = cercaLista.length ? `${pl(cercaLista.length, "cerca de ti", "cerca de ti")} · a menos de ${RADIO_LISTA_M / 1000} km` : `ninguno a menos de ${RADIO_LISTA_M / 1000} km`;
+  const fil = cercaLista.filter((x) => filtroMapa === "todos" || x.est === filtroMapa);
+  lm.innerHTML = fil.length ? fil.map(htmlItemDetalle).join("") : `<li class="lista-vacia">${cercaLista.length ? "No hay reportes con este filtro." : `No hay reportes a menos de ${RADIO_LISTA_M / 1000} km de ti.`}</li>`;
   cargarMiniaturas(lm, 10);
 }
 function verReporteEnMapa(id) {
@@ -1020,6 +1194,7 @@ function htmlPopup(id, r, est) {
       <span class="cuenta">${estado} · ${hace(r.creado)}${trazoDe(r) ? ` · tramo de ${Math.round(r.largo || 0)} m` : ""}</span></div>
     </div>
     ${r.descripcion ? `<p class="popup-desc">${esc(r.descripcion)}</p>` : ""}
+    ${gestionDe(r) === "en_atencion" ? `<p class="gestion-nota">${ic("shield-user")}La autoridad lo está atendiendo</p>` : ""}
     <p class="pregunta">¿Sigue este problema?</p>
     <div class="votos">
       <button class="si" data-voto="1" data-id="${esc(id)}" ${dis}>${ic("check")}Confirmar</button>
@@ -1597,10 +1772,21 @@ function renderCintaDemo() {
   setTimeout(() => mapa?.invalidateSize(), 50);
 }
 
-function abrirAdmin() { $("#panelAdmin").hidden = false; renderAdmin(); }
+/* Modo autoridad: se activa con ?admin=1 o 5 toques en el logo y queda guardado en este celular.
+   Agrega la pestaña "Control" (estado de la quebrada y gestión de reportes). */
+const esAutoridad = () => lsGet("previunt_autoridad", false) === true;
+let filtroGestion = "pendiente";
+function aplicarModoAutoridad() {
+  const on = esAutoridad();
+  document.body.classList.toggle("autoridad", on);
+  $(".nav-autoridad").hidden = !on;
+  $("#badgeAutoridad").hidden = !on;
+  if (!on && $("#tab-control").classList.contains("activa")) irATab("inicio");
+}
+function abrirAdmin() { lsSet("previunt_autoridad", true); aplicarModoAutoridad(); irATab("control"); renderAdmin(); }
 
 function renderAdmin() {
-  if ($("#panelAdmin").hidden) return;
+  if (!esAutoridad()) return;
   const e = estadoEfectivo();
   const eb = estadoBase();
   $$(".btn-nivel").forEach((b) => b.classList.toggle("actual", eb.nivel === Number(b.dataset.nivel) && eb.fuente !== "sinReportes"));
@@ -1617,19 +1803,51 @@ function renderAdmin() {
     ? `Último estado oficial: ${esc(NIVELES[s.nivel]?.corto ?? s.nivel)} · ${esc(s.fuente || "sin fuente")} · ${fechaHora(Number(s.actualizado))}`
     : "Aún no se publicó un estado oficial.";
 
-  const lista = Object.entries(S.reportes || {}).sort((a, b) => b[1].creado - a[1].creado);
-  $("#adminReportes").innerHTML = lista.length ? lista.map(([id, r]) => {
+  renderControlReportes();
+}
+
+/* Gestión de reportes para la autoridad: por atender, en atención, atendidos */
+function renderControlReportes() {
+  const todos = Object.entries(S.reportes || {}).filter(([, r]) => r && typeof r.lat === "number");
+  const cuenta = { pendiente: 0, en_atencion: 0, atendido: 0 };
+  todos.forEach(([, r]) => { cuenta[gestionDe(r)]++; });
+  $("#ctlResumen").textContent = `${cuenta.pendiente} por atender`;
+  $$(".ctl-filtros .filtro").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.gestion === filtroGestion));
+    const n = b.dataset.gestion === "todos" ? todos.length : cuenta[b.dataset.gestion];
+    b.textContent = `${{ pendiente: "Por atender", en_atencion: "En atención", atendido: "Atendidos", todos: "Todos" }[b.dataset.gestion]} (${n})`;
+  });
+  const lista = todos
+    .filter(([, r]) => filtroGestion === "todos" || gestionDe(r) === filtroGestion)
+    .sort((a, b) => (b[1].creado || 0) - (a[1].creado || 0));
+  const votosSim = lsGet("previunt_votosSim", false) === true;
+  const cont = $("#adminReportes");
+  cont.innerHTML = lista.length ? lista.map(([id, r]) => {
     const T = TIPOS_REPORTE[r.tipo] || TIPOS_REPORTE.otro;
-    const est = estadoReporte(r);
-    return `<li><strong>${esc(T.nombre)}</strong>${trazoDe(r) ? ` · tramo ~${Math.round(r.largo || 0)} m` : ""} · ${NOMBRE_ESTADO[est]}${r.verificadoAutoridad ? " · ✔ autoridad" : ""}<br>
-      <span class="meta">${esc((r.descripcion || "").slice(0, 80))} · ${fechaHora(r.creado)} · ${r.confirmaciones || 0} confirman, ${r.negaciones || 0} descartan</span>
-      <div class="acciones-admin">
-        <button data-acc="verificar" data-id="${esc(id)}">${r.verificadoAutoridad ? "Quitar verificación" : "Verificar (autoridad)"}</button>
-        <button data-acc="si" data-id="${esc(id)}">+1 confirmar (simulado)</button>
-        <button data-acc="no" data-id="${esc(id)}">+1 ya no está (simulado)</button>
-        <button data-acc="borrar" data-id="${esc(id)}">Eliminar</button>
+    const est = estadoReporte(r), g = gestionDe(r);
+    const comunidad = est === "atendido" ? "" : `<span class="estado-badge ${est === "confirmado" ? "confirmado" : "sinValidar"}">${NOMBRE_ESTADO[est]}</span>`;
+    const accionG = g === "pendiente" ? `<button class="prim" data-acc="atencion" data-id="${esc(id)}">${ic("clipboard-list")}Atender</button>`
+      : g === "en_atencion" ? `<button class="prim" data-acc="atendido" data-id="${esc(id)}">${ic("check-check")}Marcar atendido</button>`
+      : `<button data-acc="reabrir" data-id="${esc(id)}">Reabrir</button>`;
+    return `<li class="ctl-item gestion-${g}">
+      <div class="ctl-fila">
+        <span class="item-foto" data-foto-item="${esc(id)}">${ic(T.icono)}</span>
+        <div class="ctl-info">
+          <strong>${esc(T.nombre)}${trazoDe(r) ? ` (tramo de ${Math.round(r.largo || 0)} m)` : ""}</strong>
+          ${r.descripcion ? `<p>${esc(r.descripcion)}</p>` : ""}
+          <span class="meta">${fechaHora(r.creado)} · ${r.confirmaciones || 0} confirman, ${r.negaciones || 0} dicen que ya no está</span>
+          <span class="item-badges"><span class="estado-badge g-${g}">${NOMBRE_GESTION[g]}</span>${comunidad}${r.verificadoAutoridad ? '<span class="estado-badge autoridad">Verificado</span>' : ""}</span>
+        </div>
+      </div>
+      <div class="ctl-acciones">
+        ${accionG}
+        <button data-acc="mapa" data-id="${esc(id)}">${ic("map-pin")}Ver en mapa</button>
+        <button data-acc="verificar" data-id="${esc(id)}">${ic("badge-check")}${r.verificadoAutoridad ? "Quitar verificación" : "Verificar"}</button>
+        <button data-acc="borrar" data-id="${esc(id)}" aria-label="Eliminar reporte">${ic("trash-2")}</button>
+        ${votosSim ? `<button data-acc="si" data-id="${esc(id)}">+1 confirmar (demo)</button><button data-acc="no" data-id="${esc(id)}">+1 ya no está (demo)</button>` : ""}
       </div></li>`;
-  }).join("") : '<li class="meta">No hay reportes.</li>';
+  }).join("") : `<li class="lista-vacia">No hay reportes ${filtroGestion === "todos" ? "" : `"${NOMBRE_GESTION[filtroGestion].toLowerCase()}"`}.</li>`;
+  cargarMiniaturas(cont, 12);
 }
 
 function prepararAdmin() {
@@ -1640,9 +1858,16 @@ function prepararAdmin() {
     toques = toques.filter((x) => t - x < 3000).concat(t);
     if (toques.length >= 5) { toques = []; abrirAdmin(); }
   });
+  aplicarModoAutoridad();
   if (new URLSearchParams(location.search).get("admin") === "1") abrirAdmin();
 
-  $("#btnCerrarAdmin").onclick = () => ($("#panelAdmin").hidden = true);
+  $("#btnSalirAutoridad").onclick = () => {
+    if (!confirm("¿Salir del modo autoridad en este celular?")) return;
+    lsSet("previunt_autoridad", false); aplicarModoAutoridad(); irATab("inicio");
+  };
+  $$(".ctl-filtros .filtro").forEach((b) => b.addEventListener("click", () => { filtroGestion = b.dataset.gestion; renderControlReportes(); }));
+  $("#chkVotosSim").checked = lsGet("previunt_votosSim", false) === true;
+  $("#chkVotosSim").onchange = (e) => { lsSet("previunt_votosSim", e.target.checked); renderControlReportes(); };
   $$(".btn-nivel").forEach((b) => b.addEventListener("click", async () => {
     const n = Number(b.dataset.nivel);
     const simular = $("#chkSimular").checked;
@@ -1684,6 +1909,10 @@ function prepararAdmin() {
     const b = e.target.closest("[data-acc]"); if (!b) return;
     const id = b.dataset.id, r = S.reportes[id]; if (!r) return;
     try {
+      if (b.dataset.acc === "mapa") { verReporteEnMapa(id); return; }
+      if (b.dataset.acc === "atencion") { await Datos.actualizarReporte(id, { gestion: "en_atencion", gestionEn: ahora(), gestionPor: Datos.uid }); toast("Reporte en atención"); }
+      if (b.dataset.acc === "atendido") { await Datos.actualizarReporte(id, { gestion: "atendido", gestionEn: ahora(), gestionPor: Datos.uid }); toast("Reporte atendido: deja de mostrarse a los vecinos"); }
+      if (b.dataset.acc === "reabrir") { await Datos.actualizarReporte(id, { gestion: "pendiente", gestionEn: ahora(), gestionPor: Datos.uid }); toast("Reporte reabierto"); }
       if (b.dataset.acc === "verificar") await Datos.actualizarReporte(id, { verificadoAutoridad: !r.verificadoAutoridad, verificadoEn: ahora() });
       if (b.dataset.acc === "si") await Datos.votar(id, 1, "sim_" + idAleatorio().slice(0, 8));
       if (b.dataset.acc === "no") await Datos.votar(id, -1, "sim_" + idAleatorio().slice(0, 8));
@@ -1777,7 +2006,16 @@ async function iniciar() {
   $("#btnReportar").onclick = abrirReporte;
   $("#btnSonidoSirena").onclick = () => Sirena.desbloquear();
   $("#btnSilenciar").onclick = () => Sirena.silenciar();
-  $("#btnUbicacion").onclick = async () => { if (await pedirUbicacion()) cargarClima(); };
+  $("#btnUbicacion").onclick = async (e) => { e.stopPropagation(); if (await pedirUbicacion()) cargarClima(); };
+  $("#tarjetaClima").addEventListener("click", (e) => { if (!e.target.closest("#btnUbicacion")) abrirClimaDetalle(); });
+  $("#tarjetaClima").addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.id === "tarjetaClima") { e.preventDefault(); abrirClimaDetalle(); } });
+  $("#btnCerrarClima").onclick = cerrarClimaDetalle;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#climaDetalle").hidden) cerrarClimaDetalle(); });
+  $("#cdSlides").addEventListener("scroll", () => {
+    const el = $("#cdSlides"), i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+    $$("#cdPuntos i").forEach((p, k) => p.classList.toggle("activo", k === i));
+  }, { passive: true });
+  $("#btnHojaUbicacion").onclick = async () => { if (await pedirUbicacion()) { renderListas(); cargarClima(); } };
 
   prepararFormReporte();
   prepararAdmin();
