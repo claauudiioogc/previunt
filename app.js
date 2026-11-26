@@ -802,7 +802,6 @@ async function cargarClima() {
       tipo: tipoCielo(c.weather_code, c.is_day !== 0)
     };
     renderClima();
-    if (!$("#climaDetalle").hidden) renderClimaDetalle();
   } catch (e) {
     console.warn("Clima:", e);
     S.clima = null;
@@ -820,91 +819,17 @@ function renderClima() {
   ponerCielo($("#climaCielo"), K.tipo, false);
   const uv = K.uv, cat = uv === null ? null : uvCategoria(uv);
   $("#climaCuerpo").innerHTML = `
-    <div class="cc-top">
-      <div class="cc-temp"><span class="cc-t">${fmt(c.temperature_2m, "°", 0)}</span><span class="cc-desc">${ic(ico)}${esc(desc)}</span></div>
-      <span class="cc-mas">Ver más ${ic("chevron-right")}</span>
-    </div>
+    <div class="cc-temp"><span class="cc-t">${fmt(c.temperature_2m, "°", 0)}</span><span class="cc-desc">${ic(ico)}${esc(desc)}</span></div>
     <div class="cc-datos">
       <div><span class="k">Lluvia ahora</span><span class="v">${fmt(c.precipitation, " mm")}</span></div>
       <div><span class="k">Prob. 6 h</span><span class="v">${K.probMax === null ? "s/d" : K.probMax + "%"}</span></div>
       <div><span class="k">Hoy</span><span class="v">${fmt(K.hoy, " mm")}</span></div>
       <div><span class="k">Humedad</span><span class="v">${fmt(c.relative_humidity_2m, "%", 0)}</span></div>
-    </div>
-    <div class="cc-uv">
-      <span class="k">${ic("sun")}Índice UV</span>
-      <span class="v">${uv === null ? "s/d" : `${cat.nombre}`}</span>
-      ${uv === null ? "" : htmlUvBarra(uv)}
+      <div class="cc-uv"><span class="k">UV ${uv === null ? "" : esc(cat.nombre.toLowerCase())}</span><span class="v">${uv === null ? "s/d" : Math.round(uv)}</span>${uv === null ? "" : htmlUvBarra(uv)}</div>
     </div>`;
   $("#climaFuente").textContent = `Open-Meteo · ${c.time.slice(11, 16)}`;
 }
 
-/* Pantalla ampliada del clima: animación grande y tarjetas deslizables */
-function abrirClimaDetalle() {
-  if (!S.clima) { toast("Sin datos de clima disponibles."); return; }
-  $("#climaDetalle").hidden = false;
-  document.body.classList.add("sin-scroll");
-  renderClimaDetalle();
-  $("#cdSlides").scrollLeft = 0;
-  $("#btnCerrarClima").focus();
-}
-function cerrarClimaDetalle() {
-  $("#climaDetalle").hidden = true;
-  document.body.classList.remove("sin-scroll");
-  $("#climaDetalleCielo").dataset.tipo = "";
-  $("#climaDetalleCielo").innerHTML = "";
-}
-function renderClimaDetalle() {
-  const K = S.clima; if (!K) return;
-  const c = K.c, H = K.hourly || {};
-  const [ico, desc] = CODIGOS_WMO[c.weather_code] || ["thermometer", "—"];
-  ponerCielo($("#climaDetalleCielo"), K.tipo, true);
-  $("#cdLugar").innerHTML = `${ic("map-pin")}${esc(K.lugar)}`;
-  $("#cdTemp").textContent = fmt(c.temperature_2m, "°", 0);
-  $("#cdDesc").innerHTML = `${ic(ico)}${esc(desc)}`;
-  const serie = (k) => Array.isArray(H[k]) ? H[k] : [];
-  const horas = serie("time").slice(K.desde, K.desde + 12);
-  const probH = serie("precipitation_probability").slice(K.desde, K.desde + 12);
-  const tempH = serie("temperature_2m").slice(K.desde, K.desde + 12);
-  const uv = K.uv, cat = uv === null ? null : uvCategoria(uv);
-  const barras = horas.map((t, i) => {
-    const p = probH[i];
-    return `<div class="cd-barra"><span class="cd-barra-v" style="height:${p === null || p === undefined ? 0 : Math.max(4, p)}%"></span><span class="cd-barra-h">${t.slice(11, 13)}</span></div>`;
-  }).join("");
-  const slides = [
-    `<article class="cd-slide"><h3>${ic("thermometer")}Ahora</h3>
-      <div class="cd-filas">
-        <div><span>Sensación térmica</span><strong>${fmt(c.apparent_temperature, "°", 0)}</strong></div>
-        <div><span>Viento</span><strong>${fmt(c.wind_speed_10m, " km/h", 0)}</strong></div>
-        <div><span>Humedad</span><strong>${fmt(c.relative_humidity_2m, "%", 0)}</strong></div>
-        <div><span>Lluvia ahora</span><strong>${fmt(c.precipitation, " mm")}</strong></div>
-      </div></article>`,
-    `<article class="cd-slide"><h3>${ic("cloud-rain")}Lluvia</h3>
-      <div class="cd-filas cd-filas-3">
-        <div><span>Prob. 6 h</span><strong>${K.probMax === null ? "s/d" : K.probMax + "%"}</strong></div>
-        <div><span>Acumulado hoy</span><strong>${fmt(K.hoy, " mm")}</strong></div>
-        <div><span>Ahora</span><strong>${fmt(c.precipitation, " mm")}</strong></div>
-      </div>
-      <p class="cd-sub">Probabilidad de lluvia, próximas 12 horas</p>
-      <div class="cd-barras">${barras || '<p class="cd-sub">Sin datos disponibles</p>'}</div></article>`,
-    `<article class="cd-slide"><h3>${ic("sun")}Índice UV</h3>
-      ${uv === null ? '<p class="cd-grande">s/d</p><p class="cd-sub">Sin datos disponibles</p>' : `
-      <p class="cd-grande">${Math.round(uv)} <span>${cat.nombre}</span></p>
-      ${htmlUvBarra(uv)}
-      <div class="uv-escala"><span>Bajo</span><span>Moderado</span><span>Alto</span><span>Muy alto</span><span>Extremo</span></div>
-      <p class="cd-consejo">${esc(cat.consejo)}</p>
-      ${K.uvMax === null ? "" : `<p class="cd-sub">Máximo previsto hoy: ${Math.round(K.uvMax)} (${uvCategoria(K.uvMax).nombre})</p>`}`}
-    </article>`,
-    `<article class="cd-slide"><h3>${ic("droplet")}Humedad</h3>
-      <p class="cd-grande">${fmt(c.relative_humidity_2m, "%", 0)}</p>
-      <div class="hum-barra"><i style="width:${Math.max(0, Math.min(100, c.relative_humidity_2m || 0))}%"></i></div>
-      <p class="cd-sub">Humedad relativa del aire en tu zona.</p></article>`,
-    `<article class="cd-slide"><h3>${ic("clock")}Próximas horas</h3>
-      <ul class="cd-horas">${horas.slice(0, 8).map((t, i) => `<li><span>${t.slice(11, 16)}</span><strong>${fmt(tempH[i], "°", 0)}</strong><span>${ic("umbrella")}${probH[i] === null || probH[i] === undefined ? "s/d" : probH[i] + "%"}</span></li>`).join("") || "<li>Sin datos disponibles</li>"}</ul></article>`
-  ];
-  $("#cdSlides").innerHTML = slides.join("");
-  $("#cdPuntos").innerHTML = slides.map((_, i) => `<i class="${i === 0 ? "activo" : ""}"></i>`).join("");
-  $("#cdFuente").textContent = `Open-Meteo · ${c.time.slice(11, 16)} · Escala UV de la OMS`;
-}
 
 /* ---------------------------------------------------------------------
    UBICACIÓN
@@ -1979,10 +1904,40 @@ async function iniciar() {
   const listaClick = (ev) => { const b = ev.target.closest("[data-rep]"); if (b) verReporteEnMapa(b.dataset.rep); };
   $("#listaReportesInicio").addEventListener("click", listaClick);
   $("#listaReportesMapa").addEventListener("click", listaClick);
-  $("#asaHoja").onclick = () => {
-    const h = $("#hojaMapa"), abierta = h.dataset.abierta !== "true";
+  const fijarHoja = (abierta) => {
+    const h = $("#hojaMapa");
+    h.style.transform = ""; h.style.transition = "";
     h.dataset.abierta = String(abierta); $("#asaHoja").setAttribute("aria-expanded", String(abierta));
   };
+  let arrastrada = false;
+  $("#asaHoja").onclick = () => {
+    if (arrastrada) { arrastrada = false; return; } // el gesto ya decidió
+    fijarHoja($("#hojaMapa").dataset.abierta !== "true");
+  };
+  // Deslizar la hoja hacia arriba o hacia abajo con el dedo (además del toque)
+  (() => {
+    const h = $("#hojaMapa"), asa = $("#asaHoja");
+    let y0 = null, base = 0, dy = 0;
+    const cerrada = () => h.getBoundingClientRect().height - 64;
+    asa.addEventListener("touchstart", (e) => {
+      y0 = e.touches[0].clientY; dy = 0;
+      base = h.dataset.abierta === "true" ? 0 : cerrada();
+      h.style.transition = "none";
+    }, { passive: true });
+    asa.addEventListener("touchmove", (e) => {
+      if (y0 === null) return;
+      dy = e.touches[0].clientY - y0;
+      const t = Math.max(0, Math.min(cerrada(), base + dy));
+      h.style.transform = `translateY(${t}px)`;
+      if (Math.abs(dy) > 6) e.preventDefault();
+    }, { passive: false });
+    asa.addEventListener("touchend", () => {
+      if (y0 === null) return;
+      y0 = null;
+      if (Math.abs(dy) > 30) { arrastrada = true; fijarHoja(dy < 0); setTimeout(() => { arrastrada = false; }, 400); }
+      else { h.style.transform = ""; h.style.transition = ""; }
+    });
+  })();
   $$(".filtro").forEach((b) => b.addEventListener("click", () => {
     filtroMapa = b.dataset.filtro;
     $$(".filtro").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
@@ -2007,14 +1962,6 @@ async function iniciar() {
   $("#btnSonidoSirena").onclick = () => Sirena.desbloquear();
   $("#btnSilenciar").onclick = () => Sirena.silenciar();
   $("#btnUbicacion").onclick = async (e) => { e.stopPropagation(); if (await pedirUbicacion()) cargarClima(); };
-  $("#tarjetaClima").addEventListener("click", (e) => { if (!e.target.closest("#btnUbicacion")) abrirClimaDetalle(); });
-  $("#tarjetaClima").addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.id === "tarjetaClima") { e.preventDefault(); abrirClimaDetalle(); } });
-  $("#btnCerrarClima").onclick = cerrarClimaDetalle;
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#climaDetalle").hidden) cerrarClimaDetalle(); });
-  $("#cdSlides").addEventListener("scroll", () => {
-    const el = $("#cdSlides"), i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
-    $$("#cdPuntos i").forEach((p, k) => p.classList.toggle("activo", k === i));
-  }, { passive: true });
   $("#btnHojaUbicacion").onclick = async () => { if (await pedirUbicacion()) { renderListas(); cargarClima(); } };
 
   prepararFormReporte();

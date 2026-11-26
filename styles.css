@@ -577,57 +577,10 @@ textarea:focus { outline: none; border-color: var(--azul); }
 .estrella { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff; animation: titilar 3s ease-in-out infinite; }
 @keyframes titilar { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 
-/* Versión grande (pantalla ampliada) */
-.cielo-grande .sol { width: 300px; height: 300px; right: -70px; top: -70px; }
-.cielo-grande .sol-disco { inset: 75px; }
-.cielo-grande .nube { transform: scale(1.8); }
-.cielo-grande .nube-1 { top: 80px; } .cielo-grande .nube-2 { top: 190px; } .cielo-grande .nube-3 { top: 30px; }
-.cielo-grande .luna { width: 90px; height: 90px; right: 40px; top: 50px; box-shadow: -22px 12px 0 0 #FFF3C4; }
-
 @media (prefers-reduced-motion: reduce) {
   .sol-rayos, .nube, .gota, .destello, .estrella { animation: none !important; }
   .gota { display: none; }
 }
-
-.clima-detalle { position: fixed; inset: 0; z-index: 4400; color: #fff; display: flex; flex-direction: column; overflow: hidden;
-  padding: calc(var(--cinta-h) + 12px) 0 calc(18px + var(--safe-b)); text-shadow: 0 1px 3px rgba(0,0,0,.35); }
-.clima-detalle > :not(.cielo) { position: relative; z-index: 2; }
-body.sin-scroll { overflow: hidden; }
-.cd-cab { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; }
-.cd-lugar { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; margin: 0; }
-.cerrar-claro { background: rgba(255,255,255,.22); color: #fff; }
-.cd-principal { padding: 18px 20px 10px; display: flex; flex-direction: column; gap: 6px; }
-.cd-temp { font-size: 5rem; font-weight: 750; line-height: 1; }
-.cd-desc { display: inline-flex; align-items: center; gap: 8px; font-size: 1.2rem; font-weight: 600; }
-.cd-slides { flex: 1; display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 8px 20px; scrollbar-width: none; align-items: flex-start; }
-.cd-slides::-webkit-scrollbar { display: none; }
-.cd-slide { flex: 0 0 calc(100% - 8px); scroll-snap-align: center; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.25);
-  border-radius: 20px; padding: 16px; backdrop-filter: blur(6px); min-height: 260px; }
-.cd-slide h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 1rem; }
-.cd-filas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.cd-filas-3 { grid-template-columns: repeat(3, 1fr); }
-.cd-filas div { background: rgba(255,255,255,.14); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
-.cd-filas span { font-size: .78rem; opacity: .92; }
-.cd-filas strong { font-size: 1.35rem; }
-.cd-grande { font-size: 3rem; font-weight: 750; margin: 6px 0 10px; line-height: 1; }
-.cd-grande span { font-size: 1.3rem; font-weight: 650; }
-.cd-sub { font-size: .85rem; opacity: .92; margin-top: 10px; }
-.cd-consejo { margin-top: 12px; font-weight: 600; }
-.uv-escala { display: flex; justify-content: space-between; font-size: .66rem; opacity: .9; margin-top: 6px; }
-.hum-barra { height: 10px; border-radius: 5px; background: rgba(255,255,255,.25); overflow: hidden; }
-.hum-barra i { display: block; height: 100%; background: linear-gradient(90deg, #B3E5FC, #4FC3F7); border-radius: 5px; }
-.cd-barras { display: flex; align-items: flex-end; gap: 4px; height: 110px; margin-top: 8px; }
-.cd-barra { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
-.cd-barra-v { width: 100%; background: rgba(179,229,252,.85); border-radius: 4px 4px 0 0; }
-.cd-barra-h { font-size: .66rem; opacity: .9; }
-.cd-horas { list-style: none; padding: 0; margin: 0; }
-.cd-horas li { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.2); }
-.cd-horas li:first-child { border-top: 0; }
-.cd-horas li span:last-child { display: inline-flex; justify-content: flex-end; align-items: center; gap: 4px; }
-.cd-puntos { display: flex; justify-content: center; gap: 6px; padding: 8px 0 4px; }
-.cd-puntos i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.45); transition: width .2s; }
-.cd-puntos i.activo { width: 20px; border-radius: 4px; background: #fff; }
-.cd-fuente { text-align: center; font-size: .72rem; opacity: .85; margin: 4px 16px 0; }
 
 /* =========================================================
    HOJA DE REPORTES DEL MAPA: abre a media pantalla con detalle
@@ -681,3 +634,35 @@ body.autoridad .barra { background: #1B2A3A; }
 .clima-card .sol { width: 96px; height: 96px; right: -30px; top: -30px; }
 .clima-card .sol-disco { inset: 24px; }
 .clima-card .luna { width: 34px; height: 34px; right: 12px; top: 10px; box-shadow: -9px 5px 0 0 #FFF3C4; }
+.logo-marca { width: 34px; height: 34px; }
+
+/* Tarjeta del clima compacta (más baja que la del estado de la quebrada) */
+.clima-card { min-height: 0; cursor: default; }
+.clima-contenido { padding: 10px 12px 2px; }
+.cc-temp { display: flex; align-items: baseline; gap: 8px; padding-right: 58px; }
+.cc-t { font-size: 1.9rem; }
+.cc-datos { grid-template-columns: repeat(4, 1fr) 1.25fr; gap: 5px; margin-top: 8px; }
+.cc-datos div { padding: 5px 6px 4px; }
+.cc-datos .k { font-size: .64rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-datos .v { font-size: .9rem; }
+.cc-datos .cc-uv { display: flex; margin: 0; background: rgba(255,255,255,.16); padding: 5px 6px 6px; border-radius: 10px; }
+.cc-uv .uv-barra { height: 5px; margin: 5px 2px 1px; }
+.cc-uv .uv-barra i { width: 12px; height: 12px; border-width: 2px; font-size: 0; }
+.clima-card .clima-pie { margin-top: 6px; min-height: 30px; }
+.clima-card .clima-pie .btn-texto { min-height: 30px; }
+.cc-datos .cc-uv .v { text-align: left; }
+.hoja-mapa-asa { touch-action: none; }
+.cc-t { font-size: 1.65rem; }
+.cc-desc { font-size: .88rem; }
+.clima-contenido { padding: 8px 12px 0; }
+.cc-datos { margin-top: 6px; }
+.cc-datos div { padding: 4px 6px 3px; }
+.cc-datos .v { font-size: .85rem; }
+.clima-card .clima-pie { border-top: 0; margin-top: 2px; min-height: 26px; }
+.clima-card .clima-pie .btn-texto { min-height: 26px; font-size: .72rem; }
+.clima-card .fuente { font-size: .66rem; }
+.cc-datos .v { white-space: nowrap; }
+.cc-datos .cc-uv .uv-barra { align-self: stretch; width: auto; display: block; margin: 6px 2px 2px; }
+.cc-datos .uv-barra { background: linear-gradient(90deg, #289500 0%, #F7E400 30%, #F85900 55%, #D8001D 78%, #6B49C8 100%); padding: 0; border-radius: 3px; backdrop-filter: none; height: 5px; }
+.cc-datos .cc-uv { text-align: left; }
+.cc-datos .cc-uv .k, .cc-datos .cc-uv .v { text-align: left; justify-content: flex-start; }
