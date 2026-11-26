@@ -44,7 +44,7 @@ const RADIO_VOTO_M = 1000;                   // solo validan quienes están a me
 const proximidadActiva = () => !!(S.demo && S.demo.proximidad);          // un huaico confirmado a menos de 1 km sube la alerta del usuario
 
 // Acción de Inicio que abre el mapa con la ruta de evacuación desde tu ubicación
-const RUTA_EVAC = { ruta: true, texto: "Consulta tu ruta de evacuación" };
+const RUTA_EVAC = { ruta: true, texto: "Conoce tu ruta" };
 
 // Sistema de colores normado (igual en toda la app)
 /* El estado NO viene de un sensor: lo publica la autoridad (Defensa Civil, COER La Libertad, municipalidad)
@@ -70,7 +70,7 @@ const NIVELES = [
   {
     n: 3, estado: "DESBORDE", corto: "Desborde", color: "#C62828", titulo: "Desborde", icono: "siren",
     mensaje: "Confirmado por la autoridad. Evacúa ahora a zona alta.",
-    acciones: [{ ruta: true, texto: "Evacúa ahora: consulta tu ruta" }, "Si no puedes salir, sube al piso más alto", "No cruces agua ni lodo"]
+    acciones: [{ ruta: true, texto: "Evacúa ahora: conoce tu ruta" }, "Si no puedes salir, sube al piso más alto", "No cruces agua ni lodo"]
   }
 ];
 // Estados que puede publicar la autoridad (el huaico lo marcan los vecinos)
@@ -700,7 +700,7 @@ function textoFuente(e) {
 }
 function renderAcciones(lista) {
   $("#listaAcciones").innerHTML = lista.map((a) => typeof a === "string" ? `<li>${esc(a)}</li>`
-    : `<li class="accion-ruta"><button type="button" data-evac>${ic("route")}<span><strong>${esc(a.texto)}</strong><span class="sub">${esc(resumenEvacuacion())}</span></span>${ic("chevron-right")}</button></li>`).join("");
+    : `<li class="accion-ruta"><button type="button" data-evac>${ic("route")}${esc(a.texto)}${ic("chevron-right")}</button></li>`).join("");
 }
 
 /* Se ejecuta cada vez que cambia el nivel efectivo */
@@ -1626,16 +1626,6 @@ function precalcularEvacuacion() {
 
 const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1).replace(".", ",")} km`);
 const fmtMin = (min) => `${Math.max(1, Math.round(min))} min`;
-/* Resumen corto para la acción de Inicio (o null si aún no hay cálculo para tu ubicación) */
-function resumenEvacuacion() {
-  if (!S.ubicacion) return "Toca para ver la ruta desde tu ubicación";
-  const g = evacGuardada([S.ubicacion.lat, S.ubicacion.lng], peligroActual().clave);
-  if (!g) return "Toca para calcularla desde tu ubicación";
-  if (g.tipo === "lejos") return `Estás a ${fmtDist(g.distPeligro)} del cauce`;
-  const que = g.tipo === "refugio" ? g.destino.nombre : g.tipo === "alta" ? "Zona alta cercana" : "Alejarte del " + (g.peligro === "huaico" ? "huaico" : "cauce");
-  return `${que} · ${fmtDist(g.ruta.largo)} · ${fmtMin(g.ruta.min)} a pie`;
-}
-
 async function mostrarEvacuacion(opciones = {}) {
   cerrarAlarma();
   irATab("mapa");
