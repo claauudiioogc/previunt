@@ -68,6 +68,13 @@
         <svg class="ic ic-flecha" aria-hidden="true"><use href="#i-map"/></svg>
       </button>
 
+      <!-- Reportes hechos sin conexión: se guardan en el celular hasta que el servidor confirme -->
+      <section id="seccionPendientes" class="pendientes" aria-label="Tus reportes por enviar" aria-live="polite" hidden>
+        <h2 class="pend-titulo">Tus reportes por enviar</h2>
+        <ul id="listaPendientes" class="pend-lista"></ul>
+        <p class="fuente">Se guardan en este celular y se envían solos al volver la conexión. Las fotos se suben después de los datos.</p>
+      </section>
+
       <!-- Clima, justo debajo del estado -->
       <section id="tarjetaClima" class="cw-card" aria-label="Clima de tu zona">
         <div id="climaCuerpo"></div>
@@ -314,6 +321,7 @@
           <img id="imgPreview" alt="Vista previa de la foto">
           <button type="button" id="btnQuitarFoto" class="btn-texto">Quitar foto</button>
         </div>
+        <p class="fuente nota-foto">La foto se reduce a 800 px (máx. ~280 KB) para que suba con poca señal. Sin conexión, se guarda en tu celular y se envía después.</p>
       </fieldset>
 
       <fieldset>

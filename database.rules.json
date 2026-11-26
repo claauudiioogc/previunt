@@ -10,6 +10,7 @@
     },
     "reportes": {
       ".read": true,
+      ".indexOn": ["creado"],
       "$id": {
         ".write": "auth != null",
         "descripcion": { ".validate": "newData.isString() && newData.val().length <= 200" },

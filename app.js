@@ -307,23 +307,279 @@ const firebaseConfigurado = () => !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.d
 let serverOffset = 0; // corrección del reloj con el del servidor de Firebase
 const ahora = () => Math.round(Date.now() + serverOffset);
 
+/* ---------------------------------------------------------------------
+   SIN CONEXIÓN: estado de la red, datos guardados y cola de reportes
+   - Red: lo que sabemos de la conexión (Firebase .info/connected + navigator.onLine).
+   - Caché: último estado oficial, demo, historial y clima recibidos del servidor (localStorage).
+     Se muestran SOLO como "dato guardado", nunca como alerta actual.
+   - Cola: reportes hechos sin conexión, guardados en IndexedDB hasta que el servidor confirme.
+--------------------------------------------------------------------- */
+const Red = { conectado: false, enLinea: navigator.onLine !== false, desde: Date.now() };
+const VENTANA_REPORTES_MS = 72 * 3600 * 1000;  // el mapa solo pide reportes de los últimos 3 días
+const MAX_REPORTES = 300;                       // y como máximo los 300 más recientes
+const MAX_HISTORIAL = 30;
+const LIMITE_FOTO_CHARS = 380000;               // las reglas de /fotos aceptan < 400 000 caracteres (~280 KB)
+
+const Cache = {
+  guardar(canal, v) { lsSet("previunt_cache_" + canal, { v, t: Date.now() }); },
+  leer(canal) { return lsGet("previunt_cache_" + canal, null); }
+};
+
+/* Promesa con tiempo límite: un envío sin respuesta no queda colgado para siempre */
+const conTiempo = (p, ms, msg = "Sin respuesta del servidor") =>
+  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+
+/* Espera creciente con variación aleatoria (evita que muchos celulares reintenten a la vez) */
+function esperaReintento(intentos) {
+  const base = Math.min(10 * 60 * 1000, 5000 * 2 ** Math.max(0, intentos - 1));
+  return Math.round(base * (0.5 + Math.random()));
+}
+
+/* IndexedDB mínimo: una sola tienda "pendientes" con clave = id del reporte */
+const BD = {
+  _db: null,
+  abrir() {
+    if (this._db) return this._db;
+    this._db = new Promise((ok, mal) => {
+      if (!("indexedDB" in window)) { mal(new Error("Este navegador no tiene IndexedDB")); return; }
+      const r = indexedDB.open("previunt", 1);
+      r.onupgradeneeded = () => { r.result.createObjectStore("pendientes", { keyPath: "id" }); };
+      r.onsuccess = () => ok(r.result);
+      r.onerror = () => mal(r.error);
+    });
+    return this._db;
+  },
+  async _tx(modo, fn) {
+    const db = await this.abrir();
+    return new Promise((ok, mal) => {
+      const t = db.transaction("pendientes", modo);
+      const st = t.objectStore("pendientes");
+      let res; const req = fn(st);
+      if (req) req.onsuccess = () => { res = req.result; };
+      t.oncomplete = () => ok(res);
+      t.onerror = () => mal(t.error); t.onabort = () => mal(t.error || new Error("Transacción cancelada"));
+    });
+  },
+  todos() { return this._tx("readonly", (st) => st.getAll()); },
+  poner(item) { return this._tx("readwrite", (st) => st.put(item)); },
+  quitar(id) { return this._tx("readwrite", (st) => st.delete(id)); }
+};
+
+/* Id único generado en el celular: el mismo reporte usa siempre la misma clave en el servidor,
+   así un reintento nunca crea un duplicado. */
+const idReporteLocal = () => "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+
+const NOMBRE_COLA = {
+  pendiente: "Pendiente de envío",
+  enviando: "Enviando…",
+  subiendo_foto: "Subiendo foto…",
+  enviado: "Enviado",
+  error: "Error; se reintentará",
+  otra_sesion: "Guardado con otra sesión"
+};
+
+const Cola = {
+  items: [],            // copia en memoria de lo que hay en IndexedDB (para pintar)
+  enviados: [],         // enviados en esta sesión (se muestran un momento como "Enviado")
+  _corriendo: false,
+  _timer: null,
+
+  async cargar() {
+    try { this.items = (await BD.todos()).sort((a, b) => a.creadoLocal - b.creadoLocal); }
+    catch (e) { console.warn("Cola:", e); this.items = []; }
+    renderPendientes(); renderBadgeConexion();
+    this.ejecutar(); // al abrir la app se reintenta lo pendiente
+  },
+  async agregar(datos, foto) {
+    const item = {
+      id: idReporteLocal(), datos, foto: foto || null,
+      uid: Datos.uid || null,           // sesión con la que se creó (null si aún no había sesión)
+      creadoLocal: ahora(), estado: "pendiente", intentos: 0, proximo: 0, error: "",
+      datosOk: false, fotoOk: !foto
+    };
+    await BD.poner(item);                // se guarda ANTES de intentar enviar: no se pierde al cerrar la app
+    this.items.push(item);
+    renderPendientes(); renderBadgeConexion();
+    this.ejecutar();
+    return item;
+  },
+  async _guardar(item) { await BD.poner(item); renderPendientes(); renderBadgeConexion(); },
+  async descartar(id) {
+    await BD.quitar(id);
+    this.items = this.items.filter((x) => x.id !== id);
+    renderPendientes(); renderBadgeConexion();
+  },
+  async usarSesionActual(id) {
+    const it = this.items.find((x) => x.id === id); if (!it || !Datos.uid) return;
+    it.uid = Datos.uid; it.estado = "pendiente"; it.error = ""; it.proximo = 0;
+    await this._guardar(it); this.ejecutar();
+  },
+  programar() {
+    clearTimeout(this._timer);
+    const futuros = this.items.filter((x) => x.estado === "error").map((x) => x.proximo);
+    if (!futuros.length) return;
+    const espera = Math.max(1000, Math.min(...futuros) - Date.now());
+    this._timer = setTimeout(() => this.ejecutar(), espera);
+  },
+
+  /* Envía lo que se pueda. Solo marca "enviado" cuando el servidor confirma (la promesa de Firebase
+     se resuelve al recibir el acuse del servidor). Si algo falla, el reporte se queda guardado. */
+  async ejecutar() {
+    if (this._corriendo) return;
+    if (Datos.modo !== "firebase" || !Red.conectado || !Datos.uid) { renderPendientes(); renderBadgeConexion(); return; }
+    this._corriendo = true; renderBadgeConexion();
+    try {
+      for (const it of [...this.items]) {
+        if (it.estado === "otra_sesion") continue;
+        if (it.estado === "error" && it.proximo > Date.now()) continue;
+        if (!Red.conectado) break;
+        if (it.uid && it.uid !== Datos.uid) { it.estado = "otra_sesion"; await this._guardar(it); continue; }
+        if (!it.uid) it.uid = Datos.uid; // creado antes de tener sesión en este celular: se envía con la de ahora
+        try {
+          if (!it.datosOk) {
+            it.estado = "enviando"; await this._guardar(it);
+            await conTiempo(Datos.crearReporte(it), 20000);
+            it.datosOk = true; await this._guardar(it);
+          }
+          if (!it.fotoOk) {
+            it.estado = "subiendo_foto"; await this._guardar(it);
+            await conTiempo(Datos.subirFoto(it.id, it.foto), 60000, "La foto no terminó de subir");
+            it.fotoOk = true; await this._guardar(it);
+          }
+          await BD.quitar(it.id); // recién aquí se borra la copia local (datos y foto confirmados)
+          this.items = this.items.filter((x) => x.id !== it.id);
+          this.enviados.push({ ...it, foto: null, estado: "enviado", enviadoEn: Date.now() });
+          toast("Tu reporte se envió.");
+        } catch (e) {
+          console.warn("Envío pendiente:", it.id, e);
+          it.intentos += 1;
+          it.estado = "error";
+          it.error = e?.code === "PERMISSION_DENIED" || /permission/i.test(e?.message || "")
+            ? "El servidor rechazó el reporte (permiso)." : (e?.message || "Error de red");
+          it.proximo = Date.now() + esperaReintento(it.intentos);
+          await this._guardar(it);
+        }
+      }
+    } finally {
+      this._corriendo = false;
+      this.programar(); renderPendientes(); renderBadgeConexion();
+    }
+  }
+};
+
+/* Acciones que deben confirmarse en el momento (estado oficial, votos, gestión): sin servidor no se hacen */
+function sinServidor(queNoPaso) {
+  if (Datos.modo === "local" || (Datos.modo === "firebase" && Red.conectado)) return false;
+  toast(`Sin conexión: ${queNoPaso}. Inténtalo cuando vuelva la señal.`, 4500);
+  return true;
+}
+
+/* Indicador de conexión en la cabecera: en línea, sin conexión o sincronizando */
+function renderBadgeConexion() {
+  const b = $("#badgeConexion"); if (!b) return;
+  const n = Cola.items.length;
+  let txt, cls, tit;
+  if (Datos.modo === "local") { txt = "Modo local"; cls = "local"; tit = "Sin Firebase: los datos se guardan solo en este navegador"; }
+  else if (Datos.modo === "firebase" && Red.conectado) {
+    const enCurso = Cola.items.filter((x) => x.estado === "pendiente" || x.estado === "enviando" || x.estado === "subiendo_foto").length;
+    txt = Cola._corriendo || enCurso ? `Sincronizando${enCurso ? ` (${enCurso})` : ""}` : n ? `En línea · ${n} sin enviar` : "En línea";
+    cls = Cola._corriendo || enCurso ? "sync" : "";
+    tit = "Conectado al servidor";
+  } else {
+    txt = n ? `Sin conexión · ${n} por enviar` : "Sin conexión"; cls = "off";
+    tit = `Sin conexión desde las ${hora(Red.desde)}. Lo que ves puede estar desactualizado.`;
+  }
+  b.textContent = "● " + txt; b.title = tit;
+  b.className = "badge-conexion " + cls;
+}
+function cambiarConexion(conectado) {
+  if (conectado === Red.conectado) return;
+  Red.conectado = conectado; Red.desde = Date.now();
+  renderBadgeConexion(); renderTodo();
+  if (conectado) Cola.ejecutar();
+}
+
+/* Lista "Tus reportes por enviar" en Inicio */
+function renderPendientes() {
+  const sec = $("#seccionPendientes"); if (!sec) return;
+  const recientes = Cola.enviados.filter((x) => Date.now() - x.enviadoEn < 60000);
+  const todos = Cola.items.concat(recientes);
+  sec.hidden = todos.length === 0;
+  if (!todos.length) return;
+  $("#listaPendientes").innerHTML = todos.map((it) => {
+    const T = TIPOS_REPORTE[it.datos.tipo] || TIPOS_REPORTE.otro;
+    let estado = NOMBRE_COLA[it.estado] || it.estado, extra = "";
+    if (it.estado === "pendiente" && Datos.modo === "firebase" && Red.conectado && !Datos.uid) estado = "Esperando sesión";
+    if (it.estado === "pendiente" && !Red.conectado) extra = "Se enviará cuando vuelva la conexión.";
+    if (it.estado === "error") extra = `${esc(it.error)} Próximo intento: ${hora(it.proximo)}.`;
+    if (it.estado === "otra_sesion") extra = "Se guardó con otra sesión de este celular. Puedes enviarlo con tu sesión actual o descartarlo.";
+    if (it.datosOk && !it.fotoOk && it.estado !== "subiendo_foto") extra = "Los datos ya se enviaron; falta la foto. " + extra;
+    const botones = it.estado === "otra_sesion"
+      ? `<button class="btn-texto btn-texto-chico" data-cola="sesion" data-id="${esc(it.id)}">Enviar con mi sesión actual</button><button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>`
+      : it.estado === "error" ? `<button class="btn-texto btn-texto-chico" data-cola="reintentar" data-id="${esc(it.id)}">Reintentar ahora</button><button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>` : "";
+    return `<li class="pend-item pend-${it.estado}">
+      <span class="item-foto">${it.foto ? `<img src="${esc(it.foto)}" alt="">` : ic(T.icono)}</span>
+      <span class="pend-cuerpo"><span class="item-titulo">${esc(T.nombre)}</span>
+        <span class="item-meta">Creado ${hora(it.creadoLocal)}${it.foto ? " · con foto" : ""}</span>
+        <span class="pend-estado">${esc(estado)}</span>${extra ? `<span class="pend-extra">${extra}</span>` : ""}
+        ${botones ? `<span class="pend-botones">${botones}</span>` : ""}</span></li>`;
+  }).join("");
+}
+
+/* Valores guardados al abrir la app (solo como referencia, nunca como alerta actual) */
+function cargarDatosGuardados() {
+  if (!firebaseConfigurado()) return;
+  const cs = Cache.leer("sensor"), cd = Cache.leer("demo"), ch = Cache.leer("historial");
+  S.guardado = { sensor: cs, demo: cd };
+  if (cs) S.sensor = cs.v;
+  if (cd) S.demo = cd.v || { activo: false, nivel: 0 };
+  if (ch) S.historial = ch.v || {};
+}
+
 const Datos = {
   modo: "local",
   uid: null,
   _subs: {},
 
   async init() {
-    if (firebaseConfigurado()) {
+    if (!firebaseConfigurado()) { this._initLocal(); return; }
+    try {
+      await this._initFirebase();
+      this.modo = "firebase";
+    } catch (e) {
+      // Sin la librería de Firebase (p. ej. primera vez sin conexión): no se cae a "modo local",
+      // los reportes van a la cola y se reintenta al volver la conexión.
+      console.error("Firebase no disponible:", e);
+      this.modo = "sinConexion";
+      this._reintentarInit();
+    }
+  },
+  _intentosInit: 0,
+  _exigirServidor() { if (this.modo !== "firebase") throw new Error("Sin conexión con el servidor"); },
+  _reintentarInit() {
+    const intentar = async () => {
+      if (this.modo === "firebase") return;
       try {
         await this._initFirebase();
         this.modo = "firebase";
-        return;
+        Object.entries(this._subs).forEach(([canal, cbs]) => cbs.forEach((cb) => this._subFirebase(canal, cb)));
+        renderBadgeConexion();
       } catch (e) {
-        console.error("Firebase no disponible:", e);
-        toast("No se pudo conectar a Firebase. Funcionando en modo local.");
+        // El navegador puede recordar que la librería no cargó. Si ya responde, se recarga la página
+        // (la cola está en IndexedDB, no se pierde nada); si hay un reporte a medio llenar, se espera.
+        try {
+          const r = await fetch(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK}/firebase-app.js`, { cache: "no-store" });
+          const ultima = Number(sessionStorage.getItem("previunt_recarga") || 0);
+          if (r.ok && $("#hojaReporte").hidden && Date.now() - ultima > 120000) {
+            sessionStorage.setItem("previunt_recarga", String(Date.now())); location.reload(); return;
+          }
+        } catch {}
+        this._intentosInit++;
+        setTimeout(intentar, esperaReintento(this._intentosInit));
       }
-    }
-    this._initLocal();
+    };
+    window.addEventListener("online", intentar);
+    setTimeout(intentar, esperaReintento(1));
   },
 
   /* ---------- Modo LOCAL ---------- */
@@ -355,47 +611,77 @@ const Datos = {
       import(`${base}/firebase-auth.js`),
       import(`${base}/firebase-database.js`)
     ]);
-    const app = appM.initializeApp(FIREBASE_CONFIG);
+    const app = appM.getApps().length ? appM.getApp() : appM.initializeApp(FIREBASE_CONFIG);
     this.db = dbM.getDatabase(app);
     this.fb = dbM;
-    try {
-      const auth = authM.getAuth(app);
-      const cred = await authM.signInAnonymously(auth);
-      this.uid = cred.user.uid;
-    } catch (e) {
-      console.warn("Auth anónima falló (¿está habilitada en Firebase?)", e);
-      this.uid = lsGet("previunt_uid", null) || idAleatorio();
-      lsSet("previunt_uid", this.uid);
-      toast("Aviso: activa 'Anónimo' en Firebase Authentication.");
-    }
+    // Sesión anónima: Firebase la guarda en el celular y la recupera sin red.
+    // Sin sesión no se escribe nada (las reglas exigen auth): la cola espera.
+    const auth = authM.getAuth(app);
+    this.auth = auth;
+    try { await conTiempo(auth.authStateReady(), 8000); } catch {}
+    this.uid = auth.currentUser?.uid || null;
+    authM.onAuthStateChanged(auth, (u) => {
+      const antes = this.uid;
+      this.uid = u?.uid || null;
+      if (this.uid !== antes) { renderPendientes(); Cola.ejecutar(); }
+    });
+    const iniciarSesion = async (intento = 1) => {
+      if (auth.currentUser) return;
+      if (navigator.onLine === false) { window.addEventListener("online", () => iniciarSesion(1), { once: true }); return; }
+      try { await conTiempo(authM.signInAnonymously(auth), 15000); }
+      catch (e) {
+        console.warn("Sesión anónima:", e);
+        if (e?.code === "auth/admin-restricted-operation" || e?.code === "auth/operation-not-allowed") {
+          toast("Aviso: activa 'Anónimo' en Firebase Authentication."); return;
+        }
+        setTimeout(() => iniciarSesion(intento + 1), esperaReintento(intento));
+      }
+    };
+    iniciarSesion();
     dbM.onValue(dbM.ref(this.db, ".info/serverTimeOffset"), (s) => { serverOffset = s.val() || 0; });
+    dbM.onValue(dbM.ref(this.db, ".info/connected"), (s) => cambiarConexion(s.val() === true));
     this._rutas = { sensor: "quebrada_san_ildefonso", demo: "demo", reportes: "reportes", historial: "historial_nivel" };
   },
 
   /* ---------- API común ---------- */
   suscribir(canal, cb) {
     if (this.modo === "local") return this._subLocal(canal, cb);
-    const { onValue, ref } = this.fb;
+    (this._subs[canal] = this._subs[canal] || []).push(cb);
+    if (this.modo === "firebase") this._subFirebase(canal, cb);
+  },
+  _subFirebase(canal, cb) {
+    const { onValue, ref, query, orderByChild, limitToLast, startAt } = this.fb;
     let r = ref(this.db, this._rutas[canal]);
-    if (canal === "historial") r = this.fb.query(r, this.fb.orderByChild("fecha"), this.fb.limitToLast(50));
-    onValue(r, (s) => cb(s.val()), (err) => { console.error(canal, err); cb(canal === "reportes" || canal === "historial" ? {} : null); });
+    // Historial: solo los últimos cambios. Reportes: solo los recientes (ventana de 3 días, máx. 300).
+    // Requiere ".indexOn" en las reglas para que el filtro se haga en el servidor.
+    if (canal === "historial") r = query(r, orderByChild("fecha"), limitToLast(MAX_HISTORIAL));
+    if (canal === "reportes") r = query(r, orderByChild("creado"), startAt(ahora() - VENTANA_REPORTES_MS), limitToLast(MAX_REPORTES));
+    onValue(r, (s) => {
+      const v = s.val();
+      if (canal === "sensor" || canal === "demo" || canal === "historial") Cache.guardar(canal, v);
+      if (canal === "sensor" || canal === "demo") S.vivo[canal] = true;
+      cb(v);
+    }, (err) => { console.error(canal, err); });
   },
 
   async publicarEstado(nivel, fuente) {
     // Mismo nodo y mismo campo "nivel" que lee la sirena física (ESP32)
     const valor = { nivel, estado: NIVELES[nivel].estado, actualizado: ahora(), origen: "autoridad", fuente, autor: this.uid };
     if (this.modo === "local") { lsSet("previunt_sensor", valor); this._emitLocal("sensor"); return; }
+    this._exigirServidor();
     await this.fb.set(this.fb.ref(this.db, "quebrada_san_ildefonso"), valor);
   },
 
   async setDemo(activo, nivel, fuente = "") {
     const valor = { activo, nivel: nivelValido(nivel) ? nivel : 0, actualizado: ahora(), fuente };
     if (this.modo === "local") { lsSet("previunt_demo", { ...lsGet("previunt_demo", {}), ...valor }); this._emitLocal("demo"); return; }
+    this._exigirServidor();
     await this.fb.update(this.fb.ref(this.db, "demo"), valor);
   },
 
   async setProximidad(on) {
     if (this.modo === "local") { lsSet("previunt_demo", { ...lsGet("previunt_demo", { activo: false, nivel: 0 }), proximidad: !!on }); this._emitLocal("demo"); return; }
+    this._exigirServidor();
     await this.fb.update(this.fb.ref(this.db, "demo"), { proximidad: !!on });
   },
 
@@ -407,6 +693,7 @@ const Datos = {
       while (ids.length > 100) delete h[ids.shift()];
       lsSet("previunt_historial", h); this._emitLocal("historial"); return;
     }
+    this._exigirServidor();
     // id determinístico: si varios celulares detectan el mismo cambio, se escribe una sola vez
     await this.fb.set(this.fb.ref(this.db, `historial_nivel/${id}`), entrada);
   },
@@ -439,6 +726,27 @@ const Datos = {
     return key;
   },
 
+  /* Crea el reporte con el id local SOLO si no existe (transacción): un reintento no lo duplica
+     ni pisa los votos que ya tenga. Se resuelve cuando el servidor confirma. */
+  async crearReporte(it) {
+    const rep = {
+      ...it.datos, autor: it.uid, creado: it.creadoLocal,
+      confirmaciones: 0, negaciones: 0, verificadoAutoridad: false,
+      tieneFoto: false, ...(it.foto ? { fotoPendiente: true } : {})
+    };
+    const ref = this.fb.ref(this.db, `reportes/${it.id}`);
+    const tx = await this.fb.runTransaction(ref, (actual) => (actual === null ? rep : undefined), { applyLocally: false });
+    if (tx.committed) return "creado";
+    const v = tx.snapshot.val();
+    if (v && v.autor === it.uid) return "ya_existia";          // el intento anterior sí llegó
+    throw new Error("Ya existe un reporte con ese identificador");
+  },
+  /* La foto va después, en /fotos/{id}. Recién cuando el servidor confirma, el reporte la anuncia. */
+  async subirFoto(id, foto) {
+    await this.fb.set(this.fb.ref(this.db, `fotos/${id}`), foto);
+    await this.fb.update(this.fb.ref(this.db, `reportes/${id}`), { tieneFoto: true, fotoPendiente: null });
+  },
+
   /* voto: 1 = "Sigue ahí", -1 = "Ya no está". uidVoto permite votos SIMULADOS desde el centro de control. */
   async votar(id, voto, uidVoto = this.uid) {
     const aplicar = (r) => {
@@ -457,6 +765,7 @@ const Datos = {
       if (!res) return false;
       todos[id] = res; lsSet("previunt_reportes", todos); this._emitLocal("reportes"); return true;
     }
+    this._exigirServidor();
     const tx = await this.fb.runTransaction(this.fb.ref(this.db, `reportes/${id}`), aplicar);
     return tx.committed;
   },
@@ -478,6 +787,7 @@ const Datos = {
       if (!todos[id]) return;
       todos[id] = { ...todos[id], ...cambios }; lsSet("previunt_reportes", todos); this._emitLocal("reportes"); return;
     }
+    this._exigirServidor();
     await this.fb.update(this.fb.ref(this.db, `reportes/${id}`), cambios);
   },
 
@@ -486,6 +796,7 @@ const Datos = {
       const todos = lsGet("previunt_reportes", {}); delete todos[id];
       lsSet("previunt_reportes", todos); this._emitLocal("reportes"); return;
     }
+    this._exigirServidor();
     await this.fb.update(this.fb.ref(this.db), { [`reportes/${id}`]: null, [`fotos/${id}`]: null });
   }
 };
@@ -500,6 +811,8 @@ const S = {
   historial: {},
   ubicacion: null,          // { lat, lng, precision }
   nivelPrevio: undefined,
+  vivo: { sensor: false, demo: false },   // ¿llegó el dato del servidor en esta sesión?
+  guardado: { sensor: null, demo: null }, // copia guardada en el celular (solo referencia)
   nivelBasePrevio: undefined
 };
 
@@ -507,6 +820,21 @@ const S = {
 function estadoBase() {
   // El nivel 2 (huaico) solo sale de reportes vecinales: un 2 guardado por la versión anterior se lee como "En aumento"
   const oficial = (n) => (n === 2 ? 1 : n);
+  if (Datos.modo !== "local") {
+    // Mientras no llegue el dato del servidor en esta sesión se usa la copia guardada, marcada como tal
+    const g = S.guardado || {};
+    const gd = g.demo, gs = g.sensor;
+    if (!S.vivo.demo && gd && gd.v && gd.v.activo && nivelValido(Number(gd.v.nivel))) {
+      return { nivel: oficial(Number(gd.v.nivel)), fuente: "demo", ts: gd.v.actualizado, cita: gd.v.fuente || "", guardado: true, recibido: gd.t };
+    }
+    if (!S.vivo.sensor && !(S.vivo.demo && S.demo && S.demo.activo)) {
+      if (gs && gs.v && nivelValido(Number(gs.v.nivel))) {
+        return { nivel: oficial(Number(gs.v.nivel)), fuente: "autoridad", ts: Number(gs.v.actualizado) || 0, cita: gs.v.fuente || "", guardado: true, recibido: gs.t };
+      }
+      if (gs && !gs.v) return { nivel: 0, fuente: "sinReportes", guardado: true, recibido: gs.t };
+      return { nivel: null, fuente: "sinDatos" };
+    }
+  }
   if (S.demo && S.demo.activo && nivelValido(Number(S.demo.nivel))) {
     return { nivel: oficial(Number(S.demo.nivel)), fuente: "demo", ts: S.demo.actualizado, cita: S.demo.fuente || "" };
   }
@@ -655,6 +983,14 @@ function renderInicio() {
   $("#medidorNivel").setAttribute("aria-label", sinRegla ? "Nivel de la quebrada: sin datos" : `Nivel de la quebrada: ${NIVELES[nRegla].corto}`);
   $("#estadoEtiqueta").textContent = "Quebrada San Ildefonso";
 
+  card.classList.toggle("estado-guardado", !!e.guardado);
+  if (e.nivel === null) {
+    $("#estadoIcono").innerHTML = ic("radio-tower");
+    $("#estadoTitulo").textContent = "Sin datos";
+    $("#estadoMensaje").textContent = Red.conectado ? "Recibiendo el estado oficial…" : "Sin conexión y sin un estado guardado en este celular.";
+    $("#estadoMeta").textContent = "Escucha la radio local o llama al 115 si llueve fuerte.";
+    renderAcciones(["Ten lista tu mochila de emergencia", "Si llueve fuerte, aléjate del cauce", "Sigue la radio y a Defensa Civil"]);
+  }
   if (e.nivel !== null) {
     const N = NIVELES[e.nivel];
     $("#estadoIcono").innerHTML = ic(N.icono);
@@ -662,6 +998,15 @@ function renderInicio() {
     $("#estadoMensaje").textContent = N.mensaje;
     $("#estadoMeta").innerHTML = textoFuente(e);
     renderAcciones(N.acciones);
+    if (e.guardado) {
+      // Dato guardado: se muestra como referencia, sin alarma ni notificación
+      $("#estadoEtiqueta").textContent = "Último dato guardado";
+      if (e.nivel === 3) $("#estadoMensaje").textContent = "Fue el último estado recibido. Confirma por radio o llamando al 115.";
+      // Con un dato guardado no se dan órdenes como si fueran actuales
+      if (e.nivel >= 1) renderAcciones(["Confirma el estado por radio o llamando al 115", "Si ves agua o lodo cerca, sube a zona alta", "Ten lista tu mochila de emergencia"]);
+    } else if (Datos.modo === "firebase" && !Red.conectado) {
+      $("#estadoMeta").innerHTML = `${textoFuente(e)}<br><span class="aviso-offline">Sin conexión desde las ${hora(Red.desde)}: puede estar desactualizado</span>`;
+    }
     if (esPorReporte(e)) {
       const donde = e.dist !== null && e.dist !== undefined ? ` a ${Math.round(e.dist / 10) * 10} m` : "";
       $("#estadoEtiqueta").textContent = "Huaico reportado" + donde;
@@ -671,8 +1016,8 @@ function renderInicio() {
     }
   }
 
-  // Emergencia (rojo)
-  const rojo = e.nivel === 3;
+  // Emergencia (rojo): solo con un dato recibido del servidor en esta sesión, nunca con uno guardado
+  const rojo = e.nivel === 3 && !e.guardado;
   document.body.classList.toggle("emergencia", rojo);
   $("#bannerEmergencia").hidden = !rojo;
   if (!rojo) cerrarAlarma();
@@ -693,6 +1038,10 @@ function renderInicio() {
 }
 /* "Fuente: Parte COER La Libertad · 21:40" (o SIMULADO en la demo). Sin reporte: lo dice. */
 function textoFuente(e) {
+  if (e.guardado) {
+    const cita = e.fuente === "sinReportes" ? "Sin reportes oficiales" : (e.fuente === "demo" ? "SIMULADO · " : "") + esc(e.cita || "Autoridad");
+    return `${cita}${e.ts ? ` · ${hora(e.ts)}` : ""}<br><span class="aviso-offline">Guardado a las ${hora(e.recibido)} · ${Red.conectado ? "actualizando" : "sin conexión"}, puede estar desactualizado</span>`;
+  }
   if (e.fuente === "sinReportes") return "Sin reportes oficiales registrados";
   const cita = e.cita ? esc(e.cita) : "Autoridad";
   const h = e.ts ? ` · ${hora(e.ts)}` : "";
@@ -706,6 +1055,12 @@ function renderAcciones(lista) {
 /* Se ejecuta cada vez que cambia el nivel efectivo */
 function alCambiarNivel() {
   const e = estadoEfectivo();
+  if (e.guardado || e.nivel === null) {
+    // Un dato guardado no dispara alarma, sirena ni notificación
+    if (mapa) pintarCauceYZonas();
+    if (typeof renderGuia === "function") renderGuia();
+    return;
+  }
   const n = e.nivel;
   const nb = esPorReporte(e) ? e.base.nivel : n;
   if (nb !== S.nivelBasePrevio) { S.nivelBasePrevio = nb; if (mapa) pintarCauceYZonas(); }
@@ -821,9 +1176,17 @@ async function cargarClima() {
       uvMax: typeof uvMaxHoy === "number" ? uvMaxHoy : null,
       tipo: tipoCielo(c.weather_code, c.is_day !== 0)
     };
+    S.climaGuardado = null;
+    Cache.guardar("clima", S.clima);
     renderClima();
   } catch (e) {
     console.warn("Clima:", e);
+    const g = Cache.leer("clima");
+    if (g && g.v && Date.now() - g.t < 24 * 3600 * 1000) {
+      S.clima = g.v; S.climaGuardado = g.t;
+      renderClima();
+      return;
+    }
     S.clima = null;
     $("#climaCuerpo").innerHTML = cwHtmlError();
     $("#climaFuente").textContent = `Open-Meteo no respondió · ${hora(Date.now())}`;
@@ -954,7 +1317,9 @@ function cwAlternar() {
 function renderClima() {
   const K = S.clima; if (!K) return;
   $("#climaCuerpo").innerHTML = cwHtmlFila(K);
-  $("#climaFuente").textContent = `Open-Meteo · ${K.c.time.slice(11, 16)}`;
+  $("#climaFuente").textContent = S.climaGuardado
+    ? `Guardado · Open-Meteo ${K.c.time.slice(11, 16)} (no se pudo actualizar)`
+    : `Open-Meteo · ${K.c.time.slice(11, 16)}`;
 }
 
 
@@ -1073,8 +1438,9 @@ function iniciarMapa() {
         toast(`Solo validan quienes están a menos de ${RADIO_VOTO_M / 1000} km. Estás a ~${(d / 1000).toFixed(1)} km.`); return;
       }
     }
+    if (sinServidor("tu respuesta no se registró")) { b.disabled = false; return; }
     try {
-      const ok = await Datos.votar(b.dataset.id, Number(b.dataset.voto));
+      const ok = await conTiempo(Datos.votar(b.dataset.id, Number(b.dataset.voto)), 15000);
       toast(ok ? "¡Gracias! Tu validación ayuda a tus vecinos." : "No se pudo registrar el voto.");
       mapa.closePopup();
     } catch (e) { console.error(e); toast("Error al votar. Revisa tu conexión."); b.disabled = false; }
@@ -1090,7 +1456,7 @@ function pintarCauceYZonas() {
   if (!mapa) return;
   const e = estadoBase();
   const color = colorNivelActual();
-  const txtNivel = e.nivel === null ? "Sin datos del sensor" : NIVELES[e.nivel].corto;
+  const txtNivel = (e.nivel === null ? "Sin datos del sensor" : NIVELES[e.nivel].corto) + (e.guardado ? " (dato guardado, puede estar desactualizado)" : "");
   capas.cauce.clearLayers();
   capas.zonas.clearLayers();
   ZONAS_SIRENA.forEach((z) => {
@@ -1259,6 +1625,7 @@ function htmlPopup(id, r, est) {
       <div><h4>${ic(T.icono)} ${esc(T.nombre)}</h4>
       <span class="cuenta">${estado} · ${hace(r.creado)}${trazoDe(r) ? ` · tramo de ${Math.round(r.largo || 0)} m` : ""}</span></div>
     </div>
+    ${r.fotoPendiente && !r.tieneFoto ? '<p class="cuenta">La foto se está subiendo.</p>' : ""}
     ${r.descripcion ? `<p class="popup-desc">${esc(r.descripcion)}</p>` : ""}
     ${gestionDe(r) === "en_atencion" ? `<p class="gestion-nota">${ic("shield-user")}La autoridad lo está atendiendo</p>` : ""}
     <p class="pregunta">¿Sigue este problema?</p>
@@ -1947,7 +2314,11 @@ function prepararFormReporte() {
   $("#inputFoto").addEventListener("change", async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     try {
-      R.foto = await comprimirImagen(f);
+      if (f.size > 25 * 1024 * 1024) throw new Error("La foto pesa más de 25 MB. Elige otra.");
+      let foto = await comprimirImagen(f);
+      if (foto.length > LIMITE_FOTO_CHARS) foto = await comprimirImagen(f, 640, 0.5);
+      if (foto.length > LIMITE_FOTO_CHARS) throw new Error("La foto sigue pesando más de 280 KB después de reducirla. Prueba con otra.");
+      R.foto = foto;
       $("#imgPreview").src = R.foto; $("#previewFoto").hidden = false;
       toast(`Foto lista (${Math.round(R.foto.length * 0.75 / 1024)} KB)`);
     } catch (err) { toast(err.message); }
@@ -1983,20 +2354,26 @@ function prepararFormReporte() {
       }
     }
     const btn = $("#btnEnviarReporte");
-    btn.disabled = true; btn.textContent = "Enviando…";
+    btn.disabled = true; btn.textContent = "Guardando…";
+    const datos = {
+      tipo: R.tipo,
+      descripcion: $("#inputDesc").value.trim().slice(0, 200),
+      lat: Number(R.lat.toFixed(6)), lng: Number(R.lng.toFixed(6)),
+      forma: R.forma,
+      ...(R.forma === "tramo" ? { trazo: R.trazo, largo: R.largo, metodoTrazo: R.metodoTrazo } : {})
+    };
     try {
-      await Datos.addReporte({
-        tipo: R.tipo,
-        descripcion: $("#inputDesc").value.trim().slice(0, 200),
-        lat: Number(R.lat.toFixed(6)), lng: Number(R.lng.toFixed(6)),
-        foto: R.foto || null,
-        forma: R.forma,
-        ...(R.forma === "tramo" ? { trazo: R.trazo, largo: R.largo, metodoTrazo: R.metodoTrazo } : {})
-      });
+      if (Datos.modo === "local") {
+        await Datos.addReporte({ ...datos, foto: R.foto || null });
+        toast("Reporte guardado en modo local (sin Firebase).");
+      } else {
+        // Primero se guarda en el celular; luego se envía (datos y después la foto)
+        await Cola.agregar(datos, R.foto || null);
+        toast(Red.conectado && Datos.uid ? "Enviando tu reporte…" : "Sin conexión: tu reporte quedó guardado y se enviará cuando vuelva la señal.", 5000);
+      }
       cerrarReporte(true);
-      toast("Reporte enviado. Aparecerá en gris hasta que 3 vecinos lo confirmen.");
     } catch (err) {
-      console.error(err); toast("No se pudo enviar: " + err.message, 5000);
+      console.error(err); toast("No se pudo guardar el reporte: " + err.message, 5000);
     } finally { btn.textContent = "Enviar reporte"; validarFormReporte(); }
   });
 }
@@ -2261,6 +2638,8 @@ function prepararAdmin() {
     const simular = $("#chkSimular").checked;
     const fuente = $("#inputFuenteOficial").value.trim();
     if (!simular && !fuente) { toast("Escribe la fuente: aviso SENAMHI, parte del COER o inspección."); $("#inputFuenteOficial").focus(); return; }
+    // Un estado oficial nunca se deja "en cola": o lo confirma el servidor ahora, o no se publica
+    if (sinServidor(simular ? "la simulación no se activó" : "el estado oficial no se publicó")) return;
     if (!simular && n === 3 && !confirm("Esto activa la alarma y la sirena física para toda la población. ¿Confirmas el desborde?")) return;
     try {
       Sirena.desbloquear();
@@ -2270,17 +2649,19 @@ function prepararAdmin() {
         toast(`Simulando: ${NIVELES[n].corto}`);
       } else {
         if (S.demo?.activo) await Datos.setDemo(false, 0);
-        await Datos.publicarEstado(n, fuente);
+        await conTiempo(Datos.publicarEstado(n, fuente), 15000);
         await Datos.addHistorial(`a_${ahora()}`, { nivel: n, estado: NIVELES[n].estado, fecha: ahora(), origen: "autoridad", fuente });
         toast(`Publicado: ${NIVELES[n].corto}`);
       }
     } catch (e) { console.error(e); toast("No se pudo cambiar el estado: " + e.message); }
   }));
   $("#btnDemoOff").onclick = async () => {
+    if (sinServidor("la simulación sigue activa")) return;
     try { await Datos.setDemo(false, 0); toast("Simulación terminada: se muestra el estado oficial."); }
     catch (e) { toast("Error: " + e.message); }
   };
   $("#chkProximidad").onchange = async (e) => {
+    if (sinServidor("no se cambió la cercanía")) { e.target.checked = !e.target.checked; return; }
     try {
       await Datos.setProximidad(e.target.checked);
       toast(e.target.checked ? `Cercanía activada: reportar a ≤ ${RADIO_REPORTE_M} m y validar a ≤ ${RADIO_VOTO_M / 1000} km.` : "Cercanía desactivada: se puede reportar y validar desde cualquier lugar.");
@@ -2298,6 +2679,7 @@ function prepararAdmin() {
     const id = b.dataset.id, r = S.reportes[id]; if (!r) return;
     try {
       if (b.dataset.acc === "mapa") { verReporteEnMapa(id); return; }
+      if (sinServidor("el cambio no se guardó")) return;
       if (b.dataset.acc === "atencion") { await Datos.actualizarReporte(id, { gestion: "en_atencion", gestionEn: ahora(), gestionPor: Datos.uid }); toast("Reporte en atención"); }
       if (b.dataset.acc === "atendido") { await Datos.actualizarReporte(id, { gestion: "atendido", gestionEn: ahora(), gestionPor: Datos.uid }); toast("Reporte atendido: deja de mostrarse a los vecinos"); }
       if (b.dataset.acc === "reabrir") { await Datos.actualizarReporte(id, { gestion: "pendiente", gestionEn: ahora(), gestionPor: Datos.uid }); toast("Reporte reabierto"); }
@@ -2442,11 +2824,23 @@ async function iniciar() {
   renderLineaTiempo();
   renderPreparate();
 
+  cargarDatosGuardados();
   await Datos.init();
-  const badge = $("#badgeConexion");
-  badge.textContent = Datos.modo === "firebase" ? "● En línea" : "● Modo local";
-  badge.classList.toggle("local", Datos.modo !== "firebase");
-  badge.title = Datos.modo === "firebase" ? "Datos en tiempo real desde Firebase" : "Sin Firebase: los datos se guardan solo en este navegador";
+  renderBadgeConexion();
+  renderTodo(); // pinta enseguida el dato guardado (o "Sin datos") sin esperar al servidor
+  $("#listaPendientes").addEventListener("click", async (ev) => {
+    const b = ev.target.closest("[data-cola]"); if (!b) return;
+    const id = b.dataset.id;
+    if (b.dataset.cola === "descartar") { if (confirm("¿Descartar este reporte? Se borrará de tu celular sin enviarse.")) await Cola.descartar(id); }
+    if (b.dataset.cola === "sesion") await Cola.usarSesionActual(id);
+    if (b.dataset.cola === "reintentar") { const it = Cola.items.find((x) => x.id === id); if (it) { it.proximo = 0; Cola.ejecutar(); } }
+  });
+  await Cola.cargar();
+  // Reintentos: al volver la red, al volver a la app y al abrirla (no depende de Background Sync)
+  window.addEventListener("online", () => { Red.enLinea = true; Cola.ejecutar(); if (!S.clima || S.climaGuardado) cargarClima(); });
+  window.addEventListener("offline", () => { Red.enLinea = false; renderBadgeConexion(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") Cola.ejecutar(); });
+  setInterval(renderPendientes, 30000);
 
   Datos.suscribir("sensor", (v) => { S.sensor = v; renderTodo(); });
   Datos.suscribir("demo", (v) => { S.demo = v || { activo: false, nivel: 0 }; renderTodo(); });
@@ -2462,7 +2856,7 @@ async function iniciar() {
     if (p?.state === "granted" || lsGet("previunt_geoOK", false) && p?.state !== "denied") await pedirUbicacion({ silencioso: true });
   } catch {}
   cargarClima();
-  setInterval(cargarClima, 10 * 60 * 1000);
+  setInterval(() => { if (navigator.onLine !== false) cargarClima(); }, 10 * 60 * 1000);
   setInterval(renderListas, 60 * 1000); // refresca "hace X min" y caducidad
 }
 
