@@ -526,7 +526,7 @@ function renderPendientes() {
       <span class="item-foto">${it.foto ? `<img src="${esc(it.foto)}" alt="">` : ic(T.icono)}</span>
       <span class="pend-cuerpo"><span class="item-titulo">${esc(T.nombre)}</span>
         <span class="item-meta">Creado ${hora(it.creadoLocal)}${it.foto ? " · con foto" : ""}</span>
-        <span class="pend-estado">${esc(estado)}</span>${extra ? `<span class="pend-extra">${extra}</span>` : ""}
+        <span class="pend-estado">${["enviando", "subiendo_foto"].includes(it.estado) || (it.estado === "pendiente" && Red.conectado) ? '<span class="spinner spinner-chico" aria-hidden="true"></span>' : ""}${esc(estado)}</span>${extra ? `<span class="pend-extra">${extra}</span>` : ""}
         ${botones ? `<span class="pend-botones">${botones}</span>` : ""}</span></li>`;
   }).join("");
 }
@@ -2088,7 +2088,7 @@ function htmlPopup(id, r, est) {
       <span class="cuenta">${estado} · ${hace(r.creado)}${trazoDe(r) ? ` · tramo de ${Math.round(r.largo || 0)} m` : ""}</span></div>
     </div>
     ${htmlAutor(r)}
-    ${r.fotoPendiente && !r.tieneFoto ? '<p class="cuenta">La foto se está subiendo.</p>' : ""}
+    ${r.fotoPendiente && !r.tieneFoto ? '<p class="cuenta"><span class="spinner spinner-chico" aria-hidden="true"></span>Subiendo la foto…</p>' : ""}
     ${r.descripcion ? `<p class="popup-desc">${esc(r.descripcion)}</p>` : ""}
     ${gestionDe(r) === "en_atencion" ? `<p class="gestion-nota">${ic("shield-user")}La autoridad lo está atendiendo</p>` : ""}
     <p class="pregunta">¿Sigue este problema?</p>
@@ -2777,17 +2777,18 @@ function prepararFormReporte() {
   });
   $("#inputFoto").addEventListener("change", async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
+    $("#previewFoto").hidden = true; $("#cargandoFoto").hidden = false; // circulito mientras se reduce la foto
     try {
-      if (f.size > 25 * 1024 * 1024) throw new Error("La foto pesa más de 25 MB. Elige otra.");
+      if (f.size > 25 * 1024 * 1024) throw new Error("La foto es demasiado grande. Elige otra.");
       let foto = await comprimirImagen(f);
       if (foto.length > LIMITE_FOTO_CHARS) foto = await comprimirImagen(f, 640, 0.5);
-      if (foto.length > LIMITE_FOTO_CHARS) throw new Error("La foto sigue pesando más de 280 KB después de reducirla. Prueba con otra.");
+      if (foto.length > LIMITE_FOTO_CHARS) throw new Error("No se pudo reducir esta foto lo suficiente. Prueba con otra.");
       R.foto = foto;
       $("#imgPreview").src = R.foto; $("#previewFoto").hidden = false;
-      toast(`Foto lista (${Math.round(R.foto.length * 0.75 / 1024)} KB)`);
     } catch (err) { toast(err.message); }
+    finally { $("#cargandoFoto").hidden = true; }
   });
-  $("#btnQuitarFoto").onclick = () => { R.foto = null; $("#inputFoto").value = ""; $("#previewFoto").hidden = true; };
+  $("#btnQuitarFoto").onclick = () => { R.foto = null; $("#inputFoto").value = ""; $("#previewFoto").hidden = true; $("#cargandoFoto").hidden = true; };
   $("#inputDesc").addEventListener("input", (e) => ($("#contadorDesc").textContent = e.target.value.length));
   $("#btnGPS").onclick = () => usarGPSReporte();
   $("#btnCerrarVisor").onclick = cerrarVisor;

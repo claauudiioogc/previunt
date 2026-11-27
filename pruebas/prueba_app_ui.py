@@ -108,7 +108,14 @@ with sync_playwright() as p:
     t("registro personal desde la app: errores, código incorrecto, código correcto → abre el reporte", registro_personal)
 
     def ana_reporta():
+        from PIL import Image as _Img
+        foto = os.path.join(CAPT, "_foto_prueba.jpg")
+        _Img.new("RGB", (2400, 1800), (120, 90, 60)).save(foto, quality=95)
         pg.click("[data-tipo=huaico]")
+        pg.set_input_files("#inputFoto", foto)
+        pg.wait_for_selector("#previewFoto", state="visible", timeout=15000)
+        if pg.is_visible("#cargandoFoto"): raise Exception("el circulito de carga no se ocultó")
+        if "KB" in pg.inner_text("#toast"): raise Exception("todavía sale el aviso con KB")
         pg.fill("#inputDesc", "lodo en la pista")
         pg.wait_for_function("!document.querySelector('#btnEnviarReporte').disabled", timeout=15000)
         if pg.is_visible("#fsAmbito"): raise Exception("la cuenta personal no debería elegir ámbito")
@@ -117,8 +124,14 @@ with sync_playwright() as p:
         toast(pg, "Tu reporte se envió", 20000)
         reps = db_get("reportes")
         r = list(reps.values())[0]
-        if r["ambito"] != "ciudad" or "confirmaciones" in r: raise Exception(json.dumps(r))
-    t("ana reporta en la ciudad (llega con ámbito y sin conteos)", ana_reporta)
+        if r["ambito"] != "ciudad" or "confirmaciones" in r: raise Exception(json.dumps(r)[:200])
+        for _ in range(30):  # la foto sube después y el autor marca tieneFoto (cambio B de las reglas)
+            r = list(db_get("reportes").values())[0]
+            if r.get("tieneFoto") is True and "fotoPendiente" not in r: break
+            time.sleep(0.5)
+        else: raise Exception("la foto no terminó de subir: " + json.dumps({k: v for k, v in r.items() if k != "trazo"})[:200])
+        if not db_get(f"fotos/{list(db_get('reportes').keys())[0]}"): raise Exception("no está la foto en /fotos")
+    t("ana reporta en la ciudad con foto (circulito de carga, ámbito, foto subida)", ana_reporta)
 
     def ana_sale_y_entra():
         pg.click("#btnCuenta"); pg.wait_for_selector("[data-pantalla=micuenta]", state="visible")

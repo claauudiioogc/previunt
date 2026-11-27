@@ -324,11 +324,12 @@
           <svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>Tomar foto
           <input id="inputFoto" type="file" accept="image/*" capture="environment" hidden>
         </label>
+        <div id="cargandoFoto" class="cargando-foto" role="status" hidden><span class="spinner" aria-hidden="true"></span>Preparando foto…</div>
         <div id="previewFoto" class="preview-foto" hidden>
           <img id="imgPreview" alt="Vista previa de la foto">
           <button type="button" id="btnQuitarFoto" class="btn-texto">Quitar foto</button>
         </div>
-        <p class="fuente nota-foto">La foto se reduce a 800 px (máx. ~280 KB) para que suba con poca señal. Sin conexión, se guarda en tu celular y se envía después.</p>
+        <p class="fuente nota-foto">La foto se reduce para que suba rápido aunque haya poca señal. Sin conexión, se guarda en tu celular y se envía después.</p>
       </fieldset>
 
       <fieldset>
