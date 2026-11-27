@@ -29,10 +29,17 @@ def db_get(ruta):
     return json.load(urllib.request.urlopen(f"http://127.0.0.1:9000/{ruta}.json?ns={P}&access_token=owner"))
 
 ok = mal = 0
+PAGINAS = []
 def t(nombre, f):
     global ok, mal
     try: f(); ok += 1; print("OK   ", nombre)
-    except Exception as e: mal += 1; print("FALLA", nombre, "→", str(e)[:300])
+    except Exception as e:
+        mal += 1; print("FALLA", nombre, "→", str(e)[:300])
+        for i, x in enumerate(PAGINAS):
+            try:
+                x.screenshot(path=f"{CAPT}/falla_{mal}_{i}.png")
+                print("   ", i, "regError:", x.inner_text("#regError")[:150], "| smsError:", x.inner_text("#smsError")[:100], "| toast:", x.inner_text("#toast")[:100])
+            except Exception: pass
 
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path="/usr/bin/google-chrome", args=["--no-sandbox"])
@@ -51,6 +58,7 @@ with sync_playwright() as p:
         pg.route("**/*", ruta)
         pg.errores = []
         pg.on("pageerror", lambda e: pg.errores.append(str(e)))
+        PAGINAS.append(pg)
         pg.goto("http://localhost:8782/?emu=1")
         pg.wait_for_function("document.querySelector('#badgeConexion').textContent.includes('En línea')", timeout=30000)
         return ctx, pg
@@ -123,6 +131,7 @@ with sync_playwright() as p:
     # Segunda persona: beto vota el reporte de ana
     ctx2, pg2 = nuevo()
     def beto_vota():
+        pg2.wait_for_function(f"window.PREVIUNT && PREVIUNT.S.reportes[{json.dumps(id_rep)}]", timeout=15000)
         pg2.evaluate(f"PREVIUNT.verReporteEnMapa({json.dumps(id_rep)})")
         pg2.wait_for_selector(".popup-rep", timeout=10000)
         if pg2.query_selector(".popup-rep [data-voto]"): raise Exception("un invitado no debería ver botones de voto")

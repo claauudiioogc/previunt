@@ -3825,6 +3825,7 @@ async function iniciar() {
 
   cargarDatosGuardados();
   await Datos.init();
+  if (Datos._emu) window.PREVIUNT = { S, Datos, Cuenta, verReporteEnMapa, irATab }; // solo con ?emu=1 en localhost (pruebas)
   renderBadgeConexion();
   renderTodo(); // pinta enseguida el dato guardado (o "Sin datos") sin esperar al servidor
   $("#listaPendientes").addEventListener("click", async (ev) => {
@@ -3869,7 +3870,6 @@ async function iniciar() {
   cargarClima();
   setInterval(() => { if (navigator.onLine !== false) cargarClima(); }, 10 * 60 * 1000);
   setInterval(renderListas, 60 * 1000); // refresca "hace X min" y caducidad
-  if (Datos._emu) window.PREVIUNT = { S, Datos, Cuenta, verReporteEnMapa, irATab }; // solo con ?emu=1 en localhost (pruebas)
 }
 
 if ("serviceWorker" in navigator) {

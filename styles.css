@@ -916,4 +916,11 @@ body.emergencia .badge-conexion.off, body.emergencia .badge-conexion.sync { back
 .nota-voto .btn-texto { min-height: 32px; font-size: .85rem; }
 .opcion-sel:disabled { opacity: .45; cursor: not-allowed; }
 .estado-badge.bloqueado { background: #FDECEA; color: #8E1B1B; }
-@media (max-width: 380px) { .cuenta-texto { max-width: 70px; } .chip-campus span { display: none; } }
+.badge-conexion { white-space: nowrap; }
+/* Celulares: con sesión, el botón de cuenta muestra solo el avatar (el usuario se ve en "Mi cuenta") */
+@media (max-width: 480px) {
+  .btn-cuenta:not(.invitado) { padding: 3px; }
+  .btn-cuenta:not(.invitado) .cuenta-texto { display: none; }
+  .chip-campus .txt { display: none; }
+  .chip-campus { padding: 4px 6px; }
+}

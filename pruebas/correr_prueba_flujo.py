@@ -19,6 +19,7 @@ with sync_playwright() as p:
     pg.route("**/*",r)
     errs=[]; pg.on("pageerror",lambda e: errs.append(str(e)))
     pg.goto("http://localhost:8781/pruebas/prueba_flujo.html")
-    pg.wait_for_function("document.getElementById('out').textContent.includes('FIN')",timeout=240000)
+    try: pg.wait_for_function("document.getElementById('out').textContent.includes('FIN')",timeout=240000)
+    except Exception as e: print("TIMEOUT", e.__class__.__name__)
     print(pg.inner_text("#out")); print("pageerrors:",errs)
     b.close()

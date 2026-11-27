@@ -10,8 +10,8 @@ const db = dbM.getDatabase(app); dbM.connectDatabaseEmulator(db, "127.0.0.1", 90
 const Datos = { auth, authM, db, fb: dbM, uid: null };
 const S = { perfiles: {}, bloqueados: {} };
 // Se prueba el código real: el bloque "CUENTAS" de app.js
-const app = await (await fetch("../app.js", { cache: "no-store" })).text();
-const src = app.slice(app.indexOf("/* === CUENTAS (inicio)"), app.indexOf("/* === CUENTAS (fin) === */"));
+const codigoApp = await (await fetch("../app.js", { cache: "no-store" })).text();
+const src = codigoApp.slice(codigoApp.indexOf("/* === CUENTAS (inicio)"), codigoApp.indexOf("/* === CUENTAS (fin) === */"));
 if (src.length < 1000) throw new Error("No se encontró el bloque CUENTAS en app.js");
 const { Cuenta, validarRegistro, correoLogin } = new Function("Datos", "S", src + "\nreturn { Cuenta, validarRegistro, correoLogin };")(Datos, S);
 const log = (s) => { document.getElementById("out").textContent += s + "\n"; console.log(s); };
