@@ -1226,7 +1226,7 @@ const Cuenta = {
     const F = Datos.fb, ts = F.serverTimestamp();
     await F.update(F.ref(Datos.db), {
       [`nombres_usuario/${usuario}`]: user.uid,
-      [`perfiles/${user.uid}`]: { usuario, avatar: d.avatar || "ola-azul", creado: ts },
+      [`perfiles/${user.uid}`]: { usuario, avatar: avatarValido(d.avatar) ? d.avatar : AVATAR_DEFECTO, creado: ts },
       [`privado/${user.uid}`]: {
         tipo,
         nombres: String(d.nombres).trim(), apellidos: String(d.apellidos).trim(),
@@ -3592,17 +3592,30 @@ function prepararAdmin() {
    CUENTAS: interfaz (botón de cuenta, hojas de entrada y registro, puertas)
    Solo en modo Firebase. En modo local (sin Firebase) la app funciona como antes, sin cuentas.
 --------------------------------------------------------------------- */
-const AVATARES = {
-  "ola-azul": "#1565C0", "monte-cafe": "#6D4C41", "sol-ambar": "#9A5B00",
-  "hoja-verde": "#33691E", "faro-rojo": "#AD1457", "luna-indigo": "#3949AB", "escudo": "#123F40"
-};
+/* Avatares ilustrados (archivos en ./avatares/<id>.svg). Los ids viejos de color ("ola-azul", "monte-cafe"…)
+   y "escudo" de los admins ya no existen: se muestran con un avatar por defecto, sin tocar la base. */
+const AVATARES = [
+  { id: "aranita_blanquirroja", nombre: "Arañita Blanquirroja" },
+  { id: "capitan_cuy",          nombre: "Capitán Cuy" },
+  { id: "don_clava",            nombre: "Don Clava" },
+  { id: "huaquito",             nombre: "Huaquito" },
+  { id: "llama_chevere",        nombre: "Llama Chévere" },
+  { id: "sargento_ronsoco",     nombre: "Sargento Ronsoco" },
+  { id: "gallito_avisador",     nombre: "Gallito Avisador" },
+  { id: "ukumari_rescatista",   nombre: "Ukumari Rescatista" },
+  { id: "calato_preparado",     nombre: "Calato Preparado" }
+];
+const AVATAR_DEFECTO = "capitan_cuy";
+const AVATAR_ADMIN = "don_clava";   // para el antiguo "escudo" de los admins
+const avatarValido = (id) => AVATARES.some((a) => a.id === id);
+const avatarDe = (id) => avatarValido(id) ? id : id === "escudo" ? AVATAR_ADMIN : AVATAR_DEFECTO;
+const nombreAvatar = (id) => (AVATARES.find((a) => a.id === avatarDe(id)) || {}).nombre || "Avatar";
 const conCuentas = () => firebaseConfigurado() && Datos.modo !== "local";
 const perfilDe = (uid) => (S.perfiles && S.perfiles[uid]) || null;
 
-function htmlAvatar(perfil, clase = "avatar-chico") {
-  const av = perfil && AVATARES[perfil.avatar] ? perfil.avatar : "ola-azul";
-  const dentro = av === "escudo" ? ic("shield-user") : esc(String((perfil && perfil.usuario) || "?").charAt(0));
-  return `<span class="avatar ${clase}" style="background:${AVATARES[av]}">${dentro}</span>`;
+function htmlAvatar(perfil, clase = "avatar-chico", id = "") {
+  const av = avatarDe(perfil && perfil.avatar);
+  return `<img${id ? ` id="${id}"` : ""} class="avatar ${clase}" src="./avatares/${av}.svg" alt="${esc(nombreAvatar(av))}" decoding="async">`;
 }
 
 /* ---------- Medallas: cuántos reportes verificados tiene cada cuenta ---------- */
@@ -3677,7 +3690,7 @@ function renderBotonCuenta() {
     return;
   }
   const p = perfilDe(u.uid) || (u.nombreUsuario ? { usuario: u.nombreUsuario } : null);
-  $("#cuentaAvatar").outerHTML = htmlAvatar(p).replace('<span class="avatar', '<span id="cuentaAvatar" class="avatar');
+  $("#cuentaAvatar").outerHTML = htmlAvatar(p, "avatar-chico", "cuentaAvatar");
   $("#cuentaTexto").textContent = p ? p.usuario : "Completa tu registro";
   const med = medallaDe(verificadosDe(u.uid));
   $("#cuentaMedalla").innerHTML = htmlMedalla(med, "medalla-mini");
@@ -3707,7 +3720,7 @@ function abrirPendiente(motivo, despues) {
 }
 
 /* ---------- Hoja de cuenta ---------- */
-const HC = { pantalla: null, loginTipo: "personal", tipoReg: "personal", completar: false, avatar: "ola-azul", olvTipo: "personal", olvPaso: 1, smsTel: "", reloj: null, despues: null };
+const HC = { pantalla: null, loginTipo: "personal", tipoReg: "personal", completar: false, avatar: AVATAR_DEFECTO, olvTipo: "personal", olvPaso: 1, smsTel: "", reloj: null, despues: null };
 const TITULOS_CUENTA = { login: "Inicia sesión", registro: "Crear cuenta", sms: "Código SMS", correo: "Revisa tu correo UNT", olvido: "Olvidé mi contraseña", micuenta: "Mi cuenta" };
 
 function abrirCuenta(pantalla, o = {}) {
@@ -3794,10 +3807,10 @@ async function despuesDeEntrar() {
 }
 
 function pintarAvatares(cont, elegido, alElegir) {
-  const admin = !!Cuenta.usuario?.esAdmin;
-  const nombre = HC.pantalla === "registro" ? normalizarUsuario($("#regUsuario").value) || "?" : (perfilDe(Cuenta.usuario?.uid)?.usuario || "?");
-  cont.innerHTML = Object.keys(AVATARES).filter((k) => k !== "escudo" || admin).map((k) =>
-    `<button type="button" role="radio" aria-checked="${k === elegido}" data-avatar="${k}" aria-label="Avatar ${k.replace("-", " ")}">${htmlAvatar({ usuario: nombre, avatar: k }, "")}</button>`).join("");
+  const sel = avatarDe(elegido);
+  cont.innerHTML = AVATARES.map((a) =>
+    `<button type="button" role="radio" aria-checked="${a.id === sel}" data-avatar="${a.id}">
+      <img src="./avatares/${a.id}.svg" alt="" width="64" height="64" loading="lazy" decoding="async"><span>${esc(a.nombre)}</span></button>`).join("");
   cont.onclick = (e) => { const b = e.target.closest("[data-avatar]"); if (b) alElegir(b.dataset.avatar); };
 }
 
@@ -3882,8 +3895,8 @@ function elegirOlvido(t) {
 
 async function renderMiCuenta() {
   const u = Cuenta.usuario; if (!u) return;
-  const p = perfilDe(u.uid) || { usuario: u.nombreUsuario || "?", avatar: "ola-azul" };
-  $("#mcAvatar").outerHTML = htmlAvatar(p, "avatar-grande").replace('<span class="avatar', '<span id="mcAvatar" class="avatar');
+  const p = perfilDe(u.uid) || { usuario: u.nombreUsuario || "?", avatar: AVATAR_DEFECTO };
+  $("#mcAvatar").outerHTML = htmlAvatar(p, "avatar-grande", "mcAvatar");
   $("#mcUsuario").textContent = p.usuario;
   const nv = verificadosDe(u.uid), med = medallaDe(nv), sig = siguienteMedalla(nv);
   $("#mcNivel").innerHTML = htmlNivel(u.uid);

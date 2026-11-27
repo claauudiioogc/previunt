@@ -7,7 +7,7 @@
      securetoken), Open-Meteo, rutas ni teselas del mapa. Esas peticiones van siempre directo a la red.
    - Elevación (AWS Terrain Tiles): caché primero. El relieve no cambia; así la ruta a zona alta funciona sin red.
    Sube VERSION cuando cambies la lista de archivos. */
-const VERSION = "previunt-v37";
+const VERSION = "previunt-v38";
 const APP = [
   "./",
   "./index.html",
@@ -16,7 +16,16 @@ const APP = [
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "./icons/icon-maskable-512.png"
+  "./icons/icon-maskable-512.png",
+  "./avatares/aranita_blanquirroja.svg",
+  "./avatares/calato_preparado.svg",
+  "./avatares/capitan_cuy.svg",
+  "./avatares/don_clava.svg",
+  "./avatares/gallito_avisador.svg",
+  "./avatares/huaquito.svg",
+  "./avatares/llama_chevere.svg",
+  "./avatares/sargento_ronsoco.svg",
+  "./avatares/ukumari_rescatista.svg"
 ];
 // Los 6 tiles de elevación (z12) que cubren Trujillo, El Porvenir, Florencia de Mora y Víctor Larco
 const ELEV = [1148, 1149].flatMap((x) => [2139, 2140, 2141].map((y) =>

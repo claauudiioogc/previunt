@@ -11,7 +11,7 @@ await env.withSecurityRulesDisabled(async (c) => {
   for (const [uid, u] of [["adm1", "clau_udio"], ["adm2", "joa_quin"], ["adm3", "cris_thian"]]) {
     await set(ref(d, "admins/" + uid), true);
     await set(ref(d, "nombres_usuario/" + u), uid);
-    await set(ref(d, "perfiles/" + uid), { usuario: u, avatar: "escudo", creado: 1 });
+    await set(ref(d, "perfiles/" + uid), { usuario: u, avatar: "don_clava", creado: 1 });
   }
   await set(ref(d, "dispositivos/esp1"), { zona: "san-ildefonso-01", activo: true, nombre: "maqueta" });
   await set(ref(d, "dispositivos/esp2"), { zona: "san-ildefonso-01", activo: false, nombre: "revocado" });
@@ -34,7 +34,7 @@ const espRevocado = ctx("esp2", { email: "esp32-02@dispositivos.previunt.invalid
 const malo = ctx("malo", personal("malo_x", "+51987000009"));
 const reg = (uid, u, tipo, dni, correo, cel = "+51987000001") => ({
   [`nombres_usuario/${u}`]: uid,
-  [`perfiles/${uid}`]: { usuario: u, avatar: "ola-azul", creado: serverTimestamp() },
+  [`perfiles/${uid}`]: { usuario: u, avatar: "capitan_cuy", creado: serverTimestamp() },
   [`privado/${uid}`]: { tipo, nombres: "Ana", apellidos: "Mora Ríos", dni, celular: cel, correo, consentimiento: serverTimestamp(), creado: serverTimestamp() },
   [`indice_dni/${tipo}_${dni}`]: uid
 });
@@ -68,7 +68,7 @@ await t("UNT puede repetir el nombre de una cuenta personal con _unt (ana_m_unt)
 await t("malo se registra", true, update(ref(malo), reg("malo", "malo_x", "personal", "55556666", "m@gmail.com", "+51987000009")));
 await t("invitado NO se registra", false, update(ref(anon), reg("anon1", "anon_1", "personal", "99998888", "a@gmail.com")));
 await t("perfil con nombre real rechazado", false, update(ref(ana, "perfiles/ana"), { nombre: "Ana" }));
-await t("ana cambia su avatar", true, update(ref(ana, "perfiles/ana"), { avatar: "monte-cafe" }));
+await t("ana cambia su avatar", true, update(ref(ana, "perfiles/ana"), { avatar: "llama_chevere" }));
 await t("ana NO cambia su usuario", false, update(ref(ana, "perfiles/ana"), { usuario: "beto_r" }));
 await t("ana NO cambia su DNI", false, update(ref(ana, "privado/ana"), { dni: "00000000" }));
 await t("ana NO pone un celular distinto al verificado", false, update(ref(ana, "privado/ana"), { celular: "+51912345678" }));
