@@ -183,49 +183,15 @@ const DIRECTORIO_EMERGENCIA = [
   }
 ];
 
-/* NOTICIAS: obras y acciones públicas frente a las lluvias en Trujillo. Son informativas: los avisos
+/* NOTICIAS: obras y acciones públicas frente a las lluvias y El Niño. Son informativas: los avisos
    activos de la quebrada están en Inicio y nunca se mezclan aquí.
-   Para agregar una: copiar un objeto. Campos: titulo, zona, entidad, fecha (AAAA-MM-DD de la fuente),
-   resumen (qué se hizo o se anunció, dónde, quién y cómo se relaciona con las lluvias), estado
-   ("anunciada" | "en_ejecucion" | "concluida" | null si la fuente no lo dice) y url (fuente oficial).
-   Una intervención anunciada queda como "anunciada" hasta tener una fuente sobre su ejecución.
-   TODO: verificar con fuente oficial: los resúmenes se escribieron con el título de cada nota de gob.pe
-   y los datos del equipo (27/11/2026); contrastarlos con el texto completo de la nota antes de publicar. */
-const NOTICIAS = [
-  {
-    id: "mpt-2026-06-10-planes-lluvias",
-    titulo: "Dos planes trabajan en la MPT ante posibles lluvias",
-    zona: "Provincia de Trujillo",
-    entidad: "Municipalidad Provincial de Trujillo",
-    fecha: "2026-06-10",
-    resumen: "La municipalidad informó que trabaja con dos planes para prepararse ante posibles lluvias. Los planes de contingencia de la MPT se pueden consultar en gob.pe, incluido el de lluvias 2026 y el de la Ruta del Agua.",
-    estado: null,
-    url: "https://www.gob.pe/institucion/munitrujillo/noticias/1404869-dos-planes-trabajan-en-la-mpt-ante-posibles-lluvias",
-    extra: { texto: "Ver planes de contingencia", url: "https://www.gob.pe/institucion/munitrujillo/informes-publicaciones/7861873-planes-de-contingencia" }
-  },
-  {
-    id: "mpt-2026-06-05-buzonetas",
-    titulo: "30 buzonetas hay instaladas para evacuar aguas pluviales",
-    zona: "Ciudad de Trujillo",
-    entidad: "Municipalidad Provincial de Trujillo",
-    fecha: "2026-06-05",
-    resumen: "Las buzonetas son estructuras de captación pluvial: recogen el agua de lluvia de la calle para evacuarla y reducir los aniegos. En la fecha de la nota, la MPT informó 30 buzonetas instaladas. Puedes ver dónde están en el Mapa, capa Buzonetas.",
-    estado: "concluida",
-    url: "https://www.gob.pe/institucion/munitrujillo/noticias/1403839-30-buzonetas-hay-instaladas-para-evacuar-aguas-pluviales",
-    mapa: "buzonetas"
-  },
-  {
-    id: "mpt-2026-03-18-barreras-sacos",
-    titulo: "Municipalidad entrega barreras de canalización y sacos terreros ante posibles lluvias",
-    zona: "Territorios vecinales de la Ruta del Agua",
-    entidad: "Municipalidad Provincial de Trujillo",
-    fecha: "2026-03-18",
-    resumen: "La municipalidad entregó barreras de canalización y sacos terreros a territorios vecinales del recorrido de la Ruta del Agua, para que los vecinos puedan encauzar el agua y proteger sus casas si llueve fuerte.",
-    estado: "concluida",
-    url: "https://www.gob.pe/institucion/munitrujillo/noticias/1367633-municipalidad-entrega-barreras-de-canalizacion-y-sacos-terreros-ante-posibles-lluvias",
-    mapa: "territorios"
-  }
-];
+   El contenido está en noticias/noticias.json y sus imágenes en noticias/ (servidas desde el repositorio).
+   Campos: id, titulo, fecha ("AAAA-MM-DD" o null si aún no está confirmada), tipo ("Archivo" = nota histórica),
+   entidad, zona, resumen, fuente (enlace original), imagen (archivo en noticias/), imagenAlt, creditoImagen.
+   Opcional: estado ("anunciada" | "en_ejecucion" | "concluida") solo si la publicación lo respalda.
+   Orden: primero las sin fecha confirmada (pendientes de confirmar, en el orden del archivo), luego las
+   fechadas de la más reciente a la más antigua. */
+const RUTA_NOTICIAS = "noticias/";
 const ESTADO_NOTICIA = {
   anunciada:    { texto: "Anunciada",    icono: "clock" },
   en_ejecucion: { texto: "En ejecución", icono: "construction" },
@@ -3327,7 +3293,6 @@ function renderPreparate() {
 
   renderNumeros();
   $("#numerosFuente").innerHTML = '<a href="https://www.gob.pe/547" target="_blank" rel="noopener">gob.pe</a>; COER y COEP: números entregados por el equipo PREVIUNT (vigencia por confirmar con cada institución). Lluvia: ERA5 (Open-Meteo). Mapa: © OpenStreetMap.';
-  renderNoticias();
   renderConocenos();
   $("#fuenteGuia").href = FUENTE_GUIA;
   $("#fuenteMochila").href = FUENTE_MOCHILA;
@@ -3351,26 +3316,58 @@ const fechaLarga = (iso) => {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" });
 };
+let noticiasCargadas = null; // null = sin pedir; [] = vacío o error
+async function cargarNoticias() {
+  if (noticiasCargadas) return noticiasCargadas;
+  const ul = $("#listaNoticias");
+  ul.innerHTML = '<li class="meta">Cargando noticias…</li>';
+  try {
+    const r = await fetch(RUTA_NOTICIAS + "noticias.json", { cache: "no-cache" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    if (!Array.isArray(d)) throw new Error("Formato no válido");
+    noticiasCargadas = d.filter((n) => n && n.titulo && n.fuente);
+  } catch (e) {
+    console.warn("Noticias:", e);
+    ul.innerHTML = '<li class="meta">Sin datos disponibles: no se pudieron cargar las noticias. Revisa tu conexión.</li>';
+    return null;
+  }
+  renderNoticias();
+  return noticiasCargadas;
+}
+const fechaValida = (f) => typeof f === "string" && /^\d{4}-\d{2}-\d{2}$/.test(f);
 function renderNoticias() {
-  const lista = [...NOTICIAS].sort((a, b) => b.fecha.localeCompare(a.fecha));
-  $("#listaNoticias").innerHTML = lista.map((n) => {
+  if (!noticiasCargadas) return;
+  const sinFecha = noticiasCargadas.filter((n) => !fechaValida(n.fecha));
+  const fechadas = noticiasCargadas.filter((n) => fechaValida(n.fecha)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const lista = sinFecha.concat(fechadas);
+  // La imagen solo se acepta como archivo dentro de noticias/ (sin rutas externas)
+  const rutaImg = (f) => typeof f === "string" && /^[\w.-]+\.(webp|jpe?g|png)$/i.test(f) ? RUTA_NOTICIAS + f : null;
+  $("#listaNoticias").innerHTML = lista.length ? lista.map((n) => {
     const E = n.estado ? ESTADO_NOTICIA[n.estado] : null;
-    return `<li class="noticia" id="noticia-${esc(n.id)}">
-      <article>
-        <div class="noticia-meta">
-          <time datetime="${esc(n.fecha)}">${esc(fechaLarga(n.fecha))}</time>
-          ${E ? `<span class="estado-noticia estado-${esc(n.estado)}">${ic(E.icono)}${esc(E.texto)}</span>` : `<span class="estado-noticia estado-sin">Sin estado indicado</span>`}
+    const img = rutaImg(n.imagen);
+    const historica = n.tipo === "Archivo";
+    return `<li class="noticia" id="noticia-${esc(n.id || "")}">
+      <article${historica ? ' class="noticia-archivo"' : ""}>
+        ${img ? `<figure class="noticia-img">
+          <img src="${esc(img)}" alt="${esc(n.imagenAlt || "")}" loading="lazy" decoding="async" width="640" height="360">
+          ${n.creditoImagen ? `<figcaption>Imagen: <a href="${esc(n.fuente)}" target="_blank" rel="noopener">${esc(n.creditoImagen)}</a></figcaption>` : ""}
+        </figure>` : ""}
+        <div class="noticia-texto">
+          <div class="noticia-meta">
+            ${fechaValida(n.fecha) ? `<time datetime="${esc(n.fecha)}">${esc(fechaLarga(n.fecha))}</time>` : ""}
+            ${historica ? '<span class="estado-noticia estado-archivo">Archivo · nota histórica</span>' : ""}
+            ${E ? `<span class="estado-noticia estado-${esc(n.estado)}">${ic(E.icono)}${esc(E.texto)}</span>` : ""}
+          </div>
+          <h2 class="noticia-tit">${esc(n.titulo)}</h2>
+          <p class="noticia-resumen">${esc(n.resumen || "")}</p>
+          <p class="noticia-datos"><span><strong>Entidad:</strong> ${esc(n.entidad || "")}</span>${n.zona ? `<span><strong>Dónde:</strong> ${esc(n.zona)}</span>` : ""}</p>
+          <a class="btn btn-secundario btn-chico noticia-btn" href="${esc(n.fuente)}" target="_blank" rel="noopener">Ver publicación</a>
         </div>
-        <h2 class="noticia-tit">${esc(n.titulo)}</h2>
-        <p class="noticia-datos"><span><strong>Dónde:</strong> ${esc(n.zona)}</span><span><strong>A cargo:</strong> ${esc(n.entidad)}</span></p>
-        <p class="noticia-resumen">${esc(n.resumen)}</p>
-        <p class="noticia-enlaces">
-          <a href="${esc(n.url)}" target="_blank" rel="noopener">Ver fuente oficial</a>
-          ${n.extra ? `<a href="${esc(n.extra.url)}" target="_blank" rel="noopener">${esc(n.extra.texto)}</a>` : ""}
-          ${n.mapa ? `<button type="button" class="btn-texto btn-texto-chico" data-ver-capa="${esc(n.mapa)}">Ver en el mapa</button>` : ""}
-        </p>
       </article></li>`;
-  }).join("");
+  }).join("") : '<li class="meta">Aún no hay noticias.</li>';
+  // Si una imagen no está en el repositorio, la tarjeta se muestra igual, sin imagen
+  $$("#listaNoticias .noticia-img img").forEach((im) => im.addEventListener("error", () => im.closest("figure").remove(), { once: true }));
 }
 function renderConocenos() {
   $("#textoMotivacion").innerHTML = MOTIVACION.map((p) => `<p>${esc(p)}</p>`).join("");
@@ -3396,6 +3393,7 @@ function elegirSubInfo(nombre, foco = false) {
     t.tabIndex = on ? 0 : -1;
     p.hidden = !on;
   });
+  if (nombre === "noticias") cargarNoticias();
   if (foco) $("#subtab-" + nombre).focus();
 }
 function prepararSubtabs() {

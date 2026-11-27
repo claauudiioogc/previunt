@@ -1,0 +1,51 @@
+[
+  {
+    "id": "arcc-avance-quebradas-2023",
+    "titulo": "Avance de las obras en San Idelfonso y San Carlos",
+    "fecha": "2023-11-13",
+    "tipo": "Archivo",
+    "entidad": "Autoridad para la Reconstrucción con Cambios",
+    "zona": "Provincia de Trujillo",
+    "resumen": "En noviembre de 2023, la ARCC informó que había terminado 32 de los 35 diques previstos en San Idelfonso. El proyecto de prevención también incluía un túnel hacia San Carlos, canales de conducción y obras en el río Moche.",
+    "fuente": "https://www.gob.pe/institucion/rcc/noticias/869167-la-libertad-reconstruccion-con-cambios-avanza-ejecucion-de-obras-en-quebradas-san-idelfonso-y-san-carlos",
+    "imagen": "noticia-1.webp",
+    "imagenAlt": "Maquinaria y obras de piedra en una quebrada",
+    "creditoImagen": "Autoridad para la Reconstrucción con Cambios"
+  },
+  {
+    "id": "gore-limpieza-ascope-pacasmayo",
+    "titulo": "Anuncian limpieza de ríos y quebradas en Ascope y Pacasmayo",
+    "fecha": null,
+    "entidad": "Gobierno Regional La Libertad",
+    "zona": "Ascope y Pacasmayo",
+    "resumen": "El Gobierno Regional informó que retiraría sedimentos y reforzaría diques en cuatro zonas de riesgo de Ascope y Pacasmayo para reducir posibles desbordes e inundaciones.",
+    "fuente": "https://www.facebook.com/share/p/1ABTzDd4s1/",
+    "imagen": "noticia-2.webp",
+    "imagenAlt": "Maquinaria sobre un terreno con sedimentos",
+    "creditoImagen": "Gobierno Regional La Libertad · Portada del video"
+  },
+  {
+    "id": "gore-via-santiago-de-cao",
+    "titulo": "Acuerdan habilitar una ruta tras el colapso de la vía costera",
+    "fecha": null,
+    "entidad": "Gobierno Regional La Libertad",
+    "zona": "Santiago de Cao, Ascope",
+    "resumen": "El Gobierno Regional informó que colapsó un tramo de 350 metros de la vía en Santiago de Cao. Tras inspeccionar el sector, comunicó que se acordó habilitar una ruta para recuperar el tránsito.",
+    "fuente": "https://www.facebook.com/share/p/19hr4c1Aq1/",
+    "imagen": "noticia-3.webp",
+    "imagenAlt": "Tramo dañado de la vía costera con una grieta en la calzada",
+    "creditoImagen": "Gobierno Regional La Libertad · Portada del video"
+  },
+  {
+    "id": "gore-diques-trujillo",
+    "titulo": "El Gobierno Regional informa sobre 61 diques en dos quebradas",
+    "fecha": null,
+    "entidad": "Gobierno Regional La Libertad",
+    "zona": "Provincia de Trujillo",
+    "resumen": "El Gobierno Regional reportó que los 35 diques de San Ildefonso y los 26 de San Carlos estaban construidos y operativos. Las estructuras ayudan a retener materiales arrastrados por el agua durante lluvias intensas.",
+    "fuente": "https://www.facebook.com/share/p/1JQCSVSVVa/",
+    "imagen": "noticia-4.webp",
+    "imagenAlt": "Portada del Gobierno Regional sobre las obras en la quebrada San Ildefonso",
+    "creditoImagen": "Gobierno Regional La Libertad · Portada del video"
+  }
+]

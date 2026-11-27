@@ -1081,3 +1081,20 @@ body.emergencia .badge-conexion.off, body.emergencia .badge-conexion.sync { back
 .clasif { font-weight: 700; }
 .clasif.buz-alto { color: #B71C1C; }
 .clasif.buz-mod { color: #6B4E00; }
+
+/* Noticias con imagen (cargada desde noticias/, diferida) */
+.noticia article { padding: 0; overflow: hidden; }
+.noticia-texto { padding: 12px 14px 14px; }
+.noticia-img { margin: 0; background: #E4E8EE; }
+.noticia-img img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.noticia-img figcaption { padding: 4px 14px; font-size: .74rem; color: var(--texto-2); background: var(--superficie); }
+.noticia-img figcaption a { color: inherit; }
+.noticia-btn { margin-top: 4px; text-decoration: none; }
+.noticia-btn:focus-visible { outline: 3px solid var(--azul); outline-offset: 2px; }
+.estado-archivo { background: #ECEFF1; color: #37474F; }
+.noticia-archivo .noticia-tit { color: #37474F; }
+@media (min-width: 700px) {
+  .noticia article:has(.noticia-img) { display: grid; grid-template-columns: 260px 1fr; }
+  .noticia-img { display: flex; flex-direction: column; }
+  .noticia-img img { flex: 1; height: auto; aspect-ratio: auto; min-height: 160px; }
+}

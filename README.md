@@ -81,7 +81,7 @@ Después de cada cambio, si el celular muestra la versión vieja, recarga dos ve
 ## Info, capas municipales y reportes (rama info-capas-reportes)
 
 - **Info** (tercera entrada de la barra): pestañas Prepárate | Noticias | Conócenos. Enlaces `#preparate`, `#noticias`, `#conocenos`.
-- **Noticias**: datos en `NOTICIAS` (app.js). Resúmenes escritos a partir del título de cada nota de gob.pe; contrastar con el texto completo antes de publicar.
+- **Noticias**: contenido en `noticias/noticias.json` e imágenes WebP en `noticias/` (se cargan al abrir la pestaña; imágenes diferidas). `fecha: null` = sin fecha confirmada (no se muestra). `tipo: "Archivo"` = nota histórica.
 - **Conócenos**: motivación en `MOTIVACION` y equipo en `EQUIPO` (vacío: completar con la lista definitiva).
 - **Números**: `DIRECTORIO_EMERGENCIA` por jurisdicción (La Libertad · Trujillo): COER 991 480 550 y COEP Trujillo 925 512 879, entregados por el equipo. Confirmar su vigencia con cada institución antes de publicar.
 - **Reportes**: "Inundación" → "Punto de aniego", "Huaico o lodo" → "Lodo", "Otro" → "Otros". Los ids guardados (`inundacion`, `huaico`, `otro`) no cambian. "Otros" exige descripción en el formulario, la cola y las reglas (solo al crear; no afecta reportes antiguos). **Publicar `database.rules.json` en Firebase Console.**
