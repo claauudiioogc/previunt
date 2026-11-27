@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* PREVIUNT · Probar la cuenta de un ESP32 SIN hardware (Node 18+, sin dependencias).
-   Hace lo mismo que AlarmaPREVIUNT.ino: inicia sesión con la cuenta del dispositivo, lee /alertas/{zona}
+   Hace lo mismo que el ESP32 (maqueta/AlarmaPREVIUNT/src/main.cpp): inicia sesión con la cuenta del dispositivo, lee /alertas/{zona}
    y aplica la misma validación y la misma lógica (2 lecturas iguales para activar, 2 de despeje para apagar).
 
    Uso (los valores van en variables de entorno, nunca en el código):

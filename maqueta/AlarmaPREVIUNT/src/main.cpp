@@ -6,10 +6,9 @@
  * zona (/dispositivos/{uid}) y solo los admins (autoridad) pueden escribirlo, siempre junto con el estado
  * oficial /quebrada_san_ildefonso en la misma escritura. Detalles y configuración: maqueta/LEEME.md
  *
- * Arduino IDE:
- *   Placa: ESP32 Dev Module (núcleo "esp32" de Espressif 3.x)
- *   Biblioteca: ArduinoJson (Benoit Blanchon) 7.x
- *   Antes de compilar: copiar secretos.ejemplo.h como secretos.h y completarlo.
+ * Proyecto PlatformIO (VS Code): abrir la carpeta maqueta/AlarmaPREVIUNT (la que tiene platformio.ini).
+ *   Placa: esp32dev · Biblioteca: ArduinoJson 7.x (se instala sola con lib_deps)
+ *   Antes de compilar: copiar include/secretos.ejemplo.h como include/secretos.h y completarlo.
  *
  * Formato de /alertas/{zona} (horas Unix UTC en segundos):
  * { "level": 3, "origin": "authority", "zone": "san-ildefonso-01",
@@ -17,6 +16,7 @@
  * level 3 = DESBORDE. level 0, 1 o 2 = despeje. Una alerta vencida (now > validUntil) se toma como despeje.
  */
 
+#include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -26,12 +26,12 @@
 #if __has_include("secretos.h")
 #include "secretos.h"
 #else
-#error "Falta secretos.h: copia secretos.ejemplo.h como secretos.h y complétalo (no lo subas a Git)."
+#error "Falta include/secretos.h: copia include/secretos.ejemplo.h como include/secretos.h y complétalo (no lo subas a Git)."
 #endif
 #include "certificados.h"  // raíces de Google Trust Services (públicas)
 
 // ---------------- Hardware ----------------
-constexpr int BUZZER_PIN = 25;              // GPIO25 → resistencia 1 kΩ → base de transistor NPN (ver LEEME.md)
+constexpr int BUZZER_PIN = 32;              // GPIO32 → resistencia 1 kΩ → base de transistor NPN (ver LEEME.md)
 constexpr bool BUZZER_ACTIVE_HIGH = true;
 constexpr bool BUZZER_PASIVO = false;       // true = buzzer pasivo: toca 520/650/780 Hz como la app
 

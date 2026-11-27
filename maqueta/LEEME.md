@@ -48,24 +48,39 @@ Admin en Control ──publica──► /quebrada_san_ildefonso  (público: lo l
 
 | Desde | Hacia |
 | --- | --- |
-| GPIO **25** del ESP32 | Resistencia 1 kΩ → **base** del transistor |
+| GPIO **32** del ESP32 | Resistencia 1 kΩ → **base** del transistor |
 | **Emisor** del transistor | GND |
 | **Colector** del transistor | Pata **−** del buzzer |
 | Pata **+** del buzzer | **5 V** (pin VIN o 5V del ESP32, alimentado por USB) |
 | GND del ESP32 | GND común |
 
-El pin se cambia en `BUZZER_PIN` del `.ino`. No conectes un buzzer de 5 V directo al GPIO: el ESP32 da 3,3 V y poca corriente.
+El pin se cambia en `BUZZER_PIN` de `src/main.cpp`. No conectes un buzzer de 5 V directo al GPIO: el ESP32 da 3,3 V y poca corriente.
 Para un buzzer **pasivo**, pon `BUZZER_PASIVO = true` y conéctalo igual (por el transistor).
 
-## Software
+## Software (VS Code + PlatformIO)
 
-- **Arduino IDE 2.x** → *Boards Manager* → **esp32 by Espressif Systems 3.x** (se compiló con 3.0.7).
-  Placa: **ESP32 Dev Module**.
-- **Biblioteca:** *Library Manager* → **ArduinoJson** de Benoit Blanchon **7.x** (se compiló con 7.2.1).
-- Archivos de la carpeta `maqueta/AlarmaPREVIUNT/`:
-  - `AlarmaPREVIUNT.ino`: el programa.
-  - `certificados.h`: raíces públicas de Google Trust Services, para validar TLS (no se usa `setInsecure()`).
-  - `secretos.ejemplo.h`: plantilla. **Cópiala como `secretos.h`** y complétala. `secretos.h` está en `.gitignore`.
+Estructura del proyecto (carpeta `maqueta/AlarmaPREVIUNT/`):
+
+```
+AlarmaPREVIUNT/
+├── platformio.ini              placa esp32dev, ArduinoJson 7.x (se instala sola), monitor a 115200
+├── src/main.cpp                el programa
+└── include/
+    ├── certificados.h          raíces públicas de Google Trust Services (validan TLS; no se usa setInsecure())
+    ├── secretos.ejemplo.h      plantilla
+    └── secretos.h              ← lo creas tú copiando la plantilla (está en .gitignore)
+```
+
+1. Instala **VS Code** y la extensión **PlatformIO IDE**.
+2. *File → Open Folder…* → abre la carpeta `AlarmaPREVIUNT`, la que tiene `platformio.ini`. La primera vez,
+   PlatformIO descarga la plataforma ESP32 y ArduinoJson.
+3. Copia `include/secretos.ejemplo.h` como `include/secretos.h` y complétalo (tabla de abajo).
+4. Conecta el ESP32 por USB. En la barra inferior de PlatformIO: **✓ Build**, **→ Upload** y **🔌 Serial Monitor**
+   (115200 baudios).
+   Si no sube, mantén apretado el botón **BOOT** del ESP32 mientras dice "Connecting…".
+
+Se comprobó que compila sin advertencias con los dos núcleos de Arduino para ESP32: **2.0.17**, el que instala la
+plataforma `espressif32` de PlatformIO, y **3.0.7**. Usa ArduinoJson 7.2.1.
 
 ### Qué completar en `secretos.h`
 
@@ -125,8 +140,8 @@ El script hace lo mismo que el ESP32: inicia sesión, lee la alerta cada 3 s y a
 3. Cambia `ZONA` por `san-ildefonso-01` y vuelve a correr el script: debe responder **HTTP 401** (sin permiso), porque el
    dispositivo está registrado para `prueba-01`.
 
-Recién entonces graba el ESP32 con `EXPECTED_ZONE = "prueba-01"` y repite los pasos 1 y 2 mirando el *Monitor serie*
-(115200 baudios). Cuando suene bien, cambia la zona del dispositivo a `san-ildefonso-01`, en `secretos.h` **y** en
+Recién entonces graba el ESP32 (**Upload**) con `EXPECTED_ZONE = "prueba-01"` y repite los pasos 1 y 2 mirando el
+**Serial Monitor** de PlatformIO (115200 baudios). Cuando suene bien, cambia la zona del dispositivo a `san-ildefonso-01`, en `secretos.h` **y** en
 `/dispositivos/<UID>`.
 
 ## Lo que se probó y lo que no
@@ -135,6 +150,7 @@ Recién entonces graba el ESP32 con `EXPECTED_ZONE = "prueba-01"` y repite los p
   - reglas con los emuladores oficiales de Firebase (`pruebas/prueba_reglas.mjs`);
   - cadena completa del dispositivo contra los emuladores (`pruebas/prueba_dispositivo.mjs`): inicio de sesión,
     permisos por zona, revocación, 2 lecturas para encender y apagar, vencimiento y respuestas inválidas;
-  - el `.ino` **compila** para ESP32 (núcleo 3.0.7, ArduinoJson 7.2.1).
+  - `src/main.cpp` **compila** para ESP32 con los núcleos 2.0.17 y 3.0.7 (ArduinoJson 7.2.1).
+    No se pudo correr `pio run` en el entorno de Claude porque el registro de PlatformIO está bloqueado.
 - **No probado:** el ESP32 físico, el buzzer, el Wi-Fi y la conexión TLS real con los servidores de Google. Tampoco el
   proyecto de producción: hay que publicar las reglas y seguir los pasos de arriba.

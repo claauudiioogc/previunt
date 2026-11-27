@@ -1,5 +1,5 @@
 /*
- * PLANTILLA de configuración del ESP32. Cópiala como "secretos.h" en esta misma carpeta y complétala.
+ * PLANTILLA de configuración del ESP32. Cópiala como "secretos.h" en esta misma carpeta (include/) y complétala.
  * "secretos.h" está en .gitignore: NUNCA lo subas al repositorio.
  */
 #pragma once

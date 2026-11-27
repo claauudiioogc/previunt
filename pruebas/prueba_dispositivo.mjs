@@ -1,5 +1,5 @@
 // Prueba de punta a punta del receptor ESP32 contra los emuladores (sin hardware):
-// cuenta propia del dispositivo → /alertas/{zona} con las reglas reales → misma lógica que AlarmaPREVIUNT.ino.
+// cuenta propia del dispositivo → /alertas/{zona} con las reglas reales → misma lógica que maqueta/AlarmaPREVIUNT/src/main.cpp.
 // Necesita los emuladores de Auth (9099) y Realtime Database (9000) corriendo (ver LEEME.md).
 import { initializeTestEnvironment } from "@firebase/rules-unit-testing";
 import { ref, set, update } from "firebase/database";

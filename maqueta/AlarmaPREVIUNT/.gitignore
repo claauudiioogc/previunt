@@ -1,0 +1,5 @@
+# Credenciales del Wi-Fi y del dispositivo: nunca al repositorio
+include/secretos.h
+# Archivos de compilación de PlatformIO
+.pio/
+.vscode/
