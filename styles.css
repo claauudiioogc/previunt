@@ -1084,5 +1084,5 @@ body.emergencia .badge-conexion.off, body.emergencia .badge-conexion.sync { back
 .equipo .persona { align-items: center; }
 .equipo .persona-foto { flex-basis: 46px; width: 46px; height: 46px; }
 .equipo .persona-nombre { font-size: 1.18rem; font-weight: 750; color: var(--marino); line-height: 1.25; }
-.texto-ciudadanos { margin-top: 14px; }
-.texto-ciudadanos p { margin: 0 0 8px; }
+.texto-motivacion p { margin: 0 0 10px; }
+.texto-motivacion p:last-child { margin-bottom: 0; font-weight: 600; }

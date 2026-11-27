@@ -206,10 +206,11 @@ const EQUIPO = [ // texto entregado por el equipo (27/11/2026)
   { nombre: "Cristhian Vigo Villar", foto: null },
   { nombre: "Joaquin Portilla Gutierrez", foto: null }
 ];
-const INTRO_EQUIPO = "Somos estudiantes de Ingeniería Mecatrónica de la Universidad Nacional de Trujillo.";
-const TEXTO_CIUDADANOS = [
-  "Pero también somos ciudadanos. Creemos que la participación de la comunidad es la manera más rápida de reportar algún problema que ocurre a nuestro alrededor y, de esta manera, en conjunto con la disposición de las autoridades, podemos ser escuchados.",
-  "Debe existir una relación horizontal: así todos estamos juntos frente a los desastres."
+const INTRO_EQUIPO = "Somos estudiantes de Ingeniería Mecatrónica de la Universidad Nacional de Trujillo, y también somos ciudadanos.";
+const MOTIVACION = [ // ideas del equipo, ordenadas (27/11/2026)
+  "Creemos que la participación de la comunidad es la manera más rápida de reportar un problema que ocurre a nuestro alrededor.",
+  "Cuando esos reportes se unen a la disposición de las autoridades, la comunidad puede ser escuchada.",
+  "Por eso buscamos una relación horizontal entre vecinos y autoridades: así todos estamos juntos frente a los desastres."
 ];
 
 /* Mochila para emergencias – "Combo de Supervivencia" de INDECI (cartilla OGRD del Congreso, 2025).
@@ -3220,7 +3221,7 @@ function renderConocenos() {
   const conDatos = EQUIPO.filter((p) => p && p.nombre);
   $("#bloqueEquipo").hidden = conDatos.length === 0;
   $("#introEquipo").textContent = INTRO_EQUIPO;
-  $("#textoCiudadanos").innerHTML = TEXTO_CIUDADANOS.map((p) => `<p>${esc(p)}</p>`).join("");
+  $("#textoMotivacion").innerHTML = MOTIVACION.map((p) => `<p>${esc(p)}</p>`).join("");
   $("#listaEquipo").innerHTML = conDatos.map((p) => `<li class="persona">
       ${p.foto ? `<img class="persona-foto" src="${esc(p.foto)}" alt="" loading="lazy">` : `<span class="persona-foto persona-ini" aria-hidden="true">${esc(p.nombre.trim().charAt(0).toUpperCase())}</span>`}
       <span><strong class="persona-nombre">${esc(p.nombre)}</strong>
