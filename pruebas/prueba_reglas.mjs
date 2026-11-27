@@ -116,6 +116,26 @@ await t("invitado NO vota", false, set(ref(anon, "votos/r1/anon1"), voto()));
 await t("admin vota reporte del campus", true, set(ref(adm, "votos/r4/adm1"), voto()));
 await t("admin escribe voto simulado", true, set(ref(adm, "votos/r1/sim_1"), voto()));
 await t("voto con valor 5 rechazado", false, set(ref(beto, "votos/r12/beto"), voto(5)));
+// --- Medallas: /verificados (las reglas comprueban la prueba) ---
+const ver = (x = {}) => ({ t: serverTimestamp(), ...x });
+await env.withSecurityRulesDisabled(async (c) => {
+  const d = c.database();
+  await set(ref(d, "reportes/rv"), rep("ana")); // reporte de ana SIN verificación de la autoridad
+  for (const [u, v] of [["beto", 1], ["sim_1", 1], ["sim_2", 1], ["sim_3", -1]]) await set(ref(d, `votos/rv/${u}`), { v, t: 1 });
+});
+await t("NO se registra con un votante que no confirmó", false, set(ref(beto, "verificados/ana/rv"), ver({ a: "beto", b: "sim_1", c: "nadie" })));
+await t("NO vale un voto negativo como prueba", false, set(ref(beto, "verificados/ana/rv"), ver({ a: "beto", b: "sim_1", c: "sim_3" })));
+await t("NO se repite un votante en la prueba", false, set(ref(beto, "verificados/ana/rv"), ver({ a: "beto", b: "beto", c: "sim_1" })));
+await t("NO se registra a nombre de otro autor", false, set(ref(beto, "verificados/beto/rv"), ver({ a: "beto", b: "sim_1", c: "sim_2" })));
+await t("NO sin prueba si la autoridad no lo verificó", false, set(ref(beto, "verificados/ana/rv"), ver()));
+await t("invitado NO registra verificados", false, set(ref(anon, "verificados/ana/rv"), ver({ a: "beto", b: "sim_1", c: "sim_2" })));
+await t("NO se agregan campos extra", false, set(ref(est, "verificados/ana/rv"), ver({ a: "beto", b: "sim_1", c: "sim_2", puntos: 99 })));
+await t("cualquier cuenta registra el verificado con 3 confirmaciones", true, set(ref(est, "verificados/ana/rv"), ver({ a: "beto", b: "sim_1", c: "sim_2" })));
+await t("NO se sobrescribe un verificado ya registrado", false, set(ref(beto, "verificados/ana/rv"), ver({ a: "beto", b: "sim_1", c: "sim_2" })));
+await t("ana NO borra su verificado", false, set(ref(ana, "verificados/ana/rv"), null));
+await t("verificado por la autoridad (r1) se registra sin votos", true, set(ref(ana, "verificados/ana/r1"), ver()));
+await t("admin borra un verificado", true, set(ref(adm, "verificados/ana/r1"), null));
+await t("todos leen los verificados", true, get(ref(nadie, "verificados")));
 // --- Admin / estado ---
 await t("nadie NO cambia nivel quebrada", false, set(ref(nadie, "quebrada_san_ildefonso"), { nivel: 3 }));
 await t("ana NO cambia nivel quebrada", false, set(ref(ana, "quebrada_san_ildefonso"), { nivel: 3 }));

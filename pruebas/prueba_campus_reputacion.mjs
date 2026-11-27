@@ -3,7 +3,7 @@ import fs from "fs";
 const app = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const ini = app.indexOf("/* === CAMPUS Y REPUTACIÓN (inicio)"), fin = app.indexOf("/* === CAMPUS Y REPUTACIÓN (fin) === */");
 if (ini < 0 || fin < 0) throw new Error("No se encontró el bloque CAMPUS Y REPUTACIÓN en app.js");
-const B = new Function("VOTOS_MIN", app.slice(ini, fin) + "\nreturn { dentroDelCampus, CAMPUS_UNT, CAMPUS_BBOX, contarVotos, mezclarVotos, puntosDe, nivelDe };")(3);
+const B = new Function("VOTOS_MIN", app.slice(ini, fin) + "\nreturn { dentroDelCampus, CAMPUS_UNT, CAMPUS_BBOX, contarVotos, mezclarVotos, MEDALLAS, medallaDe, siguienteMedalla, reporteVerificado, pruebaVerificado };")(3);
 const reglas = JSON.parse(fs.readFileSync(new URL("../database.rules.json", import.meta.url), "utf8"));
 
 let ok = 0, mal = 0;
@@ -21,13 +21,18 @@ const votos = { r1: { b: { v: 1, t: 10 }, c: { v: 1, t: 20 }, d: { v: 1, t: 30 }
 const reportes = { r1: { autor: "a", creado: 1 }, r2: { autor: "a", creado: 1 }, r3: { autor: "z", creado: 1, verificadoAutoridad: true } };
 B.mezclarVotos(reportes, votos);
 t("mezclarVotos copia los conteos", reportes.r1.confirmaciones === 3 && reportes.r1.negaciones === 0 && reportes.r2.negaciones === 2 && reportes.r1.ultimaConfirmacion === 30);
-const estado = (r) => (r.confirmaciones + r.negaciones >= 3 && r.negaciones > r.confirmaciones ? "descartado" : "x");
-const pa = B.puntosDe("a", { r1: reportes.r1 }, votos, null, estado);
-t("reporte con 3 confirmaciones da 16 puntos", pa === 16);
-t("16 puntos = nivel Vecino", B.nivelDe(pa).nombre === "Vecino");
-t("reporte descartado resta 5 (16 + 2 − 5 = 13)", B.puntosDe("a", reportes, votos, null, estado) === 13);
-t("verificado por la autoridad da 20", B.puntosDe("z", reportes, votos, null, estado) === 20);
-t("0 puntos = Nuevo, 400 = Centinela", B.nivelDe(0).nombre === "Nuevo" && B.nivelDe(400).nombre === "Centinela de la quebrada");
+// Medallas: 5 niveles por reportes verificados (5, 20, 50, 100, 150)
+t("4 verificados: todavía sin medalla", B.medallaDe(4) === null && B.siguienteMedalla(4).min === 5);
+t("5 → nivel 1 gris (Vecino)", B.medallaDe(5).nivel === 1 && B.medallaDe(5).metal === "gris");
+t("20 → nivel 2 bronce", B.medallaDe(20).metal === "bronce" && B.medallaDe(49).nivel === 2);
+t("50 → plata, 100 → oro", B.medallaDe(50).metal === "plata" && B.medallaDe(100).metal === "oro");
+t("150 → nivel 5 dorado, sin siguiente", B.medallaDe(150).metal === "dorado" && B.medallaDe(999).nivel === 5 && B.siguienteMedalla(150) === null);
+t("r1 (3 confirmaciones) está verificado; r2 (descartado) no", B.reporteVerificado(reportes.r1) && !B.reporteVerificado(reportes.r2));
+t("verificado por la autoridad sin votos", B.reporteVerificado(reportes.r3) && JSON.stringify(B.pruebaVerificado(reportes.r3, null)) === "{}");
+const pr = B.pruebaVerificado(reportes.r1, votos.r1);
+t("la prueba trae 3 votantes distintos que confirmaron", pr && new Set([pr.a, pr.b, pr.c]).size === 3 && [pr.a, pr.b, pr.c].every((u) => votos.r1[u].v === 1));
+t("sin prueba si el autor se confirmó a sí mismo", B.pruebaVerificado({ autor: "b", confirmaciones: 3, negaciones: 0 }, votos.r1) === null);
+t("sin prueba si no está verificado", B.pruebaVerificado(reportes.r2, votos.r2) === null);
 
 console.log(`\nFIN ${ok} OK, ${mal} fallas`);
 process.exit(mal ? 1 : 0);

@@ -202,6 +202,33 @@ with sync_playwright() as p:
         if db_get("quebrada_san_ildefonso")["nivel"] != 1: raise Exception("no cambió el nivel")
         pg4.screenshot(path=f"{CAPT}/09_control_admin.png", full_page=True)
     t("admin clau_udio: ve Control y publica el nivel", admin)
+    def medallas():
+        uid_ana = pg.evaluate("PREVIUNT.Datos.uid")
+        pg4.click("[data-gestion=todos]")
+        pg4.click(f"#adminReportes [data-acc=verificar][data-id={json.dumps(id_rep)}]")
+        # el celular del admin registra la prueba en /verificados al ver el reporte verificado
+        for _ in range(30):
+            v = db_get(f"verificados/{uid_ana}") or {}
+            if id_rep in v: break
+            time.sleep(0.5)
+        else: raise Exception("no se registró el reporte verificado")
+        pg.wait_for_function("document.querySelector('#cuentaMedalla').hidden === true", timeout=5000)
+        # 4 verificados más (escritos como dueño del emulador) → 5 = primera medalla
+        extra = {f"x{i}": {"t": 1} for i in range(4)}
+        urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:9000/verificados/{uid_ana}.json?ns={P}&access_token=owner", data=json.dumps(extra).encode(), method="PATCH"))
+        toast(pg, "Nueva medalla: Vecino")
+        pg.wait_for_selector("#cuentaMedalla .m-gris", timeout=5000)
+        pg.click("#btnCuenta"); pg.wait_for_selector("#mcMedallas .fila-medallas", timeout=5000)
+        if "5 reportes verificados" not in pg.inner_text("#mcMedallas"): raise Exception(pg.inner_text("#mcMedallas"))
+        pg.screenshot(path=f"{CAPT}/10_medallas.png", full_page=True)
+        extra = {f"y{i}": {"t": 1} for i in range(150)}
+        urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:9000/verificados/{uid_ana}.json?ns={P}&access_token=owner", data=json.dumps(extra).encode(), method="PATCH"))
+        toast(pg, "Centinela de la quebrada")
+        pg.wait_for_selector("#mcMedallas .fila-medallas li:nth-child(5).lograda", timeout=5000)
+        pg.wait_for_timeout(1500)
+        pg.screenshot(path=f"{CAPT}/11_medalla_dorada.png", full_page=True)
+        pg.click("#btnCerrarCuenta")
+    t("medallas: el admin verifica → se registra; 5 → gris con aviso; 155 → dorada", medallas)
     def bloquear():
         pg4.click("[data-gestion=todos]")
         pg4.once("dialog", lambda d: d.accept())

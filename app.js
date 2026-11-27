@@ -659,7 +659,7 @@ const Datos = {
     dbM.onValue(dbM.ref(this.db, ".info/serverTimeOffset"), (s) => { serverOffset = s.val() || 0; });
     dbM.onValue(dbM.ref(this.db, ".info/connected"), (s) => cambiarConexion(s.val() === true));
     this._rutas = { sensor: "quebrada_san_ildefonso", demo: "demo", reportes: "reportes", historial: "historial_nivel",
-                    votos: "votos", perfiles: "perfiles", bloqueados: "bloqueados" };
+                    votos: "votos", perfiles: "perfiles", bloqueados: "bloqueados", verificados: "verificados" };
     Cuenta.iniciar(); // cuentas: sesión, tipo de cuenta y rol (evento "sesion")
   },
 
@@ -683,7 +683,7 @@ const Datos = {
       cb(v);
     }, (err) => {
       console.error(canal, err);
-      if (canal === "votos" || canal === "perfiles" || canal === "bloqueados") cb({});
+      if (["votos", "perfiles", "bloqueados", "verificados"].includes(canal)) cb({});
     });
   },
 
@@ -1192,29 +1192,30 @@ function dentroDelCampus(lat, lng) {
   return dentro;
 }
 
-/* ---------- Reputación (se calcula en cada celular, igual para todos) ---------- */
-const PUNTOS = { confirmado: 10, porConfirmacion: 2, maxConfirmaciones: 5, autoridad: 20, descartado: -5 };
-const ANTIGUEDAD_MIN_MS = 0; // demo: 0. Uso real: 24 * 60 * 60 * 1000 (ignora votos de cuentas recién creadas)
-const NIVELES_REP = [
-  { min: 400, nombre: "Centinela de la quebrada", icono: "shield-user" },
-  { min: 150, nombre: "Guardián", icono: "badge-check" },
-  { min: 50, nombre: "Vigía", icono: "shield-check" },
-  { min: 10, nombre: "Vecino", icono: "eye" },
-  { min: 0, nombre: "Nuevo", icono: null }
+/* ---------- Medallas: 5 niveles por REPORTES VERIFICADOS (de gris a dorado) ----------
+   Un reporte cuenta como verificado si la autoridad lo verificó o si 3 cuentas distintas lo confirmaron
+   (y no lo descartaron). Queda registrado para siempre en /verificados/{autor}/{reporte}: las reglas
+   solo aceptan el registro si el reporte de verdad está verificado (comprueban los 3 votos). */
+const MEDALLAS = [ // min = reportes verificados para llegar a ese nivel
+  { min: 5, nivel: 1, nombre: "Vecino", metal: "gris" },
+  { min: 20, nivel: 2, nombre: "Vigía", metal: "bronce" },
+  { min: 50, nivel: 3, nombre: "Guardián", metal: "plata" },
+  { min: 100, nivel: 4, nombre: "Centinela", metal: "oro" },
+  { min: 150, nivel: 5, nombre: "Centinela de la quebrada", metal: "dorado" }
 ];
-const nivelDe = (puntos) => NIVELES_REP.find((n) => puntos >= n.min);
+const ANTIGUEDAD_MIN_MS = 0; // demo: 0. Uso real: 24 * 60 * 60 * 1000 (los votos de cuentas recién creadas no sirven de prueba)
+/* null si aún no llega al primer nivel (menos de 5) */
+const medallaDe = (n) => [...MEDALLAS].reverse().find((m) => n >= m.min) || null;
+const siguienteMedalla = (n) => MEDALLAS.find((m) => n < m.min) || null;
 
-/* Cuenta los votos de /votos/{id}. perfiles sirve para ignorar cuentas muy nuevas al dar puntos. */
-function contarVotos(votosReporte, perfiles = null) {
-  let c = 0, n = 0, ultimaConfirmacion = 0, cValidas = 0;
-  for (const [uid, x] of Object.entries(votosReporte || {})) {
+/* Cuenta los votos de /votos/{id}. */
+function contarVotos(votosReporte) {
+  let c = 0, n = 0, ultimaConfirmacion = 0;
+  for (const x of Object.values(votosReporte || {})) {
     if (!x || (x.v !== 1 && x.v !== -1)) continue;
     if (x.v === 1) { c++; ultimaConfirmacion = Math.max(ultimaConfirmacion, x.t || 0); } else n++;
-    const p = perfiles && perfiles[uid];
-    const valida = !perfiles || uid.startsWith("sim_") || (p && (x.t || 0) - (p.creado || 0) >= ANTIGUEDAD_MIN_MS);
-    if (x.v === 1 && valida) cValidas++;
   }
-  return { c, n, ultimaConfirmacion, cValidas };
+  return { c, n, ultimaConfirmacion };
 }
 
 /* Copia los conteos al reporte EN MEMORIA, para que estadoReporte() siga igual. */
@@ -1227,19 +1228,24 @@ function mezclarVotos(reportes, votos) {
   }
 }
 
-/* Puntos de un autor. estado = la función estadoReporte(). */
-function puntosDe(uid, reportes, votos, perfiles, estado) {
-  let p = 0;
-  for (const [id, r] of Object.entries(reportes || {})) {
-    if (!r || r.autor !== uid) continue;
-    const v = contarVotos(votos && votos[id], perfiles);
-    const e = estado(r);
-    if (r.verificadoAutoridad) p += PUNTOS.autoridad;
-    if (v.c >= VOTOS_MIN) p += PUNTOS.confirmado;
-    p += PUNTOS.porConfirmacion * Math.min(v.cValidas, PUNTOS.maxConfirmaciones);
-    if (e === "descartado") p += PUNTOS.descartado;
-  }
-  return Math.max(0, p);
+/* ¿El reporte está verificado? (por la autoridad, o 3 confirmaciones sin que lo hayan descartado) */
+function reporteVerificado(r) {
+  if (!r) return false;
+  if (r.verificadoAutoridad === true) return true;
+  const c = r.confirmaciones || 0, n = r.negaciones || 0;
+  return c >= VOTOS_MIN && !(n > c);
+}
+
+/* Prueba que las reglas aceptan para /verificados: {} si lo verificó la autoridad, o 3 uids que lo confirmaron.
+   null si todavía no hay prueba. */
+function pruebaVerificado(r, votosReporte, perfiles = null) {
+  if (!reporteVerificado(r)) return null;
+  if (r.verificadoAutoridad === true) return {};
+  const uids = Object.entries(votosReporte || {})
+    .filter(([uid, x]) => x && x.v === 1 && uid !== r.autor && /^[A-Za-z0-9_-]{1,64}$/.test(uid))
+    .filter(([uid, x]) => !perfiles || uid.startsWith("sim_") || (perfiles[uid] && (x.t || 0) - (perfiles[uid].creado || 0) >= ANTIGUEDAD_MIN_MS))
+    .map(([uid]) => uid);
+  return uids.length >= 3 ? { a: uids[0], b: uids[1], c: uids[2] } : null;
 }
 /* === CAMPUS Y REPUTACIÓN (fin) === */
 
@@ -1253,6 +1259,7 @@ const S = {
   votos: {},                // /votos/{idReporte}/{uid} = { v: 1 | -1, t }
   perfiles: {},             // /perfiles/{uid} = { usuario, avatar, creado } (lo único público de una cuenta)
   bloqueados: {},
+  verificados: {},          // /verificados/{autor}/{reporte}: reportes verificados (medallas)
   historial: {},
   ubicacion: null,          // { lat, lng, precision }
   nivelPrevio: undefined,
@@ -3082,7 +3089,7 @@ function renderControlReportes() {
         <div class="ctl-info">
           <strong>${esc(T.nombre)}${trazoDe(r) ? ` (tramo de ${Math.round(r.largo || 0)} m)` : ""}</strong>
           ${r.descripcion ? `<p>${esc(r.descripcion)}</p>` : ""}
-          <span class="meta">${fechaHora(r.creado)} · ${r.confirmaciones || 0} confirman, ${r.negaciones || 0} dicen que ya no está${cuentas ? ` · por ${esc(perfilDe(r.autor)?.usuario || "cuenta sin perfil")}` : ""}</span>
+          <span class="meta">${fechaHora(r.creado)} · ${r.confirmaciones || 0} confirman, ${r.negaciones || 0} dicen que ya no está${cuentas ? ` · por ${esc(perfilDe(r.autor)?.usuario || "cuenta sin perfil")} ${htmlMedalla(medallaDe(verificadosDe(r.autor)), "medalla-mini")}` : ""}</span>
           <span class="item-badges"><span class="estado-badge g-${g}">${NOMBRE_GESTION[g]}</span>${comunidad}${r.verificadoAutoridad ? '<span class="estado-badge autoridad">Verificado</span>' : ""}${r.ambito === "unt" ? '<span class="etiqueta-campus">Campus UNT</span>' : ""}${cuentas && S.bloqueados[r.autor] ? '<span class="estado-badge bloqueado">Autor bloqueado</span>' : ""}</span>
         </div>
       </div>
@@ -3203,17 +3210,46 @@ function htmlAvatar(perfil, clase = "avatar-chico") {
   return `<span class="avatar ${clase}" style="background:${AVATARES[av]}">${dentro}</span>`;
 }
 
-/* ---------- Reputación: puntos por autor (de los reportes que la app tiene cargados) ---------- */
-let REP = {};
-function recalcularReputacion() {
-  REP = {};
-  const autores = new Set(Object.values(S.reportes || {}).map((r) => r && r.autor).filter(Boolean));
-  for (const a of autores) REP[a] = puntosDe(a, S.reportes, S.votos, S.perfiles, estadoReporte);
+/* ---------- Medallas: cuántos reportes verificados tiene cada cuenta ---------- */
+const verificadosDe = (uid) => {
+  if (Datos.modo === "local") return Object.values(S.reportes || {}).filter((r) => r && r.autor === uid && reporteVerificado(r)).length;
+  return Object.keys((S.verificados && S.verificados[uid]) || {}).length;
+};
+function htmlMedalla(m, clase = "") {
+  if (!m) return "";
+  return `<span class="medalla m-${m.metal} ${clase}" role="img" aria-label="Medalla ${esc(m.nombre)}, nivel ${m.nivel} de 5"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-medalla"/></svg></span>`;
 }
-const puntosCuenta = (uid) => REP[uid] || 0;
-function htmlNivel(uid, conPuntos = false) {
-  const p = puntosCuenta(uid), n = nivelDe(p);
-  return `<span class="nivel-rep">${n.icono ? ic(n.icono) : ""}${esc(n.nombre)}${conPuntos ? ` · ${p} pts` : ""}</span>`;
+function htmlNivel(uid) {
+  const m = medallaDe(verificadosDe(uid));
+  return m ? `<span class="nivel-rep">${htmlMedalla(m)}${esc(m.nombre)}</span>` : `<span class="nivel-rep">Nuevo</span>`;
+}
+/* Registra en /verificados los reportes que ya están verificados (lo hace cualquier cuenta con sesión;
+   las reglas comprueban la prueba). Así el conteo de medallas no se pierde cuando el reporte sale de las 72 h. */
+const _pruebasIntentadas = new Set();
+function registrarVerificados() {
+  if (Datos.modo !== "firebase" || !Red.conectado || !S._verificadosCargados || !Datos.fb) return;
+  const u = Cuenta.usuario;
+  if (!u || u.tipo === "invitado") return;
+  let n = 0;
+  for (const [id, r] of Object.entries(S.reportes || {})) {
+    if (n >= 5) break;
+    if (!r || !r.autor || String(r.autor).startsWith("sim_") || _pruebasIntentadas.has(id)) continue;
+    if (S.verificados[r.autor] && S.verificados[r.autor][id]) continue;
+    const prueba = pruebaVerificado(r, S.votos && S.votos[id], S.perfiles);
+    if (!prueba) continue;
+    _pruebasIntentadas.add(id); n++;
+    Datos.fb.set(Datos.fb.ref(Datos.db, `verificados/${r.autor}/${id}`), { ...prueba, t: Datos.fb.serverTimestamp() })
+      .catch((e) => console.info("Reporte verificado ya registrado o rechazado:", id, e && e.code));
+  }
+}
+/* Aviso cuando la propia cuenta sube de medalla (una vez por nivel y por celular) */
+function revisarSubidaMedalla() {
+  const u = Cuenta.usuario;
+  if (!u || u.tipo === "invitado" || (Datos.modo !== "local" && !S._verificadosCargados)) return;
+  const n = verificadosDe(u.uid), m = medallaDe(n), nivel = m ? m.nivel : 0, clave = "previunt_medalla_" + u.uid;
+  const antes = lsGet(clave, null);
+  if (antes !== null && nivel > antes) toast(`¡Nueva medalla: ${m.nombre}! Ya tienes ${n} reportes verificados.`, 6000);
+  if (antes !== nivel) lsSet(clave, nivel);
 }
 function htmlAutor(r) {
   if (!r || !r.autor || String(r.autor).startsWith("sim_")) return "";
@@ -3239,6 +3275,7 @@ function renderBotonCuenta() {
   b.classList.toggle("invitado", invitado);
   $("#cuentaPunto").hidden = invitado || !falta();
   if (invitado) {
+    $("#cuentaMedalla").hidden = true;
     $("#cuentaAvatar").outerHTML = `<span id="cuentaAvatar" class="avatar avatar-chico">${ic("log-in")}</span>`;
     $("#cuentaTexto").textContent = "Entrar";
     b.setAttribute("aria-label", "Iniciar sesión o crear cuenta");
@@ -3247,8 +3284,12 @@ function renderBotonCuenta() {
   const p = perfilDe(u.uid) || (u.nombreUsuario ? { usuario: u.nombreUsuario } : null);
   $("#cuentaAvatar").outerHTML = htmlAvatar(p).replace('<span class="avatar', '<span id="cuentaAvatar" class="avatar');
   $("#cuentaTexto").textContent = p ? p.usuario : "Completa tu registro";
-  b.setAttribute("aria-label", p ? `Tu cuenta: ${p.usuario}, nivel ${nivelDe(puntosCuenta(u.uid)).nombre}` : "Completa tu registro");
-  b.title = p ? `${p.usuario} · ${nivelDe(puntosCuenta(u.uid)).nombre}` : "Completa tu registro";
+  const med = medallaDe(verificadosDe(u.uid));
+  $("#cuentaMedalla").innerHTML = htmlMedalla(med, "medalla-mini");
+  $("#cuentaMedalla").hidden = !med;
+  b.setAttribute("aria-label", p ? `Tu cuenta: ${p.usuario}${med ? `, medalla ${med.nombre}` : ""}` : "Completa tu registro");
+  b.title = p ? `${p.usuario}${med ? ` · ${med.nombre}` : ""}` : "Completa tu registro";
+  revisarSubidaMedalla();
 }
 
 /* Puerta: true si puede participar en ese ámbito; si no, abre la hoja que corresponde */
@@ -3398,7 +3439,15 @@ async function renderMiCuenta() {
   const p = perfilDe(u.uid) || { usuario: u.nombreUsuario || "?", avatar: "ola-azul" };
   $("#mcAvatar").outerHTML = htmlAvatar(p, "avatar-grande").replace('<span class="avatar', '<span id="mcAvatar" class="avatar');
   $("#mcUsuario").textContent = p.usuario;
-  $("#mcNivel").innerHTML = `${htmlNivel(u.uid, true)}`;
+  const nv = verificadosDe(u.uid), med = medallaDe(nv), sig = siguienteMedalla(nv);
+  $("#mcNivel").innerHTML = htmlNivel(u.uid);
+  const desde = med ? med.min : 0, pct = sig ? Math.round(((nv - desde) / (sig.min - desde)) * 100) : 100;
+  $("#mcMedallas").innerHTML = `
+    <p class="mc-verificados"><strong>${nv}</strong> ${nv === 1 ? "reporte verificado" : "reportes verificados"}</p>
+    <div class="barra-medalla" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${pct}%"></span></div>
+    <p class="meta">${sig ? `Te ${sig.min - nv === 1 ? "falta 1 reporte verificado" : `faltan ${sig.min - nv} reportes verificados`} para <strong>${esc(sig.nombre)}</strong>.` : "¡Llegaste a la medalla más alta!"}</p>
+    <ol class="fila-medallas">${MEDALLAS.map((m) => `<li class="${nv >= m.min ? "lograda" : "bloqueada"}">${htmlMedalla(m, "medalla-grande")}<span>${esc(m.nombre)}</span><small>${m.min}</small></li>`).join("")}</ol>
+    <p class="meta">Un reporte se verifica cuando 3 personas lo confirman o cuando la autoridad lo verifica.</p>`;
   $("#mcTipo").textContent = u.esAdmin ? "Cuenta de autoridad (admin)" : u.tipo === "unt" ? `Cuenta UNT · ${u.correo}` : "Cuenta personal";
   const f = falta(), bloq = S.bloqueados && S.bloqueados[u.uid];
   $("#mcAviso").hidden = !(f || bloq);
@@ -3585,7 +3634,7 @@ function prepararCuentas() {
     const u = Cuenta.usuario;
     if (u && (u.tipo === "unt" || u.esAdmin) && document.visibilityState === "visible") Geocerca.iniciar(); else Geocerca.detener();
     pintarCampus();
-    pintarReportes(); renderListas(); renderAdmin();
+    pintarReportes(); renderListas(); renderAdmin(); registrarVerificados();
     if (!$("#hojaReporte").hidden && Datos.modo !== "local" && Cuenta.motivoNoPuede(R.ambito || "ciudad")) cerrarReporte(false);
   });
   document.addEventListener("visibilitychange", () => {
@@ -3851,11 +3900,17 @@ async function iniciar() {
   // Los conteos de votos se calculan desde /votos (un voto por cuenta) y se copian al reporte en memoria
   const alCambiarReportes = () => {
     if (Datos.modo !== "local") mezclarVotos(S.reportes, S.votos);
-    recalcularReputacion(); pintarReportes(); renderTodo(); renderListas(); renderBotonCuenta();
+    pintarReportes(); renderTodo(); renderListas(); renderBotonCuenta();
+    registrarVerificados();
   };
   Datos.suscribir("reportes", (v) => { S.reportes = v || {}; alCambiarReportes(); });
   Datos.suscribir("votos", (v) => { S.votos = v || {}; alCambiarReportes(); });
-  Datos.suscribir("perfiles", (v) => { S.perfiles = v || {}; recalcularReputacion(); renderBotonCuenta(); pintarReportes(); renderAdmin(); });
+  Datos.suscribir("perfiles", (v) => { S.perfiles = v || {}; renderBotonCuenta(); pintarReportes(); renderAdmin(); });
+  Datos.suscribir("verificados", (v) => {
+    S.verificados = v || {}; S._verificadosCargados = true;
+    renderBotonCuenta(); pintarReportes(); renderAdmin(); registrarVerificados();
+    if (HC.pantalla === "micuenta") renderMiCuenta();
+  });
   Datos.suscribir("bloqueados", (v) => { S.bloqueados = v || {}; renderBotonCuenta(); renderAdmin(); });
   Datos.suscribir("historial", (v) => { S.historial = v || {}; renderRegistro(); });
 
