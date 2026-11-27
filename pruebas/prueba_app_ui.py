@@ -91,6 +91,12 @@ with sync_playwright() as p:
         pg.screenshot(path=f"{CAPT}/02_registro_errores.png", full_page=True)
         llenar(pg, {"regNombres": "Ana", "regApellidos": "Mora Ríos", "regUsuario": "ana_m", "regCelular": "987654321", "regCorreo": "ana@gmail.com", "regDni": "12345678", "regClave": "secreta12", "regClave2": "secreta12"})
         pg.click("#regDni"); pg.wait_for_function("document.querySelector('#regUsuarioEstado').textContent === 'Disponible'", timeout=8000)
+        pg.click("#regClave + .btn-ojo")
+        if pg.get_attribute("#regClave", "type") != "text": raise Exception("el ojito no muestra la contraseña")
+        pg.screenshot(path=f"{CAPT}/02b_ojito.png", clip={"x": 0, "y": 380, "width": 390, "height": 300}) if False else None
+        pg.click("#regClave + .btn-ojo")
+        if pg.get_attribute("#regClave", "type") != "password": raise Exception("el ojito no vuelve a ocultarla")
+        pg.click("#regClave2 + .btn-ojo")
         pg.click("#btnCrearCuenta")
         pg.wait_for_selector("#formSMS", state="visible", timeout=20000)
         pg.screenshot(path=f"{CAPT}/03_sms.png")

@@ -3319,6 +3319,7 @@ const TITULOS_CUENTA = { login: "Inicia sesión", registro: "Crear cuenta", sms:
 
 function abrirCuenta(pantalla, o = {}) {
   HC.pantalla = pantalla;
+  ocultarClaves();
   if ("despues" in o) HC.despues = o.despues || null;
   if (pantalla === "registro") HC.completar = !!o.completar;
   $("#hojaCuenta").hidden = false;
@@ -3336,7 +3337,34 @@ function abrirCuenta(pantalla, o = {}) {
   const primero = $(`#hojaCuenta [data-pantalla="${pantalla}"] input:not([type=checkbox])`);
   if (primero && pantalla !== "micuenta") setTimeout(() => primero.focus({ preventScroll: true }), 60);
 }
-function cerrarCuenta() { $("#hojaCuenta").hidden = true; HC.pantalla = null; clearInterval(HC.reloj); }
+function cerrarCuenta() { $("#hojaCuenta").hidden = true; HC.pantalla = null; clearInterval(HC.reloj); ocultarClaves(); }
+/* Ojito para ver u ocultar lo que se escribe en los campos de contraseña */
+function prepararOjosClave() {
+  $$("#hojaCuenta input[type=password]").forEach((inp) => {
+    const caja = document.createElement("div");
+    caja.className = "input-clave";
+    inp.parentNode.insertBefore(caja, inp);
+    caja.appendChild(inp);
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-ojo";
+    caja.appendChild(b);
+    const pintar = () => {
+      const visible = inp.type === "text";
+      b.innerHTML = ic(visible ? "eye-off" : "eye");
+      b.setAttribute("aria-label", visible ? "Ocultar contraseña" : "Mostrar contraseña");
+      b.setAttribute("aria-pressed", String(visible));
+    };
+    b.addEventListener("click", () => {
+      inp.type = inp.type === "password" ? "text" : "password";
+      pintar();
+      inp.focus({ preventScroll: true });
+    });
+    b._pintar = pintar; pintar();
+  });
+}
+function ocultarClaves() { // al cerrar la hoja o al entrar, las contraseñas vuelven a ocultarse
+  $$("#hojaCuenta .input-clave").forEach((c) => { c.querySelector("input").type = "password"; c.querySelector(".btn-ojo")._pintar(); });
+}
 function terminarCuenta(msg) {
   const despues = HC.despues; HC.despues = null;
   cerrarCuenta();
@@ -3476,6 +3504,7 @@ async function cargarMisDatos() {
 function prepararCuentas() {
   if (!firebaseConfigurado()) return;
   Cuenta.cargarGuardada();
+  prepararOjosClave();
   renderBotonCuenta();
   $("#btnCuenta").onclick = () => {
     const u = Cuenta.usuario;
