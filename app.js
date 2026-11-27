@@ -909,8 +909,10 @@ function mensajeError(err) {
     "auth/network-request-failed": "Sin conexión. Revisa tu internet.",
     "auth/requires-recent-login": "Por seguridad, vuelve a pedir el código.",
     "auth/operation-not-allowed": "Este tipo de cuenta aún no está activado en Firebase.",
+    "auth/billing-not-enabled": "Por ahora no se pueden enviar SMS a números reales. Usa un número de prueba.",
     "auth/weak-password": "La contraseña es muy débil (mínimo 8 caracteres)."
   };
+  if (err && err.code === "auth/operation-not-allowed" && /region/i.test(err.message || "")) return "Todavía no se pueden enviar códigos SMS a números de Perú.";
   return m[err && err.code] || (err && err.message) || "Ocurrió un error.";
 }
 
@@ -3198,7 +3200,7 @@ function prepararAdmin() {
    Solo en modo Firebase. En modo local (sin Firebase) la app funciona como antes, sin cuentas.
 --------------------------------------------------------------------- */
 const AVATARES = {
-  "ola-azul": "#1565C0", "monte-cafe": "#6D4C41", "gota-celeste": "#0277BD", "sol-ambar": "#9A5B00",
+  "ola-azul": "#1565C0", "monte-cafe": "#6D4C41", "sol-ambar": "#9A5B00",
   "hoja-verde": "#33691E", "faro-rojo": "#AD1457", "luna-indigo": "#3949AB", "escudo": "#123F40"
 };
 const conCuentas = () => firebaseConfigurado() && Datos.modo !== "local";
@@ -3621,7 +3623,6 @@ function prepararCuentas() {
 
   // Mi cuenta
   $("#mcDetalles").addEventListener("toggle", () => { if ($("#mcDetalles").open) cargarMisDatos(); });
-  $("#btnCambiarCuenta").onclick = async () => { await Cuenta.salir(); await esperarSesion(); abrirCuenta("login"); };
   $("#btnCerrarSesion").onclick = async () => {
     if (!confirm("¿Cerrar sesión en este celular?")) return;
     await Cuenta.salir(); cerrarCuenta(); toast("Sesión cerrada. Sigues viendo la app como invitado.");
