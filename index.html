@@ -68,13 +68,6 @@
         </div>
       </article>
 
-      <!-- Aviso vecinal: huaico confirmado cerca (sin alarma) -->
-      <button id="avisoVecinal" class="aviso-vecinal" hidden>
-        <svg class="ic" aria-hidden="true"><use href="#i-triangle-alert"/></svg>
-        <span><strong>Cuidado al salir</strong><span id="avisoVecinalTexto"></span></span>
-        <svg class="ic ic-flecha" aria-hidden="true"><use href="#i-map"/></svg>
-      </button>
-
       <!-- Reportes hechos sin conexión: se guardan en el celular hasta que el servidor confirme -->
       <section id="seccionPendientes" class="pendientes" aria-label="Tus reportes por enviar" aria-live="polite" hidden>
         <h2 class="pend-titulo">Tus reportes por enviar</h2>
@@ -269,7 +262,7 @@
 
       <section class="bloque">
         <h2>Estado de la quebrada</h2>
-        <p class="meta">Lo publica Defensa Civil, el COER o la municipalidad. El huaico lo marcan los vecinos en el mapa.</p>
+        <p class="meta">Lo publica Defensa Civil, el COER o la municipalidad. Los reportes de vecinos no cambian este estado.</p>
         <label class="campo" for="inputFuenteOficial">Fuente</label>
         <input id="inputFuenteOficial" class="input" type="text" maxlength="80" placeholder="Ej.: Aviso SENAMHI N° 049 · Parte COER 21:40">
         <label class="fila-check"><input type="checkbox" id="chkSimular" checked> <span><strong>Simulación</strong>: muestra la cinta "MODO DEMO" y no activa la sirena física.</span></label>

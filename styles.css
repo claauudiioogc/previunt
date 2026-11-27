@@ -504,15 +504,6 @@ textarea:focus { outline: none; border-color: var(--azul); }
 .input { width: 100%; font: inherit; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--linea); }
 .input:focus { outline: none; border-color: var(--azul); }
 
-/* Aviso vecinal "Cuidado al salir" (sin alarma) */
-.aviso-vecinal {
-  width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; cursor: pointer;
-  background: #FFF3E0; color: #4E2A00; border: 2px solid var(--naranja); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
-}
-.aviso-vecinal > .ic { width: 26px; height: 26px; color: var(--naranja); }
-.aviso-vecinal strong { display: block; font-size: 1.02rem; }
-.aviso-vecinal span span { font-size: .9rem; }
-.aviso-vecinal .ic-flecha { margin-left: auto; width: 22px; height: 22px; color: var(--naranja); }
 /* Escalera de 3 estados: desborde, en aumento, seco */
 .regla[data-nivel="3"] .regla-marca:is([data-n="1"], [data-n="3"]) { background: #fff; border-color: #fff; color: var(--c); opacity: 1; }
 

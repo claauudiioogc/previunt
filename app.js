@@ -30,7 +30,6 @@ const TRUJILLO = { lat: -8.11, lng: -79.03, nombre: "Trujillo centro" };
 
 const REPORTE_CADUCA_MS = 6 * 60 * 60 * 1000; // 6 h sin nuevas confirmaciones
 const VOTOS_MIN = 3;
-const RADIO_ALERTA_HUAICO_M = 1000;
 const TRAMO_MAX_M = 2000;
 const RADIO_CERCANOS_M = 1000;
 const RADIO_LISTA_M = 2000;                  // lista del mapa: solo reportes a menos de 2 km
@@ -41,7 +40,7 @@ const CARTO_KEY = "cb1_5fmm_1_22186419f51462a8001d1885";               // Inicio
 /* Modo cercanía (se activa en el centro de control; apagado por defecto para la demo) */
 const RADIO_REPORTE_M = 500;                 // solo se puede reportar a menos de 500 m de donde estás
 const RADIO_VOTO_M = 1000;                   // solo validan quienes están a menos de 1 km del reporte
-const proximidadActiva = () => !!(S.demo && S.demo.proximidad);          // un huaico confirmado a menos de 1 km sube la alerta del usuario
+const proximidadActiva = () => !!(S.demo && S.demo.proximidad);
 
 // Acción de Inicio que abre el mapa con la ruta de evacuación desde tu ubicación
 const RUTA_EVAC = { ruta: true, texto: "Conoce tu ruta" };
@@ -49,7 +48,7 @@ const RUTA_EVAC = { ruta: true, texto: "Conoce tu ruta" };
 // Sistema de colores normado (igual en toda la app)
 /* El estado NO viene de un sensor: lo publica la autoridad (Defensa Civil, COER La Libertad, municipalidad)
    desde el Panel de autoridad, citando su fuente (aviso SENAMHI, parte del COER, inspección en campo).
-   El nivel 2 (huaico) solo lo producen los reportes vecinales confirmados.
+   Los reportes de vecinos no cambian el estado. El nivel 2 ya no se usa (un 2 antiguo se lee como En aumento).
    Se guarda en /quebrada_san_ildefonso/nivel (0-3), que es lo que lee la sirena física. */
 const NIVELES = [
   {
@@ -64,7 +63,7 @@ const NIVELES = [
   },
   {
     n: 2, estado: "HUAICO", corto: "Huaico", color: "#EF6C00", titulo: "Huaico reportado", icono: "triangle-alert",
-    mensaje: "Vecinos reportaron un huaico cerca. Cuidado al salir.",
+    mensaje: "Nivel ya no usado: los datos antiguos con este valor se muestran como En aumento.",
     acciones: [RUTA_EVAC, "Prepárate para evacuar y ubica a tu familia", "No cruces agua ni lodo"]
   },
   {
@@ -73,7 +72,7 @@ const NIVELES = [
     acciones: [{ ruta: true, texto: "Evacúa ahora: conoce tu ruta" }, "Si no puedes salir, sube al piso más alto", "No cruces agua ni lodo"]
   }
 ];
-// Estados que puede publicar la autoridad (el huaico lo marcan los vecinos)
+// Estados que publica la autoridad. Son los únicos: los reportes de vecinos no cambian el estado ni avisan.
 const NIVELES_AUTORIDAD = [0, 1, 3];
 
 /* Trazado REFERENCIAL del cauce de San Ildefonso (aguas arriba → mar).
@@ -134,7 +133,7 @@ const EVAC = {
 
 /* Los ids ("inundacion", "huaico", "otro"…) son los que ya están guardados en Firebase y en la cola:
    NO se cambian. Solo cambia el rótulo visible. "Lodo" reemplaza a "Huaico o lodo" para no invitar a
-   acercarse al flujo; el nivel "Huaico" del sistema de alertas no cambia.
+   acercarse al flujo. Un reporte de lodo no genera alertas: solo se ve en el mapa.
    descObligatoria: la descripción es obligatoria solo para "Otros". */
 const TIPOS_REPORTE = {
   bloqueo:    { nombre: "Calle bloqueada",     icono: "construction", color: "#B71C1C" },
@@ -1412,30 +1411,11 @@ function estadoBase() {
   return { nivel: oficial(Number(s.nivel)), fuente: "autoridad", ts: Number(s.actualizado) || 0, cita: s.fuente || "" };
 }
 
-/* Alerta por reportes de huaico cerca del usuario (o en cualquier zona si no compartió su ubicación):
-   - verificado por la autoridad  → rojo (emergencia)
-   - confirmado por ≥ 3 vecinos   → naranja (prepárate)
-   Los reportes caducados o descartados no cuentan. */
-function alertaPorReportes() {
-  const p = S.ubicacion ? [S.ubicacion.lat, S.ubicacion.lng] : null;
-  let mejor = null;
-  for (const [id, r] of Object.entries(S.reportes || {})) {
-    if (!r || r.tipo !== "huaico" || typeof r.lat !== "number") continue;
-    if (estadoReporte(r) !== "confirmado") continue;
-    const dist = p ? distAReporte(p, r) : null;
-    if (dist !== null && dist > RADIO_ALERTA_HUAICO_M) continue;
-    const nivel = r.verificadoAutoridad ? 3 : ((r.confirmaciones || 0) >= VOTOS_MIN ? 2 : null);
-    if (nivel !== null && (!mejor || nivel > mejor.nivel)) mejor = { nivel, id, r, dist };
-  }
-  return mejor;
-}
-
 /* El estado (y la alarma) es solo el de la quebrada, publicado por la autoridad.
-   Un huaico reportado por vecinos NO activa la alarma: se muestra como aviso de "Cuidado al salir". */
+   Los reportes de vecinos se ven en el mapa: no cambian el estado, no hacen sonar nada ni envían avisos. */
 function estadoEfectivo() {
   return estadoBase();
 }
-const esPorReporte = (e) => e.fuente === "reporteAutoridad" || e.fuente === "reporteVecinos";
 
 /* ---------------------------------------------------------------------
    SIRENA (Web Audio API, sin archivos externos)
@@ -1605,13 +1585,6 @@ function renderInicio() {
     } else if (Datos.modo === "firebase" && !Red.conectado) {
       $("#estadoMeta").innerHTML = `${textoFuente(e)}<br><span class="aviso-offline">Sin conexión desde las ${hora(Red.desde)}: puede estar desactualizado</span>`;
     }
-    if (esPorReporte(e)) {
-      const donde = e.dist !== null && e.dist !== undefined ? ` a ${Math.round(e.dist / 10) * 10} m` : "";
-      $("#estadoEtiqueta").textContent = "Huaico reportado" + donde;
-      $("#estadoMensaje").textContent = e.nivel === 3 ? "Verificado por la autoridad. Evacúa a zona alta." : "Confirmado por vecinos. Prepárate.";
-      const base = e.base.nivel !== null ? NIVELES[e.base.nivel].corto.toLowerCase() : "sin datos";
-      $("#estadoMeta").textContent = `Reporte vecinal · ${hora(e.ts)} · Estado oficial: ${base}`;
-    }
   }
 
   // Emergencia (rojo): solo con un dato recibido del servidor en esta sesión, nunca con uno guardado
@@ -1619,14 +1592,7 @@ function renderInicio() {
   document.body.classList.toggle("emergencia", rojo);
   $("#bannerEmergencia").hidden = !rojo;
   if (!rojo) cerrarAlarma();
-  if (rojo && esPorReporte(e)) {
-    // Huaico verificado: las sirenas de la quebrada NO están activas; no se dice que lo estén
-    $("#emergenciaTitulo").textContent = "Huaico: evacúa ahora";
-    $("#bannerEmergenciaTitulo").textContent = "Huaico cerca: evacúa";
-    const donde = e.dist !== null && e.dist !== undefined ? `a ${Math.round(e.dist / 10) * 10} m de ti` : "en la ciudad";
-    $("#listaZonasSirena").innerHTML = `<li>Huaico verificado ${esc(donde)}${e.reporte.descripcion ? ": " + esc(e.reporte.descripcion) : ""}</li>`;
-    $("#emergenciaFuente").textContent = `Reporte verificado por la autoridad · ${hora(e.ts)}`;
-  } else if (rojo) {
+  if (rojo) {
     $("#emergenciaTitulo").textContent = "Desborde: evacúa ahora";
     $("#bannerEmergenciaTitulo").textContent = "Desborde: evacúa ahora";
     $("#listaZonasSirena").innerHTML = `<li>Sirenas activas en ${ZONAS_SIRENA.map((z) => esc(z.nombre)).join(", ").replace(/, ([^,]*)$/, " y $1")}</li>`;
@@ -1660,8 +1626,7 @@ function alCambiarNivel() {
     return;
   }
   const n = e.nivel;
-  const nb = esPorReporte(e) ? e.base.nivel : n;
-  if (nb !== S.nivelBasePrevio) { S.nivelBasePrevio = nb; if (mapa) pintarCauceYZonas(); }
+  if (n !== S.nivelBasePrevio) { S.nivelBasePrevio = n; if (mapa) pintarCauceYZonas(); }
   if (n === S.nivelPrevio) return;
   const previo = S.nivelPrevio;
   S.nivelPrevio = n;
@@ -1669,9 +1634,8 @@ function alCambiarNivel() {
   if (typeof renderGuia === "function") renderGuia();
 
   if (n === 3) Sirena.iniciar(); else Sirena.detener();
-  // Regla del proyecto: los reportes ciudadanos no generan notificaciones. Sí notifica el sensor, el demo
-  // y un huaico verificado por la autoridad.
-  gestionarNotificacion(e.fuente === "reporteVecinos" ? e.base.nivel : n);
+  // Regla del proyecto: solo notifica el estado de la autoridad (o la simulación). Los reportes de vecinos no.
+  gestionarNotificacion(n);
 
   if (mapa) pintarCauceYZonas();
 }
@@ -1935,7 +1899,7 @@ function pedirUbicacion({ silencioso = false } = {}) {
         $("#btnUbicacion").textContent = "Actualizar ubicación";
         pintarYo();
         renderListas();
-        renderTodo(); // la distancia al huaico reportado depende de la ubicación
+        renderTodo();
         setTimeout(precalcularEvacuacion, 1500); // ruta de evacuación lista antes de que haga falta
         resolve(S.ubicacion);
       },
@@ -2554,17 +2518,8 @@ async function rutaAPie(a, b, evitar) {
   catch (e) { console.warn("OSRM a pie:", e); return undefined; }   // undefined = sin servicio
 }
 
-/* El peligro del que hay que alejarse: el cauce, o un huaico verificado por la autoridad */
+/* El peligro del que hay que alejarse: el cauce de la quebrada */
 function peligroActual() {
-  const e = estadoEfectivo();
-  if (esPorReporte(e) && e.reporte && Number.isFinite(e.reporte.lat)) {
-    const h = [e.reporte.lat, e.reporte.lng];
-    return {
-      tipo: "huaico", nombre: "huaico", clave: `h:${h[0].toFixed(4)},${h[1].toFixed(4)}`,
-      cerca: (q) => { const d = distM(q, h); return { d, ll: h, lado: 0 }; },
-      evitar: (libres) => libres.some((q) => distM(q, h) < 180) ? [] : cuadradoEvitar(h, 200)
-    };
-  }
   return {
     tipo: "cauce", nombre: "cauce", clave: "cauce-v2",
     cerca: (q) => puntoMasCercanoEnCauce(q),
@@ -3460,10 +3415,8 @@ function renderAdmin() {
   const eb = estadoBase();
   $$(".btn-nivel").forEach((b) => b.classList.toggle("actual", eb.nivel === Number(b.dataset.nivel) && eb.fuente !== "sinReportes"));
   $("#chkProximidad").checked = proximidadActiva();
-  const al = alertaPorReportes();
   $("#btnDemoOff").hidden = !S.demo?.activo;
-  $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Simulación activa: ${NIVELES[S.demo.nivel]?.corto || S.demo.nivel}` : eb.fuente === "autoridad" ? `Estado oficial: ${NIVELES[eb.nivel].corto} · ${eb.cita || "sin fuente"}` : "Sin estado oficial publicado.")
-    + (al ? ` · Aviso "Cuidado al salir" activo por un huaico reportado` : "");
+  $("#adminEstadoDemo").textContent = (S.demo?.activo ? `Simulación activa: ${NIVELES[S.demo.nivel]?.corto || S.demo.nivel}` : eb.fuente === "autoridad" ? `Estado oficial: ${NIVELES[eb.nivel].corto} · ${eb.cita || "sin fuente"}` : "Sin estado oficial publicado.");
   const yo = Cuenta.usuario && (perfilDe(Cuenta.usuario.uid)?.usuario || Cuenta.usuario.nombreUsuario);
   $("#adminConexion").innerHTML = Datos.modo === "firebase"
     ? `Conectado como <strong>${esc(yo || "admin")}</strong> (admin)`
@@ -4254,34 +4207,8 @@ function irATab(nombre) {
 /* ---------------------------------------------------------------------
    ARRANQUE
 --------------------------------------------------------------------- */
-/* "Cuidado al salir": huaico confirmado por 3 vecinos (o verificado por la autoridad) a menos de 1 km */
-function renderAvisoVecinal() {
-  const a = alertaPorReportes();
-  const caja = $("#avisoVecinal");
-  if (!a) { caja.hidden = true; return; }
-  caja.hidden = false;
-  caja.dataset.rep = a.id;
-  const donde = a.dist !== null && a.dist !== undefined ? `a ${Math.round(a.dist / 10) * 10} m de ti` : "en la ciudad";
-  const quien = a.r.verificadoAutoridad ? "Verificado por la autoridad" : `Confirmado por ${a.r.confirmaciones || 0} vecinos`;
-  $("#avisoVecinalTexto").textContent = `Tránsito de huaico reportado ${donde}. ${quien} · ${hace(Math.max(a.r.ultimaConfirmacion || 0, a.r.creado || 0))}.`;
-  notificarVecinal(a, donde);
-}
-async function notificarVecinal(a, donde) {
-  const ya = lsGet("previunt_vecinalNotificados", []);
-  if (ya.includes(a.id)) return;
-  lsSet("previunt_vecinalNotificados", ya.concat(a.id).slice(-50));
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const titulo = "Cuidado al salir";
-  const opts = { body: `Tránsito de huaico reportado por vecinos ${donde}.`, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "huaico-" + a.id, vibrate: [200] };
-  try {
-    const reg = await navigator.serviceWorker?.getRegistration();
-    if (reg) await reg.showNotification(titulo, opts); else new Notification(titulo, opts);
-  } catch (e) { try { new Notification(titulo, opts); } catch {} }
-}
-
 function renderTodo() {
   renderInicio();
-  renderAvisoVecinal();
   renderCintaDemo();
   alCambiarNivel();
   renderAdmin();
@@ -4297,7 +4224,6 @@ async function iniciar() {
   $("#listaAcciones").onclick = (ev) => { if (ev.target.closest("[data-evac]")) mostrarEvacuacion(); };
   $("#btnCerrarAlarma").onclick = cerrarAlarma;
   $("#bannerEmergencia").onclick = abrirAlarma;
-  $("#avisoVecinal").onclick = () => { const id = $("#avisoVecinal").dataset.rep; if (id) verReporteEnMapa(id); };
   $("#btnReportarInicio").onclick = abrirReporteNuevo;
   $$("[data-ir]").forEach((b) => b.addEventListener("click", () => irATab(b.dataset.ir)));
   prepararSubtabs();

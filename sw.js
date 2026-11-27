@@ -7,7 +7,7 @@
      securetoken), Open-Meteo, rutas ni teselas del mapa. Esas peticiones van siempre directo a la red.
    - Elevación (AWS Terrain Tiles): caché primero. El relieve no cambia; así la ruta a zona alta funciona sin red.
    Sube VERSION cuando cambies la lista de archivos. */
-const VERSION = "previunt-v30";
+const VERSION = "previunt-v31";
 const APP = [
   "./",
   "./index.html",
