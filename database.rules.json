@@ -147,7 +147,7 @@
       ],
       "$id": {
         ".write": "auth != null && !root.child('bloqueados').child(auth.uid).exists() && ((!data.exists() && newData.child('autor').val() === auth.uid && (root.child('admins').child(auth.uid).val() === true || (root.child('perfiles').child(auth.uid).exists() && ((newData.child('ambito').val() === 'ciudad' && (auth.token.phone_number != null && auth.token.email.endsWith('@previunt.invalid'))) || (newData.child('ambito').val() === 'unt' && (auth.token.email_verified === true && auth.token.email.matches(/.*@unitru\\.edu\\.pe$/))))))) || root.child('admins').child(auth.uid).val() === true || (data.exists() && !newData.exists() && data.child('autor').val() === auth.uid))",
-        ".validate": "newData.hasChildren(['tipo', 'ambito', 'forma', 'lat', 'lng', 'autor', 'creado']) && (data.exists() || newData.child('tipo').val() !== 'otro' || (newData.child('descripcion').isString() && newData.child('descripcion').val().matches(/\\S/)))",
+        ".validate": "newData.hasChildren(['tipo', 'ambito', 'forma', 'lat', 'lng', 'autor', 'creado']) && (data.exists() || newData.child('tipo').val() !== 'otro' || (newData.child('descripcion').isString() && newData.child('descripcion').val().replace(' ', '').length > 0))",
         "tipo": {
           ".validate": "newData.val() === 'bloqueo' || newData.val() === 'inundacion' || newData.val() === 'huaico' || newData.val() === 'afectados' || newData.val() === 'otro'"
         },

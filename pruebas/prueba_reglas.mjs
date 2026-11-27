@@ -95,6 +95,8 @@ await t("ana NO se autoverifica", false, set(ref(ana, "reportes/r11"), rep("ana"
 await t("admin clau_udio reporta en la ciudad", true, set(ref(adm, "reportes/r12"), rep("adm1")));
 await t("admin reporta en el campus", true, set(ref(adm, "reportes/r13"), rep("adm1", campus)));
 await t("reporte + foto en un update", true, update(ref(ana), { "reportes/r14": rep("ana", { tieneFoto: true }), "fotos/r14": "data:image/jpeg;base64,AAAA" }));
+await t("reporte Otros sin descripción rechazado", false, set(ref(ana, "reportes/o1"), rep("ana", { tipo: "otro", descripcion: "   " })));
+await t("reporte Otros con descripción aceptado", true, set(ref(ana, "reportes/o2"), rep("ana", { tipo: "otro", descripcion: "poste caído" })));
 await t("ana NO cambia la gestión", false, update(ref(ana, "reportes/r1"), { gestion: "atendido" }));
 await t("admin marca atendido", true, update(ref(adm, "reportes/r1"), { gestion: "atendido", verificadoAutoridad: true, gestionPor: "adm1" }));
 // --- Cola sin conexión (cambio A) y foto subida después (cambio B) ---

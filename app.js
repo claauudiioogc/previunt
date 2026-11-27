@@ -1939,13 +1939,12 @@ function iniciarMapa() {
       maxZoom: 19, className: "teselas-osm", attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(mapa);
   }
-  // Cauce y zonas de sirena: ocultos por defecto (se muestran con los botones del mapa)
-  capas.zonas = L.layerGroup();
+  // Cauce: oculto por defecto (se muestra con su botón del mapa)
   capas.cauce = L.layerGroup();
   capas.bloqueos = L.layerGroup().addTo(mapa);
   capas.reportes = L.layerGroup().addTo(mapa);
   capas.evac = L.layerGroup().addTo(mapa);
-  capas.seguros = L.layerGroup().addTo(mapa);
+  capas.seguros = L.layerGroup(); // zonas de refugio: solo se muestran con DESBORDE (ver pintarCauceYZonas)
   // Capas de cartografía municipal (ocultas hasta activarlas con su botón)
   capas.buzonetas = L.layerGroup();
   mapa.on("zoomend", () => { if (mapa.hasLayer(capas.buzonetas)) pintarBuzonetas(); });
@@ -2029,13 +2028,9 @@ function pintarCauceYZonas() {
   const color = colorNivelActual();
   const txtNivel = (e.nivel === null ? "Sin datos del sensor" : NIVELES[e.nivel].corto) + (e.guardado ? " (dato guardado, puede estar desactualizado)" : "");
   capas.cauce.clearLayers();
-  capas.zonas.clearLayers();
-  ZONAS_SIRENA.forEach((z) => {
-    L.circle(z.centro, {
-      radius: z.radio, color, weight: 1.5, fillColor: color, fillOpacity: e.nivel === 3 ? 0.22 : 0.08,
-      dashArray: "4 6", className: e.nivel === 3 ? "zona-pulso" : ""
-    }).bindTooltip(`${esc(z.nombre)} · zona de sirena (referencial)`).addTo(capas.zonas);
-  });
+  // Zonas de refugio (escudos): solo cuando hay DESBORDE (oficial o simulado)
+  if (e.nivel === 3) capas.seguros.addTo(mapa); else capas.seguros.remove();
+  if (!$("#leyendaMapa").hidden) renderLeyenda();
   // Cauce: línea punteada fina con el color del nivel (trazado referencial)
   L.polyline(CAUCE_REFERENCIAL, { color, weight: 4, opacity: 0.9, dashArray: "2 8", lineCap: "round" })
     .bindPopup(`<strong>Quebrada San Ildefonso</strong><br>Nivel: ${esc(txtNivel)}<br><span class="cuenta">Trazado referencial</span>`)
@@ -2252,7 +2247,7 @@ function renderLeyenda() {
     <li><span class="ley-pin ley-gris" aria-hidden="true"></span>Reporte vecinal sin validar</li>
     <li><span class="ley-pin" aria-hidden="true"></span>Reporte confirmado por vecinos</li>
     <li>${muestraLinea("stroke:#2E7D32;stroke-width:3;stroke-dasharray:2 5;stroke-linecap:round")}Cauce de la quebrada (trazado referencial; color según el nivel)</li>
-    <li><span class="ley-zona" aria-hidden="true"></span>Zona de sirena (referencial)</li></ul>`);
+    ${estadoBase().nivel === 3 ? `<li><span class="mk mk-refugio mk-ley" aria-hidden="true">${ic("shield-check")}</span>Zona de refugio (ANA 2015)</li>` : ""}</ul>`);
   if (activa("buzonetas")) {
     const n = buzPuntos ? buzPuntos.length : 0;
     const altos = buzPuntos ? buzPuntos.filter((b) => b.p.riesgo === "alto").length : 0;
@@ -3144,10 +3139,7 @@ function renderPreparate() {
   };
 
   renderNumeros();
-  $("#numerosFuente").innerHTML = '<a href="https://www.gob.pe/547" target="_blank" rel="noopener">gob.pe</a>; COER y COEP: números entregados por el equipo PREVIUNT (vigencia por confirmar con cada institución). Lluvia: ERA5 (Open-Meteo). Mapa: © OpenStreetMap.';
   renderConocenos();
-  $("#fuenteGuia").href = FUENTE_GUIA;
-  $("#fuenteMochila").href = FUENTE_MOCHILA;
 }
 
 /* Números: tarjeta con ícono de teléfono, número destacado y nombre del centro (un toque para llamar) */
@@ -4279,7 +4271,7 @@ async function iniciar() {
     if (!mapa) return;
     const capa = b.dataset.capa;
     if (capa === "buzonetas") { activarBuzonetas(on); return; }
-    const grupos = capa === "reportes" ? [capas.reportes, capas.bloqueos] : capa === "cauce" ? [capas.cauce] : [capas.zonas];
+    const grupos = capa === "reportes" ? [capas.reportes, capas.bloqueos] : [capas.cauce];
     grupos.forEach((g) => on ? g.addTo(mapa) : g.remove());
     renderLeyenda();
   }));
