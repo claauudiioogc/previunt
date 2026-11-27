@@ -91,6 +91,7 @@ await t("UNT abre el enlace y toca «Ya verifiqué»", async () => {
   if (Cuenta.motivoNoPuede("unt") !== null || !Cuenta.motivoNoPuede("ciudad")) throw new Error("permisos mal");
 });
 await t("UNT reporta dentro del campus (reglas)", () => dbM.set(dbM.ref(db, "reportes/r2"), rep(uidLuis, { ambito: "unt", lat: -8.1135, lng: -79.037 })));
+await t("UNT NO entra con su usuario _unt (se pide el correo)", () => debeFallar(() => Cuenta.entrar("luis_unt", "unitru123"), "correo @unitru"));
 await t("UNT entra con su correo UNT", async () => { await Cuenta.salir(); await espera(800); await Cuenta.entrar("luis@unitru.edu.pe", "unitru123"); await espera(800); if (Cuenta.usuario.tipo !== "unt") throw new Error("no"); });
 for (const [u, clave] of [["clau_udio", "clave-prueba-1"], ["joa_quin", "clave-prueba-2"], ["cris_thian", "clave-prueba-3"]]) {
   await t(`admin ${u} entra y es admin`, async () => { await Cuenta.salir(); await espera(600); await Cuenta.entrar(u, clave); await espera(900); if (!Cuenta.usuario.esAdmin || Cuenta.motivoNoPuede("unt") !== null) throw new Error(JSON.stringify(Cuenta.usuario)); });

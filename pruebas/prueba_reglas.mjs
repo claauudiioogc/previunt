@@ -60,6 +60,9 @@ await t("personal NO se declara tipo UNT", false, update(ref(malo), reg("malo", 
   delete sinCons["privado/zed"].consentimiento;
   await t("registro sin consentimiento (casilla apagada) se acepta", true, update(ref(ctx("zed", personal("zed_k", "+51987000007"))), sinCons));
 }
+await t("personal NO toma un usuario terminado en _unt", false, update(ref(ctx("pep", personal("pep_unt", "+51987000011"))), reg("pep", "pep_unt", "personal", "10101010", "p@gmail.com", "+51987000011")));
+await t("UNT NO toma un usuario sin _unt", false, update(ref(ctx("uu1", untTok("uu1@unitru.edu.pe"))), reg("uu1", "uu_uno", "unt", "20202020", "uu1@unitru.edu.pe")));
+await t("UNT puede repetir el nombre de una cuenta personal con _unt (ana_m_unt)", true, update(ref(ctx("uu2", untTok("uu2@unitru.edu.pe"))), reg("uu2", "ana_m_unt", "unt", "30303030", "uu2@unitru.edu.pe")));
 await t("malo se registra", true, update(ref(malo), reg("malo", "malo_x", "personal", "55556666", "m@gmail.com", "+51987000009")));
 await t("invitado NO se registra", false, update(ref(anon), reg("anon1", "anon_1", "personal", "99998888", "a@gmail.com")));
 await t("perfil con nombre real rechazado", false, update(ref(ana, "perfiles/ana"), { nombre: "Ana" }));

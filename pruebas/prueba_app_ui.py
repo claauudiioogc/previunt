@@ -160,6 +160,8 @@ with sync_playwright() as p:
         pg2.click(".popup-rep [data-cuenta-ir]")
         pg2.wait_for_selector("#formLogin", state="visible")
         pg2.click("[data-pantalla-ir=registro]")
+        pg2.fill("#regUsuario", "beto_unt"); pg2.click("#btnCrearCuenta")
+        pg2.wait_for_function("document.querySelector('[data-error=usuario]').textContent.includes('solo para cuentas UNT')", timeout=5000)
         llenar(pg2, {"regNombres": "Beto", "regApellidos": "Ruiz", "regUsuario": "beto_r", "regCelular": "912345678", "regCorreo": "beto@gmail.com", "regDni": "76543210", "regClave": "secreta12", "regClave2": "secreta12"})
         pg2.click("#btnCrearCuenta"); pg2.wait_for_selector("#formSMS", state="visible", timeout=20000)
         pg2.fill("#smsCodigo", codigo_sms("+51912345678")); pg2.click("#btnConfirmarSMS")
@@ -179,7 +181,9 @@ with sync_playwright() as p:
     ctx3, pg3 = nuevo(CAMPUS)
     def registro_unt():
         pg3.click("#btnCuenta"); pg3.click("[data-pantalla-ir=registro]"); pg3.click("[data-tipo-cuenta=unt]")
-        llenar(pg3, {"regNombres": "Luis", "regApellidos": "Paz", "regUsuario": "luis_unt", "regCelular": "955555555", "regCorreo": "ana@gmail.com", "regDni": "12345678", "regClave": "unitru123", "regClave2": "unitru123"})
+        llenar(pg3, {"regNombres": "Luis", "regApellidos": "Paz", "regUsuario": "ana_m", "regCelular": "955555555", "regCorreo": "ana@gmail.com", "regDni": "12345678", "regClave": "unitru123", "regClave2": "unitru123"})
+        if pg3.is_hidden("#regSufijo"): raise Exception("no se ve el sufijo _unt")
+        pg3.click("#regDni"); pg3.wait_for_function("document.querySelector('#regUsuarioEstado').textContent.includes('ana_m_unt')", timeout=8000)
         pg3.click("#btnCrearCuenta")
         pg3.wait_for_function("document.querySelector('[data-error=correo]').textContent.includes('unitru')")
         pg3.fill("#regCorreo", "luis@unitru.edu.pe"); pg3.click("#btnCrearCuenta")
@@ -190,7 +194,8 @@ with sync_playwright() as p:
         oob = [c for c in emu_json("oobCodes")["oobCodes"] if c["email"] == "luis@unitru.edu.pe" and c["requestType"] == "VERIFY_EMAIL"][-1]
         urllib.request.urlopen(EMU + "/" + oob["oobLink"].split("/", 3)[3])
         pg3.click("#btnYaVerifique"); toast(pg3, "cuenta UNT está verificada")
-    t("registro UNT: correo no UNT rechazado; enlace; «Ya verifiqué»", registro_unt)
+        if pg3.inner_text("#cuentaTexto") != "ana_m_unt": raise Exception("usuario UNT: " + pg3.inner_text("#cuentaTexto"))
+    t("registro UNT con el mismo nombre que la personal (ana_m → ana_m_unt); correo no UNT rechazado; enlace; «Ya verifiqué»", registro_unt)
     def unt_reporta_campus():
         pg3.wait_for_selector("#chipCampus", state="visible", timeout=15000)
         pg3.click("#btnReportarInicio"); pg3.wait_for_selector("#formReporte", state="visible")

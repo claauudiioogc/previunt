@@ -406,10 +406,10 @@
         <p class="error-campo" data-error="apellidos"></p>
         <div id="grupoUsuario">
         <label class="campo" for="regUsuario">Nombre de usuario</label>
-        <input id="regUsuario" class="input" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="ej.: ana_m">
+        <div class="input-sufijo"><input id="regUsuario" class="input" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="ej.: ana_m"><span id="regSufijo" hidden>_unt</span></div>
         <p class="error-campo" data-error="usuario"></p>
           <p id="regUsuarioEstado" class="meta estado-usuario"></p>
-          <p class="meta">Es lo único que verán los demás. Minúsculas, números o _. No se puede cambiar después.</p>
+          <p id="regUsuarioAyuda" class="meta">Es lo único que verán los demás. Minúsculas, números o _. No se puede cambiar después.</p>
         </div>
         <label class="campo" for="regCelular">Celular</label>
         <div class="input-prefijo"><span>+51</span><input id="regCelular" class="input" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="9" placeholder="9 dígitos"></div>

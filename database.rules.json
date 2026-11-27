@@ -21,7 +21,7 @@
     "nombres_usuario": {
       "$u": {
         ".read": true,
-        ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !data.exists() && newData.val() === auth.uid && $u.matches(/^[a-z0-9_]{3,20}$/) && (auth.token.email === $u + '@previunt.invalid' || auth.token.email.matches(/.*@unitru\\.edu\\.pe$/)) && newData.parent().parent().child('perfiles').child(auth.uid).child('usuario').val() === $u"
+        ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && !data.exists() && newData.val() === auth.uid && $u.matches(/^[a-z0-9_]{3,20}$/) && ((auth.token.email === $u + '@previunt.invalid' && !$u.endsWith('_unt')) || (auth.token.email.matches(/.*@unitru\\.edu\\.pe$/) && $u.endsWith('_unt'))) && newData.parent().parent().child('perfiles').child(auth.uid).child('usuario').val() === $u"
       }
     },
     "perfiles": {

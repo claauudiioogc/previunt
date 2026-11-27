@@ -976,3 +976,9 @@ body.emergencia .badge-conexion.off, body.emergencia .badge-conexion.sync { back
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 1.6s; } }
 .cargando-foto { display: flex; align-items: center; justify-content: center; min-height: 120px; margin-top: 8px; border-radius: 12px;
   background: var(--fondo); color: var(--texto-2); font-weight: 600; font-size: .92rem; }
+
+/* Usuario UNT: la app agrega "_unt" al final */
+.input-sufijo { display: flex; align-items: stretch; }
+.input-sufijo .input { flex: 1; min-width: 0; }
+.input-sufijo span { display: inline-flex; align-items: center; padding: 0 12px; border: 1.5px solid var(--linea); border-left: 0; border-radius: 0 12px 12px 0; background: var(--fondo); font-weight: 650; color: #283593; }
+.input-sufijo span:not([hidden]) ~ .input, .input-sufijo .input:has(+ span:not([hidden])) { border-radius: 12px 0 0 12px; }

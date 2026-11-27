@@ -857,6 +857,24 @@ const RE_NOMBRE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]{2,60}$/;
 const RE_CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 const normalizarUsuario = (u) => String(u || "").trim().toLowerCase();
+/* Las cuentas UNT llevan siempre "_unt" al final (y solo ellas): así una persona puede tener
+   "clau_udio" (personal) y "clau_udio_unt" (UNT). En el formulario se escribe solo la parte base. */
+const SUFIJO_UNT = "_unt";
+const usuarioFinal = (u, tipo) => {
+  const b = normalizarUsuario(u);
+  return tipo === "unt" ? b.replace(/_unt$/, "") + SUFIJO_UNT : b;
+};
+/* Mensaje de error del nombre de usuario (null si está bien) */
+function errorUsuario(u, tipo) {
+  const b = normalizarUsuario(u);
+  if (tipo === "unt") {
+    const base = b.replace(/_unt$/, "");
+    return /^[a-z0-9_]{3,16}$/.test(base) ? null : "De 3 a 16 caracteres: letras minúsculas, números o _ (al final se agrega _unt).";
+  }
+  if (!RE_USUARIO.test(b)) return "De 3 a 20 caracteres: letras minúsculas, números o _.";
+  if (b.endsWith(SUFIJO_UNT)) return "Los nombres que terminan en _unt son solo para cuentas UNT.";
+  return null;
+}
 /* Lo que la persona escribe en "Usuario o correo UNT" → correo con el que entra en Firebase */
 const correoLogin = (txt) => {
   const s = String(txt || "").trim().toLowerCase();
@@ -872,7 +890,7 @@ function validarRegistro(d, tipo, completar = false) {
   const e = {};
   if (!RE_NOMBRE.test(String(d.nombres || "").trim())) e.nombres = "Escribe tus nombres (solo letras).";
   if (!RE_NOMBRE.test(String(d.apellidos || "").trim())) e.apellidos = "Escribe tus apellidos (solo letras).";
-  if (!completar && !RE_USUARIO.test(normalizarUsuario(d.usuario))) e.usuario = "De 3 a 20 caracteres: letras minúsculas, números o _.";
+  if (!completar && errorUsuario(d.usuario, tipo)) e.usuario = errorUsuario(d.usuario, tipo);
   if (!/^9\d{8}$/.test(String(d.celular || ""))) e.celular = "9 dígitos y empieza con 9.";
   if (!/^\d{8}$/.test(String(d.dni || ""))) e.dni = "El DNI tiene 8 dígitos.";
   const correo = String(d.correo || "").trim();
@@ -1027,6 +1045,7 @@ const Cuenta = {
   /* Paso 1: crea la cuenta y envía el SMS. */
   async registrarPersonal(d) {
     const A = Datos.authM, usuario = normalizarUsuario(d.usuario);
+    if (errorUsuario(usuario, "personal")) throw new Error(errorUsuario(usuario, "personal"));
     if (!(await this.usuarioLibre(usuario))) throw new Error("Ese nombre de usuario ya está en uso.");
     try { await A.createUserWithEmailAndPassword(Datos.auth, `${usuario}@${DOMINIO_CUENTAS}`, d.clave); }
     catch (e) {
@@ -1072,7 +1091,7 @@ const Cuenta = {
   /* Cuenta UNT a medio registrar (se creó la cuenta pero no se guardaron los datos) */
   async completarRegistroUNT(d) {
     const u = Datos.auth.currentUser;
-    try { await this._guardarDatos(u, normalizarUsuario(d.usuario), "unt", d); }
+    try { await this._guardarDatos(u, usuarioFinal(d.usuario, "unt"), "unt", d); }
     catch (e) { throw new Error("Ese DNI ya tiene una cuenta UNT, o el usuario ya está en uso."); }
     if (!u.emailVerified) { try { await Datos.authM.sendEmailVerification(u); } catch {} }
     await this._actualizar(u);
@@ -1086,7 +1105,7 @@ const Cuenta = {
 
   /* ---------- Cuenta UNT: se crea y se verifica por correo ---------- */
   async registrarUNT(d) {
-    const A = Datos.authM, usuario = normalizarUsuario(d.usuario), correo = String(d.correo).trim().toLowerCase();
+    const A = Datos.authM, usuario = usuarioFinal(d.usuario, "unt"), correo = String(d.correo).trim().toLowerCase();
     if (!(await this.usuarioLibre(usuario))) throw new Error("Ese nombre de usuario ya está en uso.");
     let cred;
     try { cred = await A.createUserWithEmailAndPassword(Datos.auth, correo, d.clave); }
@@ -1135,6 +1154,8 @@ const Cuenta = {
 
   /* ---------- Entrar / salir ---------- */
   async entrar(usuarioOCorreo, clave) {
+    const txt = normalizarUsuario(usuarioOCorreo);
+    if (!txt.includes("@") && txt.endsWith(SUFIJO_UNT)) throw new Error("Las cuentas UNT entran con su correo @unitru.edu.pe.");
     try { await Datos.authM.signInWithEmailAndPassword(Datos.auth, correoLogin(usuarioOCorreo), clave); }
     catch (e) { throw new Error(mensajeError(e)); }
   },
@@ -3420,6 +3441,15 @@ function prepararRegistro() {
   $("#grupoUsuario").hidden = comp && t === "personal";
   $("#grupoClaves").hidden = comp;
   $("#regCorreo").placeholder = t === "unt" ? "tu@unitru.edu.pe" : "tu@gmail.com";
+  // Usuario: en la cuenta UNT se escribe la base y la app agrega "_unt"
+  const antes = $("#regUsuario").value;
+  $("#regSufijo").hidden = t !== "unt";
+  $("#regUsuario").maxLength = t === "unt" ? 16 : 20;
+  $("#regUsuario").value = t === "unt" ? antes.replace(/_unt$/, "").slice(0, 16) : antes;
+  $("#regUsuarioEstado").textContent = "";
+  $("#regUsuarioAyuda").textContent = t === "unt"
+    ? "Se agrega _unt al final, así puedes usar el mismo nombre que en tu cuenta personal. Es lo único que verán los demás."
+    : "Es lo único que verán los demás. Minúsculas, números o _. No se puede cambiar después.";
   if (comp && t === "unt" && u?.correo) { $("#regCorreo").value = u.correo; $("#regCorreo").readOnly = true; } else $("#regCorreo").readOnly = false;
   $("#btnCrearCuenta").textContent = comp ? (t === "personal" && !u?.celularVerificado ? "Enviar código SMS" : "Guardar mis datos") : t === "personal" ? "Crear cuenta y enviar código" : "Crear cuenta UNT";
   $("#regConsentimiento").hidden = !PEDIR_CONSENTIMIENTO;
@@ -3538,12 +3568,12 @@ function prepararCuentas() {
   $$("[data-tipo-cuenta]").forEach((b) => b.addEventListener("click", () => { HC.tipoReg = b.dataset.tipoCuenta; prepararRegistro(); }));
   $("#regUsuario").addEventListener("input", (e) => { e.target.value = e.target.value.toLowerCase().replace(/\s/g, ""); $("#regUsuarioEstado").textContent = ""; });
   $("#regUsuario").addEventListener("blur", async () => {
-    const u = normalizarUsuario($("#regUsuario").value), est = $("#regUsuarioEstado");
+    const t = HC.tipoReg, u = usuarioFinal($("#regUsuario").value, t), est = $("#regUsuarioEstado");
     est.className = "meta estado-usuario"; est.textContent = "";
-    if (!RE_USUARIO.test(u)) return;
+    if (errorUsuario($("#regUsuario").value, t)) return;
     try {
       const libre = await conTiempo(Cuenta.usuarioLibre(u), 8000);
-      est.textContent = libre ? "Disponible" : "Ya está en uso"; est.classList.add(libre ? "libre" : "ocupado");
+      est.textContent = libre ? (t === "unt" ? `Disponible: tu usuario será ${u}` : "Disponible") : "Ya está en uso"; est.classList.add(libre ? "libre" : "ocupado");
     } catch {}
     pintarAvataresRegistro();
   });
@@ -3555,7 +3585,7 @@ function prepararCuentas() {
     const t = HC.tipoReg, comp = HC.completar, d = leerRegistro();
     if (comp && t === "personal") d.usuario = String(Datos.auth.currentUser?.email || "").split("@")[0];
     const errs = validarRegistro(d, t, comp && t === "personal");
-    if (comp && t === "unt" && !RE_USUARIO.test(normalizarUsuario(d.usuario))) errs.usuario = "De 3 a 20 caracteres: letras minúsculas, números o _.";
+    if (comp && t === "unt" && errorUsuario(d.usuario, "unt")) errs.usuario = errorUsuario(d.usuario, "unt");
     mostrarErrores(errs);
     $("#regError").textContent = "";
     if (Object.keys(errs).length) return;
