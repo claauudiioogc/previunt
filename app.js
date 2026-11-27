@@ -205,8 +205,15 @@ const MOTIVACION = [
   "A una persona le cuesta encontrar en un mismo lugar el estado de la quebrada San Ildefonso, lo que pasa en su entorno y cómo prepararse.",
   "PREVIUNT reúne esas tres cosas: el estado de la quebrada publicado por la autoridad, los reportes de los vecinos en el mapa y qué hacer antes, durante y después de las lluvias."
 ];
-const EQUIPO = [
-  // { nombre: "Nombre Apellido", rol: "De qué se encargó", aporte: "Qué hizo para PREVIUNT", foto: null }
+const EQUIPO = [ // texto entregado por el equipo (27/11/2026)
+  { nombre: "Claudio Guzman Campos", foto: null },
+  { nombre: "Cristhian Vigo Villar", foto: null },
+  { nombre: "Joaquin Portilla Gutierrez", foto: null }
+];
+const INTRO_EQUIPO = "Somos estudiantes de Ingeniería Mecatrónica de la Universidad Nacional de Trujillo.";
+const TEXTO_CIUDADANOS = [
+  "Pero también somos ciudadanos. Creemos que la participación de la comunidad es la manera más rápida de reportar algún problema que ocurre a nuestro alrededor y, de esta manera, en conjunto con la disposición de las autoridades, podemos ser escuchados.",
+  "Debe existir una relación horizontal: así todos estamos juntos frente a los desastres."
 ];
 
 /* Mochila para emergencias – "Combo de Supervivencia" de INDECI (cartilla OGRD del Congreso, 2025).
@@ -3217,6 +3224,8 @@ function renderConocenos() {
   $("#textoMotivacion").innerHTML = MOTIVACION.map((p) => `<p>${esc(p)}</p>`).join("");
   const conDatos = EQUIPO.filter((p) => p && p.nombre);
   $("#bloqueEquipo").hidden = conDatos.length === 0;
+  $("#introEquipo").textContent = INTRO_EQUIPO;
+  $("#textoCiudadanos").innerHTML = TEXTO_CIUDADANOS.map((p) => `<p>${esc(p)}</p>`).join("");
   $("#listaEquipo").innerHTML = conDatos.map((p) => `<li class="persona">
       ${p.foto ? `<img class="persona-foto" src="${esc(p.foto)}" alt="" loading="lazy">` : `<span class="persona-foto persona-ini" aria-hidden="true">${esc(p.nombre.trim().charAt(0).toUpperCase())}</span>`}
       <span><strong class="persona-nombre">${esc(p.nombre)}</strong>
