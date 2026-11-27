@@ -85,4 +85,5 @@ Después de cada cambio, si el celular muestra la versión vieja, recarga dos ve
 - **Conócenos**: motivación en `MOTIVACION` y equipo en `EQUIPO` (vacío: completar con la lista definitiva).
 - **Números**: `DIRECTORIO_EMERGENCIA` por jurisdicción (La Libertad · Trujillo): COER 991 480 550 y COEP Trujillo 925 512 879, entregados por el equipo. Confirmar su vigencia con cada institución antes de publicar.
 - **Reportes**: "Inundación" → "Punto de aniego", "Huaico o lodo" → "Lodo", "Otro" → "Otros". Los ids guardados (`inundacion`, `huaico`, `otro`) no cambian. "Otros" exige descripción en el formulario, la cola y las reglas (solo al crear; no afecta reportes antiguos). **Publicar `database.rules.json` en Firebase Console.**
-- **Mapa**: capas Territorios vecinales y Buzonetas, con leyenda. Ver `datos/LEEME.md` para los archivos que faltan.
+- **Mapa**: capa Buzonetas (30, plan 2026) con leyenda. Ver `datos/LEEME.md`.
+- **Clima**: el detalle muestra la sensación térmica (`apparent_temperature` de Open-Meteo).

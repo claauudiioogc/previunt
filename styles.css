@@ -733,7 +733,7 @@ body.emergencia .badge-conexion { background: rgba(255,255,255,.18); color: #fff
 .cw-detalle { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows .25s ease, visibility 0s .25s; }
 .cw-detalle.abierto { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows .25s ease, visibility 0s; }
 .cw-detalle-in { overflow: hidden; min-height: 0; }
-.cw-datos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 2px 12px 0; }
+.cw-datos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 2px 12px 0; }
 .cw-datos div { background: var(--fondo); border-radius: 10px; padding: 6px 10px 5px; display: flex; flex-direction: column; gap: 1px; }
 .cw-datos .k { font-size: .7rem; color: var(--texto-2); }
 .cw-datos .v { font-size: .95rem; font-weight: 700; white-space: nowrap; }
@@ -1033,7 +1033,7 @@ body.emergencia .badge-conexion.off, body.emergencia .badge-conexion.sync { back
 .pend-describir { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
 .pend-describir textarea { width: 100%; font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--linea); }
 
-/* ---------- Mapa: leyenda, territorios, puntos críticos y buzonetas ---------- */
+/* ---------- Mapa: leyenda y buzonetas ---------- */
 .btn-leyenda {
   position: absolute; left: 10px; top: 92px; z-index: 1100; display: inline-flex; align-items: center; gap: 6px;
   min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--linea); background: #fff;
@@ -1055,18 +1055,7 @@ body.emergencia .badge-conexion.off, body.emergencia .badge-conexion.sync { back
 .ley-pin { width: 16px; height: 16px; border-radius: 50%; background: #B71C1C; border: 2px solid #fff; box-shadow: 0 0 0 1px #B71C1C; flex: none; }
 .ley-gris { background: #9E9E9E; box-shadow: none; border: 2px dashed #616161; }
 .ley-zona { width: 18px; height: 18px; border-radius: 50%; border: 1.5px dashed #2E7D32; background: rgba(46,125,50,.12); flex: none; }
-.ley-falta { color: #8E1B1B; font-weight: 600; }
-.ley-tv { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 2px; }
-.ley-tv strong { display: inline-block; min-width: 40px; color: var(--marino); }
-.ley-aviso { display: flex; gap: 6px; margin: 8px 0 0; padding: 8px; border-radius: 8px; background: #FFF8E1; font-size: .82rem; }
-.ley-aviso .ic { flex: none; width: 16px; height: 16px; color: #6B4E00; margin-top: 2px; }
-@media (min-width: 420px) { .ley-tv { grid-template-columns: 1fr 1fr; } }
 
-.mk-pc { display: inline-grid; place-items: center; min-width: 40px; height: 26px; padding: 0 6px; border-radius: 6px; background: var(--c); color: #fff; font-weight: 800; font-size: .78rem; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
-.mk-pc-ley { min-width: 38px; height: 22px; flex: none; }
-.tv-rotulo { background: rgba(255,255,255,.85); border: 0; box-shadow: none; font-weight: 750; font-size: .72rem; color: var(--marino); padding: 0 3px; display: none; }
-.tv-rotulo::before { display: none; }
-.tv-rotulos .tv-rotulo, .tv-rotulo.tv-prioridad { display: block; }
 .mk-buz { position: relative; width: 30px; height: 30px; display: grid; place-items: center; background: #fff; border: 3px solid; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
 .mk-buz .ic { width: 16px; height: 16px; }
 .mk-buz.buz-alto { border-color: #C62828; color: #C62828; border-radius: 6px; }

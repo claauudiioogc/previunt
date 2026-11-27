@@ -1886,6 +1886,7 @@ function cwHtmlFila(K) {
     </button>
     <div id="cwDetalle" class="cw-detalle${abierto ? " abierto" : ""}"><div class="cw-detalle-in">
       <div class="cw-datos">
+        <div><span class="k">Sensación térmica</span><span class="v">${fmt(c.apparent_temperature, "°", 0)}</span></div>
         <div><span class="k">Lluvia hoy</span><span class="v">${fmt(K.hoy, " mm")}</span></div>
         <div><span class="k">Humedad</span><span class="v">${fmt(c.relative_humidity_2m, "%", 0)}</span></div>
       </div>
@@ -1982,12 +1983,8 @@ function iniciarMapa() {
   capas.evac = L.layerGroup().addTo(mapa);
   capas.seguros = L.layerGroup().addTo(mapa);
   // Capas de cartografía municipal (ocultas hasta activarlas con su botón)
-  capas.territorios = L.layerGroup();
   capas.buzonetas = L.layerGroup();
-  mapa.on("zoomend", () => {
-    if (mapa.hasLayer(capas.buzonetas)) pintarBuzonetas();
-    mapa.getContainer().classList.toggle("tv-rotulos", mapa.getZoom() >= 14);
-  });
+  mapa.on("zoomend", () => { if (mapa.hasLayer(capas.buzonetas)) pintarBuzonetas(); });
   // Zonas de refugio oficiales (ANA 2015), con botón "Cómo llegar"
   ZONAS_REFUGIO.forEach((z) => L.marker([z.lat, z.lng], {
     icon: L.divIcon({ className: "", html: `<div class="mk mk-refugio">${ic("shield-check")}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] })
@@ -2205,44 +2202,12 @@ function renderListas() {
   cargarMiniaturas(lm, 10);
 }
 /* ---------------------------------------------------------------------
-   CARTOGRAFÍA MUNICIPAL: Territorios vecinales (Ruta del Agua) y Buzonetas
+   CARTOGRAFÍA MUNICIPAL: Buzonetas
    Archivos estáticos en datos/ (rutas relativas: funcionan bajo /previunt/). No usan Firebase.
 --------------------------------------------------------------------- */
-/* Los 12 territorios vecinales señalados en el plano "Plan de acción – Ruta del Agua – Quebrada San Idelfonso 2026" (MPT).
-   Códigos y nombres entregados por el equipo a partir del plano (27/11/2026). */
-const TERRITORIOS_RUTA_AGUA = [
-  { codigo: "TV28", nombre: "Semirústica Mampuesto" },
-  { codigo: "TV41", nombre: "Urb. Pay Pay" },
-  { codigo: "TV17", nombre: "Urb. Miraflores" },
-  { codigo: "TV18", nombre: "Urb. El Molino" },
-  { codigo: "TV45", nombre: "Urb. Huerta Grande" },
-  { codigo: "TV16", nombre: "Urb. Las Quintanas I" },
-  { codigo: "TV27", nombre: "Centro Histórico Norte" },
-  { codigo: "TV11", nombre: "Urb. Jorge Chávez" },
-  { codigo: "TV43", nombre: "Urb. San Nicolás" },
-  { codigo: "TV10", nombre: "Urb. San Andrés" },
-  { codigo: "TV49", nombre: "Urb. San Judas Tadeo" },
-  { codigo: "TV53", nombre: "Urb. Los Rosales de San Andrés" }
-];
-/* Puntos críticos del mismo plano, en su orden y colores. lat/lng: null hasta tener la ubicación
-   georreferenciada de la fuente (no se colocan a ojo). TODO: verificar con fuente oficial. */
-const PUNTOS_CRITICOS = [
-  { codigo: "PC1", color: "#6A1B9A", nombreColor: "morado",   interseccion: "Av. 26 de Marzo y Av. Miraflores", lat: null, lng: null },
-  { codigo: "PC2", color: "#C62828", nombreColor: "rojo",     interseccion: "Av. América Norte y Av. Miraflores", lat: null, lng: null },
-  { codigo: "PC3", color: "#EF6C00", nombreColor: "naranja",  interseccion: "Av. España y Av. Miraflores", lat: null, lng: null },
-  { codigo: "PC4", color: "#F9A825", nombreColor: "amarillo", interseccion: "Óvalo Papal y Av. Juan Pablo II", lat: null, lng: null }
-];
 const FUENTE_PLANES_MPT = "https://www.gob.pe/institucion/munitrujillo/informes-publicaciones/7861873-planes-de-contingencia";
-const FUENTE_TV_PLANDET = "https://munitrujillo.gob.pe/Archivosvirtual/plandet/Territorios%20Vecinales%20TRU.pdf";
-/* Archivos de geometría oficial. Si un archivo no existe, la capa muestra solo el catálogo y la leyenda dice qué falta.
-   TODO: verificar con fuente oficial: pedir a la MPT/PLANDET los polígonos de territorios vecinales y el límite provincial
-   (shapefile o GeoJSON en WGS 84) y guardarlos con estos nombres. */
-const ARCHIVOS_CARTO = {
-  territorios: "datos/territorios-vecinales.geojson",     // propiedades: codigo (TV17), nombre, fuente
-  limiteProvincial: "datos/limite-provincial-trujillo.geojson",
-  buzonetas: "datos/buzonetas-trujillo-2026.geojson"
-};
-const Carto = { territorios: undefined, limite: undefined, buzonetas: undefined }; // undefined = sin pedir; null = no existe
+const ARCHIVOS_CARTO = { buzonetas: "datos/buzonetas-trujillo-2026.geojson" };
+const Carto = { buzonetas: undefined }; // undefined = sin pedir; null = no se pudo cargar
 
 async function cargarGeojson(ruta) {
   try {
@@ -2251,56 +2216,6 @@ async function cargarGeojson(ruta) {
     const d = await r.json();
     return d && Array.isArray(d.features) ? d : null;
   } catch (e) { console.warn("Cartografía:", ruta, e); return null; }
-}
-
-/* ----- Territorios vecinales + Ruta del Agua ----- */
-let cauceDeTerritorios = false; // el cauce se encendió solo para acompañar esta capa
-async function activarTerritorios(on) {
-  const chipCauce = $('.chip[data-capa="cauce"]');
-  if (on) {
-    capas.territorios.addTo(mapa);
-    // Ruta del Agua: se usa la misma línea del cauce (no se dibuja otra encima)
-    if (!mapa.hasLayer(capas.cauce)) { capas.cauce.addTo(mapa); chipCauce?.setAttribute("aria-pressed", "true"); cauceDeTerritorios = true; }
-    if (Carto.territorios === undefined) Carto.territorios = await cargarGeojson(ARCHIVOS_CARTO.territorios);
-    if (Carto.limite === undefined) Carto.limite = await cargarGeojson(ARCHIVOS_CARTO.limiteProvincial);
-    pintarTerritorios();
-  } else {
-    capas.territorios.remove();
-    if (cauceDeTerritorios) { capas.cauce.remove(); chipCauce?.setAttribute("aria-pressed", "false"); cauceDeTerritorios = false; }
-  }
-  renderLeyenda();
-}
-function pintarTerritorios() {
-  capas.territorios.clearLayers();
-  const prioridad = new Set(TERRITORIOS_RUTA_AGUA.map((t) => t.codigo));
-  const nombreDe = (c) => TERRITORIOS_RUTA_AGUA.find((t) => t.codigo === c)?.nombre;
-  if (Carto.limite) {
-    L.geoJSON(Carto.limite, { interactive: false, style: { color: "#263238", weight: 2.5, dashArray: "10 5 2 5", fill: false } }).addTo(capas.territorios);
-  }
-  if (Carto.territorios) {
-    L.geoJSON(Carto.territorios, {
-      style: (f) => {
-        const p = prioridad.has(String(f.properties?.codigo || "").toUpperCase());
-        return p ? { color: "#0E2846", weight: 2.2, dashArray: "6 4", fillColor: "#1565C0", fillOpacity: 0.14 }
-                 : { color: "#607D8B", weight: 1, dashArray: "3 4", fillColor: "#90A4AE", fillOpacity: 0.04 };
-      },
-      onEachFeature: (f, capa) => {
-        const P = f.properties || {};
-        const cod = String(P.codigo || "").toUpperCase();
-        const nom = P.nombre || nombreDe(cod) || "";
-        capa.bindTooltip(esc(cod), { permanent: true, direction: "center", className: "tv-rotulo" + (prioridad.has(cod) ? " tv-prioridad" : "") });
-        capa.bindPopup(`<strong>${esc(cod)} · ${esc(nom)}</strong>${prioridad.has(cod) ? "<br>Señalado en el plano de la Ruta del Agua 2026" : ""}
-          <br><span class="cuenta">Fuente: ${esc(P.fuente || "MPT – PLANDET, Territorios Vecinales")}</span>`);
-      }
-    }).addTo(capas.territorios);
-  }
-  PUNTOS_CRITICOS.filter((p) => typeof p.lat === "number" && typeof p.lng === "number").forEach((p) => {
-    L.marker([p.lat, p.lng], {
-      icon: L.divIcon({ className: "", html: `<div class="mk-pc" style="--c:${p.color}">${esc(p.codigo)}</div>`, iconSize: [40, 26], iconAnchor: [20, 13] }),
-      title: `${p.codigo} · ${p.interseccion}`
-    }).bindPopup(`<strong>${esc(p.codigo)} · Punto crítico</strong><br>${esc(p.interseccion)}<br><span class="cuenta">Plan de acción – Ruta del Agua 2026 (MPT)</span>`)
-      .addTo(capas.territorios);
-  });
 }
 
 /* ----- Buzonetas de captación pluvial (30, plan 2026) ----- */
@@ -2332,7 +2247,6 @@ function popupBuz(b) {
   return `<strong>${esc(b.id)} · ${esc(p.nombre)}</strong>
     <br>${esc(p.referencia || "")}
     <br><span class="clasif ${R.clase}">${R.letra === "A" ? "▲" : "●"} ${esc(R.texto)}</span>
-    ${p.tv ? `<br>Territorio vecinal: ${esc(p.tv)}${p.territorio ? " · " + esc(p.territorio) : ""}` : ""}
     <br><span class="cuenta">La clasificación es la del punto de aniego en el plan. No es un aviso en tiempo real ni indica si la buzoneta funciona.</span>
     <br><span class="cuenta">Fuente: MPT, Plan de Acción ante Lluvias Intensas y Peligros Asociados 2026, anexos 15.1 (tabla 13) y 15.2 (mapa 2). Coordenadas convertidas de la tabla UTM del plan. <a href="${FUENTE_PLANES_MPT}" target="_blank" rel="noopener">Ver planes</a></span>`;
 }
@@ -2375,24 +2289,6 @@ function renderLeyenda() {
     <li><span class="ley-pin" aria-hidden="true"></span>Reporte confirmado por vecinos</li>
     <li>${muestraLinea("stroke:#2E7D32;stroke-width:3;stroke-dasharray:2 5;stroke-linecap:round")}Cauce de la quebrada (trazado referencial; color según el nivel)</li>
     <li><span class="ley-zona" aria-hidden="true"></span>Zona de sirena (referencial)</li></ul>`);
-  if (activa("territorios")) {
-    const falta = [];
-    if (!Carto.limite) falta.push("límite provincial");
-    if (!Carto.territorios) falta.push("polígonos de territorios vecinales");
-    const sinPc = PUNTOS_CRITICOS.filter((p) => typeof p.lat !== "number");
-    partes.push(`<h3>Ruta del Agua · Territorios vecinales</h3>
-      <ul class="ley-lista">
-        <li>${muestraLinea("stroke:#263238;stroke-width:2.5;stroke-dasharray:10 5 2 5")}Límite provincial${Carto.limite ? "" : ' <span class="ley-falta">(no cargado)</span>'}</li>
-        <li>${muestraLinea("stroke:#0E2846;stroke-width:2;stroke-dasharray:6 4")}Límite de territorio vecinal${Carto.territorios ? "" : ' <span class="ley-falta">(no cargado)</span>'}</li>
-        <li>${muestraLinea("stroke:#2E7D32;stroke-width:3;stroke-dasharray:2 5;stroke-linecap:round")}Ruta del Agua: recorrido del agua (se muestra el trazado referencial del cauce)</li>
-      </ul>
-      <h4>Puntos críticos</h4>
-      <ul class="ley-lista">${PUNTOS_CRITICOS.map((p) => `<li><span class="mk-pc mk-pc-ley" style="--c:${p.color}">${esc(p.codigo)}</span>${esc(p.interseccion)} <span class="meta">(${esc(p.nombreColor)})</span></li>`).join("")}</ul>
-      <h4>Territorios señalados en el plano</h4>
-      <ul class="ley-tv">${TERRITORIOS_RUTA_AGUA.map((t) => `<li><strong>${esc(t.codigo)}</strong> ${esc(t.nombre)}</li>`).join("")}</ul>
-      ${falta.length || sinPc.length ? `<p class="ley-aviso">${ic("info")}<span>Aún no se muestran en el mapa: ${[...falta, ...(sinPc.length ? [`ubicación de ${sinPc.map((p) => p.codigo).join(", ")}`] : [])].join("; ")}. Falta el archivo oficial georreferenciado: <a href="${FUENTE_TV_PLANDET}" target="_blank" rel="noopener">Territorios Vecinales (PLANDET)</a> en formato GeoJSON o shapefile, y las coordenadas de los puntos críticos del plan de la Ruta del Agua. No se dibujan a ojo.</span></p>` : ""}
-      <p class="fuente">Fuente: MPT, <a href="${FUENTE_PLANES_MPT}" target="_blank" rel="noopener">Plan de acción – Ruta del Agua 2026</a>; PLANDET.</p>`);
-  }
   if (activa("buzonetas")) {
     const n = buzPuntos ? buzPuntos.length : 0;
     const altos = buzPuntos ? buzPuntos.filter((b) => b.p.riesgo === "alto").length : 0;
@@ -4455,9 +4351,7 @@ async function iniciar() {
     b.setAttribute("aria-pressed", String(on));
     if (!mapa) return;
     const capa = b.dataset.capa;
-    if (capa === "territorios") { activarTerritorios(on); return; }
     if (capa === "buzonetas") { activarBuzonetas(on); return; }
-    if (capa === "cauce") cauceDeTerritorios = false; // la persona decidió: ya no se apaga junto con Territorios
     const grupos = capa === "reportes" ? [capas.reportes, capas.bloqueos] : capa === "cauce" ? [capas.cauce] : [capas.zonas];
     grupos.forEach((g) => on ? g.addTo(mapa) : g.remove());
     renderLeyenda();
