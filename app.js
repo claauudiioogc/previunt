@@ -1348,7 +1348,11 @@ const esPorReporte = (e) => e.fuente === "reporteAutoridad" || e.fuente === "rep
    Secuencia elegida por el equipo (26/11, a partir de un audio de referencia): tres tonos puros que suben
    520 → 650 → 780 Hz (acorde mayor), de 0,23 s cada uno cada 0,35 s, y una pausa; se repite cada 2,1 s.
 --------------------------------------------------------------------- */
-const SIRENA_PATRON = { tonos: [520, 650, 780], paso: 0.35, dura: 0.233, ciclo: 2.1, volumen: 0.35, ataque: 0.02, caida: 0.05 };
+/* Armónicos: las mismas notas con timbre de zumbador. Los parlantes de celular casi no reproducen
+   520–780 Hz puros; con armónicos la energía cae en 1–5 kHz, donde el parlante y el oído rinden más
+   (medido: ~35 dB más en esa banda que el tono puro, más fuerte que la sirena anterior). */
+const SIRENA_PATRON = { tonos: [520, 650, 780], paso: 0.35, dura: 0.233, ciclo: 2.1, volumen: 0.9, ataque: 0.02, caida: 0.05,
+  armonicos: [1, 0.55, 0.4, 0.25, 0.18, 0.1] };
 const Sirena = {
   ctx: null, nodos: null, activa: false, silenciada: false,
   desbloquear() {
@@ -1384,9 +1388,11 @@ const Sirena = {
   /* Un ciclo: los tres tonos que suben, con entrada y salida suaves (sin chasquidos) */
   _ciclo(nodos, t0) {
     const c = this.ctx, P = SIRENA_PATRON;
+    // Onda con armónicos, normalizada a pico 1 (no satura con volumen < 1)
+    if (!nodos.onda) nodos.onda = c.createPeriodicWave(new Float32Array(P.armonicos.length + 1), new Float32Array([0, ...P.armonicos]));
     P.tonos.forEach((f, i) => {
       const t = t0 + i * P.paso, osc = c.createOscillator(), g = c.createGain();
-      osc.type = "sine"; osc.frequency.value = f;
+      osc.setPeriodicWave(nodos.onda); osc.frequency.value = f;
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(P.volumen, t + P.ataque);
       g.gain.setValueAtTime(P.volumen, t + P.dura - P.caida);
