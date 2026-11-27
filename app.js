@@ -201,10 +201,6 @@ const ESTADO_NOTICIA = {
    EQUIPO: completar con la lista definitiva. Solo nombres, roles, aportes, fotos y créditos que entregue
    el equipo. foto: ruta relativa (p. ej. "icons/equipo/nombre.jpg") o null.
    Mientras esté vacío, "El equipo" no se muestra. TODO: lista definitiva del equipo. */
-const MOTIVACION = [
-  "A una persona le cuesta encontrar en un mismo lugar el estado de la quebrada San Ildefonso, lo que pasa en su entorno y cómo prepararse.",
-  "PREVIUNT reúne esas tres cosas: el estado de la quebrada publicado por la autoridad, los reportes de los vecinos en el mapa y qué hacer antes, durante y después de las lluvias."
-];
 const EQUIPO = [ // texto entregado por el equipo (27/11/2026)
   { nombre: "Claudio Guzman Campos", foto: null },
   { nombre: "Cristhian Vigo Villar", foto: null },
@@ -3221,7 +3217,6 @@ function renderNoticias() {
   $$("#listaNoticias .noticia-img img").forEach((im) => im.addEventListener("error", () => im.closest("figure").remove(), { once: true }));
 }
 function renderConocenos() {
-  $("#textoMotivacion").innerHTML = MOTIVACION.map((p) => `<p>${esc(p)}</p>`).join("");
   const conDatos = EQUIPO.filter((p) => p && p.nombre);
   $("#bloqueEquipo").hidden = conDatos.length === 0;
   $("#introEquipo").textContent = INTRO_EQUIPO;
