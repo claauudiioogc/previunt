@@ -242,6 +242,8 @@
         </div>
         <button id="btnDemoOff" class="btn btn-secundario btn-ancho" hidden>Terminar simulación</button>
         <p id="adminEstadoDemo" class="meta"></p>
+        <p id="adminSirenaFisica" class="meta"></p>
+        <button id="btnRenovarAlerta" class="btn btn-secundario btn-ancho" hidden>Renovar desborde 1 hora (sirena física)</button>
       </section>
 
       <section class="bloque">
@@ -262,6 +264,11 @@
         <div class="fila-botones">
           <button id="btnProbarSirena" class="btn btn-secundario">Probar sirena</button>
           <button id="btnProbarNotif" class="btn btn-secundario">Probar aviso</button>
+        </div>
+        <p class="meta"><strong>Sirena física de prueba</strong> (zona <code>prueba-01</code>): solo suena un ESP32 configurado con esa zona. No cambia el estado oficial ni la app de nadie.</p>
+        <div class="fila-botones">
+          <button id="btnPruebaFisica" class="btn btn-secundario">Probar sirena física</button>
+          <button id="btnPruebaFisicaOff" class="btn btn-secundario">Apagar prueba</button>
         </div>
         <label class="fila-check"><input type="checkbox" id="chkProximidad"> <span><strong>Exigir cercanía</strong>: reportar a menos de 500 m y validar a menos de 1 km.</span></label>
         <label class="fila-check"><input type="checkbox" id="chkVotosSim"> <span><strong>Votos simulados</strong>: muestra botones para sumar confirmaciones con un solo celular (demo).</span></label>

@@ -315,6 +315,12 @@ const ahora = () => Math.round(Date.now() + serverOffset);
    - Cola: reportes hechos sin conexión, guardados en IndexedDB hasta que el servidor confirme.
 --------------------------------------------------------------------- */
 const Red = { conectado: false, enLinea: navigator.onLine !== false, desde: Date.now() };
+/* Sirena física (ESP32): zona de la quebrada, zona de banco de pruebas y vigencia de cada alerta.
+   La vigencia máxima (1 h) la exigen las reglas y el ESP32; la app de la autoridad la renueva sola mientras siga el desborde. */
+const ZONA_QUEBRADA = "san-ildefonso-01";
+const ZONA_PRUEBA = "prueba-01";
+const VIGENCIA_ALERTA_S = 3600;
+const alertaDispositivo = (zone, level, eventId, updatedAt, validUntil) => ({ level, origin: "authority", zone, eventId, updatedAt, validUntil });
 const VENTANA_REPORTES_MS = 72 * 3600 * 1000;  // el mapa solo pide reportes de los últimos 3 días
 const MAX_REPORTES = 300;                       // y como máximo los 300 más recientes
 const MAX_HISTORIAL = 30;
@@ -687,12 +693,29 @@ const Datos = {
     });
   },
 
-  async publicarEstado(nivel, fuente) {
-    // Mismo nodo y mismo campo "nivel" que lee la sirena física (ESP32)
-    const valor = { nivel, estado: NIVELES[nivel].estado, actualizado: ahora(), origen: "autoridad", fuente, autor: this.uid };
+  /* Estado oficial (solo autoridad). En la MISMA escritura se actualiza /alertas/{zona}, que es lo que leen
+     los ESP32 con su propia cuenta (no es público). Las reglas exigen que ambos coincidan.
+     eventId: se conserva al renovar la vigencia del mismo evento; cada publicación nueva crea uno nuevo. */
+  async publicarEstado(nivel, fuente, renovar = null) {
+    const t = ahora(), s = Math.floor(t / 1000);
+    const eventId = renovar ? renovar.eventId : `evt-${s}-${Math.random().toString(36).slice(2, 8)}`;
+    const valor = {
+      nivel, estado: NIVELES[nivel].estado, actualizado: renovar ? renovar.actualizado : t, origen: "autoridad", fuente, autor: this.uid,
+      zona: ZONA_QUEBRADA, eventId, updatedAt: s, validUntil: s + VIGENCIA_ALERTA_S
+    };
     if (this.modo === "local") { lsSet("previunt_sensor", valor); this._emitLocal("sensor"); return; }
     this._exigirServidor();
-    await this.fb.set(this.fb.ref(this.db, "quebrada_san_ildefonso"), valor);
+    await this.fb.update(this.fb.ref(this.db), {
+      quebrada_san_ildefonso: valor,
+      [`alertas/${ZONA_QUEBRADA}`]: alertaDispositivo(ZONA_QUEBRADA, nivel, eventId, s, s + VIGENCIA_ALERTA_S)
+    });
+  },
+  /* Alerta de PRUEBA para el banco de trabajo: zona aparte, no toca el estado oficial ni la app de nadie */
+  async alertaPrueba(encender) {
+    this._exigirServidor();
+    const s = Math.floor(ahora() / 1000);
+    await this.fb.set(this.fb.ref(this.db, `alertas/${ZONA_PRUEBA}`),
+      alertaDispositivo(ZONA_PRUEBA, encender ? 3 : 0, `prueba-${s}`, s, s + (encender ? 120 : 600)));
   },
 
   async setDemo(activo, nivel, fuente = "") {
@@ -3090,6 +3113,18 @@ function aplicarModoAutoridad() {
 }
 function abrirAdmin() { if (firebaseConfigurado()) return; lsSet("previunt_autoridad", true); aplicarModoAutoridad(); irATab("control"); renderAdmin(); }
 
+/* Renueva la vigencia del desborde vigente (mismo eventId: los ESP32 no lo cuentan como alarma nueva) */
+async function renovarAlerta(manual) {
+  const s = S.sensor;
+  if (!esAutoridad() || Datos.modo !== "firebase" || !Red.conectado || !s || s.nivel !== 3 || !s.eventId) return;
+  const quedan = Number(s.validUntil || 0) - Math.floor(ahora() / 1000);
+  if (!manual && (document.visibilityState !== "visible" || quedan > 20 * 60)) return;
+  try {
+    await Datos.publicarEstado(3, s.fuente || "", { eventId: s.eventId, actualizado: Number(s.actualizado) || ahora() });
+    if (manual) toast("Desborde renovado por 1 hora para la sirena física.");
+  } catch (e) { console.warn("No se pudo renovar la alerta:", e); if (manual) toast("No se pudo renovar: " + e.message); }
+}
+
 function renderAdmin() {
   if (!esAutoridad()) return;
   const e = estadoEfectivo();
@@ -3108,6 +3143,14 @@ function renderAdmin() {
   $("#adminSensor").innerHTML = s
     ? `Último estado oficial: ${esc(NIVELES[s.nivel]?.corto ?? s.nivel)} · ${esc(s.fuente || "sin fuente")} · ${fechaHora(Number(s.actualizado))}`
     : "Aún no se publicó un estado oficial.";
+  // Sirena física: vigencia del evento que leen los ESP32
+  const vence = s && Number(s.validUntil) ? Number(s.validUntil) * 1000 : 0;
+  $("#adminSirenaFisica").innerHTML = !s || !s.eventId
+    ? "Sirena física: todavía no hay un estado publicado con la versión nueva (se crea al publicar)."
+    : vence > ahora()
+      ? `Sirena física (zona <code>${esc(s.zona)}</code>): ${s.nivel === 3 ? "<strong>DESBORDE</strong>" : NIVELES[s.nivel]?.corto ?? s.nivel} vigente hasta ${hora(vence)}${s.nivel === 3 ? " · se renueva sola mientras tengas Control abierto" : ""}.`
+      : `Sirena física: el último estado venció a las ${hora(vence)}. Los ESP32 lo toman como despeje.${s.nivel === 3 ? " Si el desborde sigue, toca «Renovar»." : ""}`;
+  $("#btnRenovarAlerta").hidden = !(Datos.modo === "firebase" && s && s.eventId && s.nivel === 3);
 
   renderControlReportes();
 }
@@ -3204,6 +3247,19 @@ function prepararAdmin() {
       }
     } catch (e) { console.error(e); toast("No se pudo cambiar el estado: " + e.message); }
   }));
+  $("#btnRenovarAlerta").onclick = () => renovarAlerta(true);
+  $("#btnPruebaFisica").onclick = async () => {
+    if (sinServidor("no se envió la prueba")) return;
+    try { await Datos.alertaPrueba(true); toast(`Prueba enviada a la zona ${ZONA_PRUEBA}: suena unos 2 minutos.`); }
+    catch (e) { toast("No se pudo: " + e.message); }
+  };
+  $("#btnPruebaFisicaOff").onclick = async () => {
+    if (sinServidor("no se apagó la prueba")) return;
+    try { await Datos.alertaPrueba(false); toast("Prueba apagada (el ESP32 se apaga en dos lecturas)."); }
+    catch (e) { toast("No se pudo: " + e.message); }
+  };
+  // Mientras siga el desborde, la app de la autoridad renueva la vigencia antes de que venza
+  setInterval(() => renovarAlerta(false), 60 * 1000);
   $("#btnDemoOff").onclick = async () => {
     if (sinServidor("la simulación sigue activa")) return;
     try { await Datos.setDemo(false, 0); toast("Simulación terminada: se muestra el estado oficial."); }

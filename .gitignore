@@ -9,3 +9,5 @@ pruebas/*.log
 firebase-debug.log
 database-debug.log
 pruebas/capturas/
+# ESP32: credenciales del dispositivo y del Wi-Fi
+maqueta/**/secretos.h

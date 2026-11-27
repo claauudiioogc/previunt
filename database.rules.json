@@ -8,7 +8,7 @@
     },
     "dispositivos": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true)",
         ".write": false
       }
     },
@@ -84,7 +84,48 @@
     },
     "quebrada_san_ildefonso": {
       ".read": true,
-      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('dispositivos').child(auth.uid).val() === true)"
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".validate": "newData.hasChildren(['nivel', 'zona', 'eventId', 'updatedAt', 'validUntil']) && newData.child('zona').val() === 'san-ildefonso-01' && newData.parent().child('alertas/san-ildefonso-01/eventId').val() === newData.child('eventId').val() && newData.parent().child('alertas/san-ildefonso-01/level').val() === newData.child('nivel').val() && newData.parent().child('alertas/san-ildefonso-01/validUntil').val() === newData.child('validUntil').val()",
+      "nivel": {
+        ".validate": "newData.val() === 0 || newData.val() === 1 || newData.val() === 2 || newData.val() === 3"
+      },
+      "eventId": {
+        ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_.:-]{1,64}$/)"
+      },
+      "updatedAt": {
+        ".validate": "newData.isNumber() && newData.val() * 1000 <= now + 60000 && newData.val() * 1000 >= now - 300000"
+      },
+      "validUntil": {
+        ".validate": "newData.isNumber() && newData.val() > newData.parent().child('updatedAt').val() && newData.val() - newData.parent().child('updatedAt').val() <= 3600"
+      }
+    },
+    "alertas": {
+      "$zona": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || (root.child('dispositivos').child(auth.uid).child('activo').val() === true && root.child('dispositivos').child(auth.uid).child('zona').val() === $zona))",
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+        ".validate": "newData.hasChildren(['level', 'origin', 'zone', 'eventId', 'updatedAt', 'validUntil']) && ($zona !== 'san-ildefonso-01' || (newData.parent().parent().child('quebrada_san_ildefonso/eventId').val() === newData.child('eventId').val() && newData.parent().parent().child('quebrada_san_ildefonso/nivel').val() === newData.child('level').val()))",
+        "level": {
+          ".validate": "newData.val() === 0 || newData.val() === 1 || newData.val() === 2 || newData.val() === 3"
+        },
+        "origin": {
+          ".validate": "newData.val() === 'authority'"
+        },
+        "zone": {
+          ".validate": "newData.val() === $zona"
+        },
+        "eventId": {
+          ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_.:-]{1,64}$/)"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber() && newData.val() * 1000 <= now + 60000 && newData.val() * 1000 >= now - 300000"
+        },
+        "validUntil": {
+          ".validate": "newData.isNumber() && newData.val() > newData.parent().child('updatedAt').val() && newData.val() - newData.parent().child('updatedAt').val() <= 3600"
+        },
+        "$otro": {
+          ".validate": false
+        }
+      }
     },
     "demo": {
       ".read": true,
@@ -96,7 +137,7 @@
         "fecha"
       ],
       "$id": {
-        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('dispositivos').child(auth.uid).val() === true)"
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
       }
     },
     "reportes": {

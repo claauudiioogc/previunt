@@ -11,6 +11,8 @@ PWA estática (HTML + CSS + JS vanilla). No necesita compilar nada.
 | `manifest.json`, `sw.js`, `icons/` | Instalación como app y funcionamiento sin conexión |
 | `database.rules.json` | Reglas para pegar en Firebase Realtime Database |
 | `pruebas/` | Pruebas con los emuladores de Firebase (ver `pruebas/LEEME.md`) |
+| `maqueta/` | Sirena física con ESP32: programa, cableado, configuración y pruebas (ver `maqueta/LEEME.md`) |
+| `firebase.json`, `.firebaserc` | Para publicar las reglas con la CLI (`npx firebase-tools deploy --only database`) y para los emuladores |
 | `datos/` | Límite del campus UNT (`campus_unt.geojson`, `hackaton.kmz`, trazado por el equipo) |
 
 ## Probar en la PC
@@ -73,4 +75,5 @@ Después de cada cambio, si el celular muestra la versión vieja, recarga dos ve
 
 **Pendientes**
 - Antes de usar la app con gente real: cambiar las contraseñas de los admins, quitar los números de prueba del SMS, poner `ANTIGUEDAD_MIN_MS` en 24 h y encender el consentimiento.
-- La sirena física (ESP32 #2) lee `nivel` desde Firebase por WiFi: **sin internet no suena**. Propuesta: que el ESP32 sensor active la sirena directamente (cable o radio LoRa/ESP-NOW) por umbral local definido por quien calibre la maqueta, y use Firebase solo para difundir el estado a la app.
+- Sirena física (ESP32): lee `/alertas/{zona}` (privado) con su propia cuenta; solo la autoridad publica, con vigencia de 1 h que la app de la autoridad renueva. Ver `maqueta/LEEME.md`. **Sin internet no suena.**
+- (Antes) La sirena física leía `nivel` desde Firebase por WiFi: Propuesta: que el ESP32 sensor active la sirena directamente (cable o radio LoRa/ESP-NOW) por umbral local definido por quien calibre la maqueta, y use Firebase solo para difundir el estado a la app.

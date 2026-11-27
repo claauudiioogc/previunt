@@ -8,6 +8,7 @@ Las contraseñas de los admins de estas pruebas son de mentira (`clave-prueba-1`
 | `prueba_campus_reputacion.mjs` | Polígono del campus, rectángulo de las reglas, votos y puntos | Solo Node |
 | `prueba_reglas.mjs` | Reglas de `database.rules.json`: registro, reportes, cola sin conexión, fotos, votos y admin | Emulador de la base de datos |
 | `prueba_flujo.html` + `correr_prueba_flujo.py` | Bloque `CUENTAS` de `app.js` en Chrome: registro con SMS, UNT con enlace, entrar, contraseña olvidada | Los dos emuladores |
+| `prueba_dispositivo.mjs` | Receptor ESP32 sin hardware: cuenta del dispositivo, permisos por zona, revocación y lógica de 2 lecturas (usa `maqueta/probar_dispositivo.mjs`) | Los dos emuladores |
 | `prueba_app_ui.py` | La app completa (`index.html` + `app.js`) en un celular simulado: hojas, reportes, votos, campus y Control | Los dos emuladores |
 
 Las pruebas leen el código **directamente de `app.js`** (entre las marcas `=== CUENTAS ===` y `=== CAMPUS Y REPUTACIÓN ===`), así siempre se prueba lo que se publica.
@@ -25,6 +26,7 @@ npx firebase emulators:start --only auth --project demo-previunt3 &
 
 node prueba_campus_reputacion.mjs
 node prueba_reglas.mjs
+node prueba_dispositivo.mjs
 node preparar_emuladores.mjs && python3 correr_prueba_flujo.py
 node preparar_emuladores.mjs && python3 prueba_app_ui.py   # capturas en pruebas/capturas/
 ```

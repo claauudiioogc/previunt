@@ -96,7 +96,13 @@ await t("UNT entra con su correo UNT", async () => { await Cuenta.salir(); await
 for (const [u, clave] of [["clau_udio", "clave-prueba-1"], ["joa_quin", "clave-prueba-2"], ["cris_thian", "clave-prueba-3"]]) {
   await t(`admin ${u} entra y es admin`, async () => { await Cuenta.salir(); await espera(600); await Cuenta.entrar(u, clave); await espera(900); if (!Cuenta.usuario.esAdmin || Cuenta.motivoNoPuede("unt") !== null) throw new Error(JSON.stringify(Cuenta.usuario)); });
 }
-await t("admin cambia el nivel oficial (reglas)", () => dbM.set(dbM.ref(db, "quebrada_san_ildefonso"), { nivel: 1 }));
+await t("admin cambia el nivel oficial junto con /alertas (reglas)", () => {
+  const s = Math.floor(Date.now() / 1000), Z = "san-ildefonso-01";
+  return dbM.update(dbM.ref(db), {
+    quebrada_san_ildefonso: { nivel: 1, zona: Z, eventId: "evt-flujo", updatedAt: s, validUntil: s + 3600, actualizado: Date.now() },
+    [`alertas/${Z}`]: { level: 1, origin: "authority", zone: Z, eventId: "evt-flujo", updatedAt: s, validUntil: s + 3600 }
+  });
+});
 await Cuenta.salir(); await espera(800);
 await t("olvidé contraseña (personal): SMS → nueva clave", async () => {
   await Cuenta.recuperarPersonalEnviar("987654321", "b");

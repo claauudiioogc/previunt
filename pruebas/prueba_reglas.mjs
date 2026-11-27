@@ -13,7 +13,8 @@ await env.withSecurityRulesDisabled(async (c) => {
     await set(ref(d, "nombres_usuario/" + u), uid);
     await set(ref(d, "perfiles/" + uid), { usuario: u, avatar: "escudo", creado: 1 });
   }
-  await set(ref(d, "dispositivos/esp1"), true);
+  await set(ref(d, "dispositivos/esp1"), { zona: "san-ildefonso-01", activo: true, nombre: "maqueta" });
+  await set(ref(d, "dispositivos/esp2"), { zona: "san-ildefonso-01", activo: false, nombre: "revocado" });
   await set(ref(d, "bloqueados/malo"), true);
 });
 const ctx = (uid, t) => env.authenticatedContext(uid, t).database();
@@ -28,7 +29,8 @@ const lia = ctx("lia", sinCel("lia_p"));                        // registró per
 const est = ctx("est", untTok("est@unitru.edu.pe"));
 const estNo = ctx("estno", untTok("nov@unitru.edu.pe", false)); // no abrió el enlace
 const adm = ctx("adm1", { email: "clau_udio" + DOM, email_verified: false, firebase: { sign_in_provider: "password" } });
-const esp = ctx("esp1", { email: "maqueta" + DOM, email_verified: false, firebase: { sign_in_provider: "password" } });
+const esp = ctx("esp1", { email: "esp32-01@dispositivos.previunt.invalid", email_verified: false, firebase: { sign_in_provider: "password" } });
+const espRevocado = ctx("esp2", { email: "esp32-02@dispositivos.previunt.invalid", email_verified: false, firebase: { sign_in_provider: "password" } });
 const malo = ctx("malo", personal("malo_x", "+51987000009"));
 const reg = (uid, u, tipo, dni, correo, cel = "+51987000001") => ({
   [`nombres_usuario/${u}`]: uid,
@@ -140,10 +142,39 @@ await t("verificado por la autoridad (r1) se registra sin votos", true, set(ref(
 await t("admin borra un verificado", true, set(ref(adm, "verificados/ana/r1"), null));
 await t("todos leen los verificados", true, get(ref(nadie, "verificados")));
 // --- Admin / estado ---
-await t("nadie NO cambia nivel quebrada", false, set(ref(nadie, "quebrada_san_ildefonso"), { nivel: 3 }));
-await t("ana NO cambia nivel quebrada", false, set(ref(ana, "quebrada_san_ildefonso"), { nivel: 3 }));
-await t("admin cambia nivel quebrada", true, set(ref(adm, "quebrada_san_ildefonso"), { nivel: 1 }));
-await t("maqueta (dispositivo) cambia nivel", true, set(ref(esp, "quebrada_san_ildefonso"), { nivel: 2 }));
+const Z = "san-ildefonso-01", seg = () => Math.floor(Date.now() / 1000);
+const publicar = (nivel, evt, extra = {}, alertaExtra = {}) => {
+  const s = seg();
+  return {
+    quebrada_san_ildefonso: { nivel, estado: "X", actualizado: Date.now(), origen: "autoridad", fuente: "prueba", zona: Z, eventId: evt, updatedAt: s, validUntil: s + 3600, ...extra },
+    [`alertas/${Z}`]: { level: nivel, origin: "authority", zone: Z, eventId: evt, updatedAt: s, validUntil: s + 3600, ...alertaExtra }
+  };
+};
+await t("nadie NO cambia nivel quebrada", false, update(ref(nadie), publicar(3, "e10")));
+await t("ana NO cambia nivel quebrada", false, update(ref(ana), publicar(3, "e9")));
+// --- Estado oficial + espejo para los ESP32 (/alertas) ---
+await t("admin NO publica el estado sin su espejo en /alertas", false, set(ref(adm, "quebrada_san_ildefonso"), publicar(1, "e1").quebrada_san_ildefonso));
+await t("admin publica estado + /alertas en una sola escritura", true, update(ref(adm), publicar(1, "e1")));
+await t("NO si el nivel del espejo no coincide", false, update(ref(adm), publicar(3, "e2", {}, { level: 1 })));
+await t("NO si el eventId del espejo no coincide", false, update(ref(adm), publicar(3, "e3", {}, { eventId: "otro" })));
+await t("NO vigencia mayor a 1 hora", false, update(ref(adm), publicar(3, "e4", { validUntil: seg() + 7200 }, { validUntil: seg() + 7200 })));
+await t("NO origen distinto de authority", false, update(ref(adm), publicar(3, "e5", {}, { origin: "vecinos" })));
+await t("NO hora de publicación inventada (2 h atrás)", false, update(ref(adm), publicar(3, "e6", { updatedAt: seg() - 7200, validUntil: seg() - 3600 }, { updatedAt: seg() - 7200, validUntil: seg() - 3600 })));
+await t("admin publica DESBORDE (nivel 3)", true, update(ref(adm), publicar(3, "evt-desborde")));
+await t("maqueta (dispositivo) NO cambia el estado oficial", false, update(ref(esp), publicar(0, "e7")));
+await t("maqueta NO escribe /alertas", false, set(ref(esp, `alertas/${Z}`), publicar(0, "e8")[`alertas/${Z}`]));
+await t("cuenta personal NO escribe /alertas", false, set(ref(ana, "alertas/prueba-01"), { level: 3, origin: "authority", zone: "prueba-01", eventId: "x", updatedAt: seg(), validUntil: seg() + 60 }));
+await t("maqueta lee la alerta de su zona", true, get(ref(esp, `alertas/${Z}`)));
+await t("maqueta NO lee otra zona", false, get(ref(esp, "alertas/prueba-01")));
+await t("maqueta revocada (activo: false) NO lee", false, get(ref(espRevocado, `alertas/${Z}`)));
+await t("invitado NO lee /alertas", false, get(ref(anon, `alertas/${Z}`)));
+await t("sin sesión NO lee /alertas", false, get(ref(nadie, `alertas/${Z}`)));
+await t("cuenta personal NO lee /alertas", false, get(ref(ana, `alertas/${Z}`)));
+await t("admin escribe una alerta de prueba en la zona prueba-01", true, set(ref(adm, "alertas/prueba-01"), { level: 3, origin: "authority", zone: "prueba-01", eventId: "prueba-1", updatedAt: seg(), validUntil: seg() + 120 }));
+await t("NO zona distinta a la de la ruta", false, set(ref(adm, "alertas/prueba-01"), { level: 3, origin: "authority", zone: Z, eventId: "prueba-2", updatedAt: seg(), validUntil: seg() + 120 }));
+await t("maqueta lee su propio registro de dispositivo", true, get(ref(esp, "dispositivos/esp1")));
+await t("maqueta NO se cambia de zona", false, set(ref(esp, "dispositivos/esp1/zona"), "prueba-01"));
+await t("admin NO cambia nivel sin los campos nuevos", false, set(ref(adm, "quebrada_san_ildefonso"), { nivel: 1 }));
 await t("ana NO activa demo", false, set(ref(ana, "demo"), { activo: true }));
 await t("admin activa demo", true, set(ref(adm, "demo"), { activo: true }));
 await t("admin lee su entrada en /admins", true, get(ref(adm, "admins/adm1")));
