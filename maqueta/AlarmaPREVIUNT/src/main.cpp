@@ -33,15 +33,24 @@
 // ---------------- Hardware ----------------
 constexpr int BUZZER_PIN = 32;              // GPIO32 → resistencia 1 kΩ → base de transistor NPN (ver LEEME.md)
 constexpr bool BUZZER_ACTIVE_HIGH = true;
-constexpr bool BUZZER_PASIVO = false;       // true = buzzer pasivo: toca 520/650/780 Hz como la app
+constexpr bool BUZZER_PASIVO = false;       // true = buzzer pasivo (puede tocar distintos Hz)
+// OJO: un buzzer ACTIVO (suena con solo darle voltaje) tiene UN tono fijo de fábrica; ahí los Hz no
+// cambian nada, solo el ritmo. Para tocar los mismos Hz que la app hace falta un buzzer PASIVO.
 
-// Secuencia de la alarma (igual que la app): 3 tonos de 233 ms cada 350 ms y pausa; ciclo de 2,1 s.
-struct Paso { uint16_t hz; uint16_t ms; };
-constexpr Paso SECUENCIA[] = { {520, 233}, {0, 117}, {650, 233}, {0, 117}, {780, 233}, {0, 1167} };
-constexpr size_t N_PASOS = sizeof(SECUENCIA) / sizeof(SECUENCIA[0]);
+// Sonido de la alarma: 1 = igual que la app PREVIUNT (3 tonos que suben: 520/650/780 Hz, ciclo de 2,1 s)
+//                      2 = despertador clásico (bip-bip-bip-bip rápido y pausa, 2000 Hz)
+constexpr int SONIDO = 1;
+
+struct Paso { uint16_t hz; uint16_t ms; };  // hz = 0 es silencio; ms = duración del paso
+constexpr Paso SONIDO_APP[] = { {520, 233}, {0, 117}, {650, 233}, {0, 117}, {780, 233}, {0, 1167} };
+constexpr Paso SONIDO_DESPERTADOR[] = { {2000, 100}, {0, 100}, {2000, 100}, {0, 100},
+                                        {2000, 100}, {0, 100}, {2000, 100}, {0, 600} };
+constexpr const Paso *SECUENCIA = SONIDO == 2 ? SONIDO_DESPERTADOR : SONIDO_APP;
+constexpr size_t N_PASOS = SONIDO == 2 ? sizeof(SONIDO_DESPERTADOR) / sizeof(Paso)
+                                       : sizeof(SONIDO_APP) / sizeof(Paso);
 
 // ---------------- Tiempos y límites ----------------
-constexpr uint32_t POLL_MS = 3000;
+constexpr uint32_t POLL_MS = 1000;              // consulta Firebase cada 1 s
 constexpr uint32_t WIFI_RETRY_MS = 10000;
 constexpr uint32_t HTTP_TIMEOUT_MS = 6000;
 constexpr uint32_t AUTH_RETRY_MS = 30000;          // espera tras un fallo de inicio de sesión
@@ -49,7 +58,9 @@ constexpr uint32_t TOKEN_MARGIN_MS = 5UL * 60 * 1000; // renovar el token 5 min 
 constexpr uint32_t MAX_FUTURE_SKEW_SEC = 30;
 constexpr uint32_t MAX_VALIDITY_SEC = 3600;
 
-WiFiClientSecure tls;
+WiFiClientSecure tls;     // inicio de sesión (Google Auth)
+WiFiClientSecure tlsDb;   // Realtime Database: conexión que se mantiene abierta entre lecturas
+HTTPClient httpDb;
 bool alarmLatched = false;
 String activeEventId;
 String candidateEventId;
@@ -218,6 +229,26 @@ int httpsRequest(const String &url, const char *method, const String &contentTyp
   return code;
 }
 
+// Lectura de la base de datos reutilizando la misma conexión segura (keep-alive): evita repetir el
+// saludo TLS en cada consulta (~1 s) y gasta menos datos del plan gratuito. Si la conexión se cayó,
+// reconecta una vez en el acto.
+int dbGet(const String &url, String &response) {
+  for (int intento = 0; intento < 2; intento++) {
+    if (!httpDb.begin(tlsDb, url)) return -1000;
+    httpDb.addHeader("Accept", "application/json");
+    const int code = httpDb.GET();
+    if (code > 0) {
+      response = httpDb.getString();
+      httpDb.end();  // con setReuse(true) la conexión queda abierta para la próxima lectura
+      return code;
+    }
+    httpDb.end();
+    tlsDb.stop();    // conexión vieja o caída: se abre una nueva
+    if (intento == 1) return code;
+  }
+  return -1;
+}
+
 // ---------------- Firebase Auth (cuenta propia del dispositivo) ----------------
 bool saveTokens(const String &body, const char *idKey, const char *refreshKey, const char *expiresKey) {
   JsonDocument doc;
@@ -375,7 +406,7 @@ void pollAlert() {
 
   String body;
   const String url = String(DATABASE_URL) + "/alertas/" + EXPECTED_ZONE + ".json?auth=" + idToken;
-  const int code = httpsRequest(url, "GET", "", "", body);
+  const int code = dbGet(url, body);
   if (code == 401 || code == 403) {
     // Token vencido o dispositivo revocado/sin permiso para esta zona
     Serial.printf("Firebase HTTP %d (sin permiso); se pedirá un token nuevo. Estado anterior conservado.\n", code);
@@ -415,6 +446,10 @@ void setup() {
 
   alarmLatched = false;  // tras reinicio no restaurar una alarma antigua
   tls.setCACert(ROOT_CA_GOOGLE);
+  tlsDb.setCACert(ROOT_CA_GOOGLE);
+  httpDb.setReuse(true);
+  httpDb.setTimeout(HTTP_TIMEOUT_MS);
+  httpDb.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
   configTime(0, 0, "pool.ntp.org", "time.google.com");

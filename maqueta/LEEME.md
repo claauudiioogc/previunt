@@ -57,6 +57,11 @@ Admin en Control ──publica──► /quebrada_san_ildefonso  (público: lo l
 El pin se cambia en `BUZZER_PIN` de `src/main.cpp`. **El GPIO da 3,3 V, no 5 V**, y solo mientras suena la alarma. Los 5 V del buzzer
 salen del pin VIN/5V; el transistor solo los conecta. **Prueba del buzzer sin Firebase:** con el ESP32 por USB,
 escribe `p` en el Serial Monitor y suena 3 segundos. No conectes un buzzer de 5 V directo al GPIO: el ESP32 da 3,3 V y poca corriente.
+
+**Velocidad y sonido.** El ESP32 consulta Firebase cada 1 s (`POLL_MS`) con la conexión segura abierta
+(keep-alive), así que el Desborde suena en unos 2–3 s. El sonido se elige con `SONIDO` (1 = igual que la app,
+2 = despertador bip-bip-bip-bip). Un buzzer **activo** tiene un tono fijo y solo cambia el ritmo; para los
+mismos Hz que la app usa un buzzer **pasivo** y pon `BUZZER_PASIVO = true`.
 Para un buzzer **pasivo**, pon `BUZZER_PASIVO = true` y conéctalo igual (por el transistor).
 
 ## Software (VS Code + PlatformIO)
