@@ -1345,7 +1345,10 @@ const esPorReporte = (e) => e.fuente === "reporteAutoridad" || e.fuente === "rep
 
 /* ---------------------------------------------------------------------
    SIRENA (Web Audio API, sin archivos externos)
+   Secuencia elegida por el equipo (26/11, a partir de un audio de referencia): tres tonos puros que suben
+   520 → 650 → 780 Hz (acorde mayor), de 0,23 s cada uno cada 0,35 s, y una pausa; se repite cada 2,1 s.
 --------------------------------------------------------------------- */
+const SIRENA_PATRON = { tonos: [520, 650, 780], paso: 0.35, dura: 0.233, ciclo: 2.1, volumen: 0.35, ataque: 0.02, caida: 0.05 };
 const Sirena = {
   ctx: null, nodos: null, activa: false, silenciada: false,
   desbloquear() {
@@ -1366,22 +1369,42 @@ const Sirena = {
   puedeSonar() { return !!(this.ctx && this.ctx.state === "running"); },
   _sonar() {
     if (!this.puedeSonar() || this.nodos) return;
-    const c = this.ctx;
-    const osc = c.createOscillator(); osc.type = "square"; osc.frequency.value = 850;
-    const lfo = c.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 0.6; // barrido sube-baja
-    const lfoGain = c.createGain(); lfoGain.gain.value = 350;
-    const vol = c.createGain(); vol.gain.value = 0.08;
-    lfo.connect(lfoGain).connect(osc.frequency);
-    osc.connect(vol).connect(c.destination);
-    osc.start(); lfo.start();
-    this.nodos = { osc, lfo, vol };
+    const c = this.ctx, salida = c.createGain();
+    salida.connect(c.destination);
+    const nodos = { salida, oscs: new Set(), siguiente: c.currentTime + 0.05, timer: null };
+    // Se programan los tonos con varios segundos de anticipación: así no se corta aunque el celular
+    // retrase los temporizadores con la pantalla en segundo plano.
+    const programar = () => {
+      while (nodos.siguiente < c.currentTime + 6) { this._ciclo(nodos, nodos.siguiente); nodos.siguiente += SIRENA_PATRON.ciclo; }
+    };
+    programar();
+    nodos.timer = setInterval(programar, 1000);
+    this.nodos = nodos;
+  },
+  /* Un ciclo: los tres tonos que suben, con entrada y salida suaves (sin chasquidos) */
+  _ciclo(nodos, t0) {
+    const c = this.ctx, P = SIRENA_PATRON;
+    P.tonos.forEach((f, i) => {
+      const t = t0 + i * P.paso, osc = c.createOscillator(), g = c.createGain();
+      osc.type = "sine"; osc.frequency.value = f;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(P.volumen, t + P.ataque);
+      g.gain.setValueAtTime(P.volumen, t + P.dura - P.caida);
+      g.gain.linearRampToValueAtTime(0, t + P.dura);
+      osc.connect(g).connect(nodos.salida);
+      osc.start(t); osc.stop(t + P.dura + 0.02);
+      nodos.oscs.add(osc);
+      osc.onended = () => { nodos.oscs.delete(osc); try { g.disconnect(); } catch {} };
+    });
   },
   _parar() {
     if (!this.nodos) return;
-    try { this.nodos.osc.stop(); this.nodos.lfo.stop(); } catch {}
+    clearInterval(this.nodos.timer);
+    for (const o of this.nodos.oscs) { try { o.stop(); } catch {} }
+    try { this.nodos.salida.disconnect(); } catch {}
     this.nodos = null;
   },
-  async prueba(ms = 3000) {
+  async prueba(ms = 4300) { // dos secuencias completas
     this.desbloquear();
     const estaba = this.activa;
     this.activa = true; this.silenciada = false; this._sonar();
@@ -3187,7 +3210,7 @@ function prepararAdmin() {
       toast(e.target.checked ? `Cercanía activada: reportar a ≤ ${RADIO_REPORTE_M} m y validar a ≤ ${RADIO_VOTO_M / 1000} km.` : "Cercanía desactivada: se puede reportar y validar desde cualquier lugar.");
     } catch (err) { toast("Error: " + err.message); }
   };
-  $("#btnProbarSirena").onclick = () => Sirena.prueba(3000);
+  $("#btnProbarSirena").onclick = () => Sirena.prueba(4300);
   $("#btnProbarNotif").onclick = async () => {
     if (!("Notification" in window)) return toast("Este navegador no soporta avisos.");
     if (Notification.permission === "default") await Notification.requestPermission();
