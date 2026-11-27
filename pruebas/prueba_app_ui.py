@@ -81,7 +81,16 @@ with sync_playwright() as p:
         pg.wait_for_selector("#formLogin", state="visible", timeout=5000)
         if "Inicia sesión" not in pg.inner_text("#cuentaMotivo"): raise Exception(pg.inner_text("#cuentaMotivo"))
         pg.screenshot(path=f"{CAPT}/01_login.png")
-    t("invitado toca Reportar → hoja Inicia sesión con el motivo", reportar_pide_login)
+        pg.click("[data-login=unt]")
+        if pg.inner_text("#loginEtiqueta") != "Correo UNT": raise Exception("la pestaña UNT no cambia la etiqueta")
+        pg.fill("#loginUsuario", "ana_m"); pg.fill("#loginClave", "x12345678"); pg.click("#btnEntrar")
+        pg.wait_for_function("document.querySelector('#loginError').textContent.includes('@unitru')", timeout=3000)
+        pg.screenshot(path=f"{CAPT}/01b_login_unt.png")
+        pg.click("[data-login=personal]")
+        pg.fill("#loginUsuario", "luis@unitru.edu.pe"); pg.fill("#loginClave", "x12345678"); pg.click("#btnEntrar")
+        pg.wait_for_function("document.querySelector('#loginError').textContent.includes('Cuenta UNT')", timeout=3000)
+        pg.fill("#loginUsuario", ""); pg.fill("#loginClave", "")
+    t("invitado toca Reportar → hoja Inicia sesión con el motivo; pestañas personal/UNT avisan si se equivoca", reportar_pide_login)
 
     def registro_personal():
         pg.click("[data-pantalla-ir=registro]")
@@ -213,6 +222,14 @@ with sync_playwright() as p:
         if pg3.is_visible("#formReporte"): raise Exception("fuera del campus no debería abrir el formulario")
         toast(pg3, "solo reportas dentro del campus")
     t("UNT fuera del campus: desaparece el chip y no puede reportar", unt_sale)
+    def unt_entra_pestana():
+        pg3.click("#btnCuenta"); pg3.wait_for_selector("[data-pantalla=micuenta]", state="visible")
+        pg3.once("dialog", lambda d: d.accept()); pg3.click("#btnCerrarSesion")
+        pg3.wait_for_function("document.querySelector('#cuentaTexto').textContent === 'Entrar'", timeout=10000)
+        pg3.click("#btnCuenta"); pg3.click("[data-login=unt]")
+        pg3.fill("#loginUsuario", "luis@unitru.edu.pe"); pg3.fill("#loginClave", "unitru123"); pg3.click("#btnEntrar")
+        pg3.wait_for_function("document.querySelector('#cuentaTexto').textContent === 'ana_m_unt'", timeout=10000)
+    t("UNT cierra sesión y entra por la pestaña «Cuenta UNT» con su correo", unt_entra_pestana)
 
     # Admin
     ctx4, pg4 = nuevo()

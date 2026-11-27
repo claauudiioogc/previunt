@@ -3336,7 +3336,7 @@ function abrirPendiente(motivo, despues) {
 }
 
 /* ---------- Hoja de cuenta ---------- */
-const HC = { pantalla: null, tipoReg: "personal", completar: false, avatar: "ola-azul", olvTipo: "personal", olvPaso: 1, smsTel: "", reloj: null, despues: null };
+const HC = { pantalla: null, loginTipo: "personal", tipoReg: "personal", completar: false, avatar: "ola-azul", olvTipo: "personal", olvPaso: 1, smsTel: "", reloj: null, despues: null };
 const TITULOS_CUENTA = { login: "Inicia sesión", registro: "Crear cuenta", sms: "Código SMS", correo: "Revisa tu correo UNT", olvido: "Olvidé mi contraseña", micuenta: "Mi cuenta" };
 
 function abrirCuenta(pantalla, o = {}) {
@@ -3350,6 +3350,7 @@ function abrirCuenta(pantalla, o = {}) {
   $("#cuentaMotivo").hidden = !o.motivo;
   $("#cuentaMotivo").textContent = o.motivo || "";
   $$("#hojaCuenta .error-form, #hojaCuenta .ok-form").forEach((p) => (p.textContent = ""));
+  if (pantalla === "login") elegirLogin(HC.loginTipo);
   if (pantalla === "registro") prepararRegistro();
   if (pantalla === "sms") prepararSMS();
   if (pantalla === "correo") $("#correoTexto").innerHTML = `Abre el enlace que enviamos a <strong>${esc(Cuenta.usuario?.correo || "tu correo UNT")}</strong>. Hasta abrirlo no puedes reportar en el campus.`;
@@ -3486,6 +3487,19 @@ function prepararSMS() {
   HC.reloj = setInterval(() => { s--; if (s <= 0) { clearInterval(HC.reloj); b.disabled = false; b.textContent = "Reenviar"; } else b.textContent = `Reenviar (${s} s)`; }, 1000);
 }
 
+/* Iniciar sesión: pestaña personal (usuario) o UNT (correo @unitru.edu.pe) */
+function elegirLogin(t) {
+  const cambio = HC.loginTipo !== t;
+  HC.loginTipo = t;
+  $$("[data-login]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.login === t)));
+  const inp = $("#loginUsuario");
+  $("#loginEtiqueta").textContent = t === "unt" ? "Correo UNT" : "Usuario";
+  inp.type = t === "unt" ? "email" : "text";
+  inp.inputMode = t === "unt" ? "email" : "text";
+  inp.autocomplete = t === "unt" ? "email" : "username";
+  inp.placeholder = t === "unt" ? "tu@unitru.edu.pe" : "ej.: ana_m";
+  if (cambio) { inp.value = ""; $("#loginError").textContent = ""; }
+}
 function elegirOlvido(t) {
   HC.olvTipo = t;
   $$("[data-olvido]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.olvido === t)));
@@ -3547,15 +3561,27 @@ function prepararCuentas() {
   $("#hojaCuenta").addEventListener("click", (e) => {
     if (e.target.id === "hojaCuenta" || e.target.closest("[data-cerrar-cuenta]")) { cerrarCuenta(); return; }
     const ir = e.target.closest("[data-pantalla-ir]");
-    if (ir) { if (ir.dataset.pantallaIr === "registro") HC.completar = false; HC.olvPaso = 1; abrirCuenta(ir.dataset.pantallaIr); }
+    if (ir) {
+      // la pestaña elegida (personal / UNT) se mantiene al pasar entre entrar, crear cuenta y contraseña olvidada
+      const desde = HC.pantalla, t = desde === "login" ? HC.loginTipo : desde === "registro" ? HC.tipoReg : desde === "olvido" ? HC.olvTipo : null;
+      if (t) { HC.loginTipo = t; HC.tipoReg = t; HC.olvTipo = t; }
+      if (ir.dataset.pantallaIr === "registro") HC.completar = false;
+      HC.olvPaso = 1; abrirCuenta(ir.dataset.pantallaIr);
+    }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#hojaCuenta").hidden) cerrarCuenta(); });
 
   // Entrar
+  $$("[data-login]").forEach((b) => b.addEventListener("click", () => elegirLogin(b.dataset.login)));
   $("#formLogin").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const usuario = $("#loginUsuario").value.trim(), clave = $("#loginClave").value;
-    if (!usuario || !clave) { $("#loginError").textContent = "Escribe tu usuario (o correo UNT) y tu contraseña."; return; }
+    const usuario = $("#loginUsuario").value.trim(), clave = $("#loginClave").value, unt = HC.loginTipo === "unt";
+    const err = (m) => { $("#loginError").textContent = m; };
+    if (!usuario || !clave) { err(unt ? "Escribe tu correo UNT y tu contraseña." : "Escribe tu usuario y tu contraseña."); return; }
+    if (unt && !RE_UNT.test(usuario)) { err("Escribe tu correo completo @unitru.edu.pe."); return; }
+    if (!unt && RE_UNT.test(usuario)) { err("Ese es un correo UNT: entra por la pestaña «Cuenta UNT»."); return; }
+    if (!unt && usuario.includes("@")) { err("Escribe tu nombre de usuario (por ejemplo ana_m), no tu correo."); return; }
+    if (!unt && normalizarUsuario(usuario).endsWith(SUFIJO_UNT)) { err("Las cuentas UNT entran por la pestaña «Cuenta UNT», con su correo."); return; }
     $("#loginError").textContent = "";
     try {
       await conBoton($("#btnEntrar"), "Entrando…", () => Cuenta.entrar(usuario, clave));

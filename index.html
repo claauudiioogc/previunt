@@ -380,8 +380,12 @@
       <p id="cuentaMotivo" class="aviso-cuenta" hidden></p>
 
       <form data-pantalla="login" id="formLogin" novalidate hidden>
-        <label class="campo" for="loginUsuario">Usuario o correo UNT</label>
-        <input id="loginUsuario" class="input" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ana_m o luis@unitru.edu.pe">
+        <div class="selector-forma" role="group" aria-label="Tipo de cuenta">
+          <button type="button" class="opcion-sel" data-login="personal" aria-pressed="true"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg>Cuenta personal</button>
+          <button type="button" class="opcion-sel" data-login="unt" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-graduation-cap"/></svg>Cuenta UNT</button>
+        </div>
+        <label id="loginEtiqueta" class="campo" for="loginUsuario">Usuario</label>
+        <input id="loginUsuario" class="input" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ej.: ana_m">
         <label class="campo" for="loginClave">Contraseña</label>
         <input id="loginClave" class="input" type="password" autocomplete="current-password">
         <p id="loginError" class="error-form" role="alert"></p>
