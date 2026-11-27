@@ -312,7 +312,7 @@ main {
 /* Popup de reporte */
 .popup-rep { min-width: 220px; max-width: 260px; font-size: .9rem; }
 .popup-rep h4 { margin: 0 0 6px; font-size: 1rem; display: flex; align-items: center; gap: 6px; }
-.popup-rep img { width: 100%; border-radius: 8px; margin: 6px 0; max-height: 170px; object-fit: cover; }
+.popup-rep img:not(.avatar) { width: 100%; border-radius: 8px; margin: 6px 0; max-height: 170px; object-fit: cover; }
 .popup-rep .pregunta { font-weight: 650; margin-top: 8px; }
 .popup-rep .votos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
 .popup-rep .votos button {
@@ -940,8 +940,11 @@ img.avatar { object-fit: cover; background: #EEF2F5; padding: 0; }
 @keyframes dorado-resplandor { 0%, 100% { filter: drop-shadow(0 0 0 rgba(245,194,27,0)); } 50% { filter: drop-shadow(0 0 4px rgba(245,194,27,.95)); } }
 @keyframes medalla-destello { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0); } 45% { opacity: 1; transform: scale(1) rotate(45deg); } 70% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .medalla, .medalla svg, .medalla::after { animation: none !important; } }
-.cuenta-medalla { position: absolute; left: 22px; bottom: -3px; display: inline-flex; background: #fff; border-radius: 50%; padding: 1px; line-height: 0; }
-.btn-cuenta.invitado .cuenta-medalla { display: none; }
+/* Medalla como insignia del avatar (esquina inferior derecha) */
+.avatar-caja { position: relative; display: inline-flex; flex: none; vertical-align: middle; line-height: 0; }
+.medalla.medalla-avatar { position: absolute; right: -4px; bottom: -4px; width: 17px; height: 17px; padding: 1px;
+  background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.28); }
+.avatar-grande-caja .medalla.medalla-avatar { width: 26px; height: 26px; right: -3px; bottom: -3px; padding: 2px; }
 .nivel-rep .medalla { margin-right: 2px; }
 .mc-medallas { background: var(--fondo); border-radius: 14px; padding: 10px 12px; margin: 0 0 12px; }
 .mc-medallas p { margin: 4px 0; }

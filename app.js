@@ -3627,9 +3627,14 @@ function htmlMedalla(m, clase = "") {
   if (!m) return "";
   return `<span class="medalla m-${m.metal} ${clase}" role="img" aria-label="Medalla ${esc(m.nombre)}, nivel ${m.nivel} de 5"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-medalla"/></svg></span>`;
 }
-function htmlNivel(uid) {
+function htmlNivel(uid, conIcono = true) {
   const m = medallaDe(verificadosDe(uid));
-  return m ? `<span class="nivel-rep">${htmlMedalla(m)}${esc(m.nombre)}</span>` : `<span class="nivel-rep">Nuevo</span>`;
+  return m ? `<span class="nivel-rep">${conIcono ? htmlMedalla(m) : ""}${esc(m.nombre)}</span>` : `<span class="nivel-rep">Nuevo</span>`;
+}
+/* Avatar con la medalla (si tiene) como insignia en la esquina inferior derecha */
+function htmlAvatarMedalla(perfil, uid, clase = "avatar-chico", id = "") {
+  const m = uid ? medallaDe(verificadosDe(uid)) : null;
+  return `<span${id ? ` id="${id}"` : ""} class="avatar-caja ${clase}-caja">${htmlAvatar(perfil, clase)}${m ? htmlMedalla(m, "medalla-avatar") : ""}</span>`;
 }
 /* Registra en /verificados los reportes que ya están verificados (lo hace cualquier cuenta con sesión;
    las reglas comprueban la prueba). Así el conteo de medallas no se pierde cuando el reporte sale de las 72 h. */
@@ -3663,7 +3668,7 @@ function htmlAutor(r) {
   if (!r || !r.autor || String(r.autor).startsWith("sim_")) return "";
   const p = perfilDe(r.autor);
   if (!p) return "";
-  return `<p class="popup-autor">${htmlAvatar(p, "avatar-medio")}<span>Reportado por <strong>${esc(p.usuario)}</strong> · ${htmlNivel(r.autor)}</span></p>`;
+  return `<p class="popup-autor">${htmlAvatarMedalla(p, r.autor)}<span>Reportado por <strong>${esc(p.usuario)}</strong> · ${htmlNivel(r.autor, false)}</span></p>`;
 }
 
 /* ---------- Estado de la cuenta para la interfaz ---------- */
@@ -3683,18 +3688,15 @@ function renderBotonCuenta() {
   b.classList.toggle("invitado", invitado);
   $("#cuentaPunto").hidden = invitado || !falta();
   if (invitado) {
-    $("#cuentaMedalla").hidden = true;
     $("#cuentaAvatar").outerHTML = `<span id="cuentaAvatar" class="avatar avatar-chico">${ic("log-in")}</span>`;
     $("#cuentaTexto").textContent = "Entrar";
     b.setAttribute("aria-label", "Iniciar sesión o crear cuenta");
     return;
   }
   const p = perfilDe(u.uid) || (u.nombreUsuario ? { usuario: u.nombreUsuario } : null);
-  $("#cuentaAvatar").outerHTML = htmlAvatar(p, "avatar-chico", "cuentaAvatar");
+  $("#cuentaAvatar").outerHTML = htmlAvatarMedalla(p, u.uid, "avatar-chico", "cuentaAvatar");
   $("#cuentaTexto").textContent = p ? p.usuario : "Completa tu registro";
   const med = medallaDe(verificadosDe(u.uid));
-  $("#cuentaMedalla").innerHTML = htmlMedalla(med, "medalla-mini");
-  $("#cuentaMedalla").hidden = !med;
   b.setAttribute("aria-label", p ? `Tu cuenta: ${p.usuario}${med ? `, medalla ${med.nombre}` : ""}` : "Completa tu registro");
   b.title = p ? `${p.usuario}${med ? ` · ${med.nombre}` : ""}` : "Completa tu registro";
   revisarSubidaMedalla();
@@ -3896,10 +3898,10 @@ function elegirOlvido(t) {
 async function renderMiCuenta() {
   const u = Cuenta.usuario; if (!u) return;
   const p = perfilDe(u.uid) || { usuario: u.nombreUsuario || "?", avatar: AVATAR_DEFECTO };
-  $("#mcAvatar").outerHTML = htmlAvatar(p, "avatar-grande", "mcAvatar");
+  $("#mcAvatar").outerHTML = htmlAvatarMedalla(p, u.uid, "avatar-grande", "mcAvatar");
   $("#mcUsuario").textContent = p.usuario;
   const nv = verificadosDe(u.uid), med = medallaDe(nv), sig = siguienteMedalla(nv);
-  $("#mcNivel").innerHTML = htmlNivel(u.uid);
+  $("#mcNivel").innerHTML = htmlNivel(u.uid, false);
   const desde = med ? med.min : 0, pct = sig ? Math.round(((nv - desde) / (sig.min - desde)) * 100) : 100;
   $("#mcMedallas").innerHTML = `
     <p class="mc-verificados"><strong>${nv}</strong> ${nv === 1 ? "reporte verificado" : "reportes verificados"}</p>
