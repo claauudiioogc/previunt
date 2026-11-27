@@ -58,6 +58,10 @@ uint8_t sameCandidateCount = 0;
 uint8_t clearCandidateCount = 0;
 uint32_t lastPoll = 0;
 uint32_t lastWifiAttempt = 0;
+bool wifiEverAttempted = false;
+bool wifiWasConnected = false;
+bool clockWasReady = false;
+uint32_t lastClockMsg = 0;
 
 // Sesión de Firebase Auth del dispositivo
 String idToken;
@@ -134,7 +138,8 @@ void connectWiFi() {
   if (!secretsConfigured()) return;
   if (WiFi.status() == WL_CONNECTED) return;
   const uint32_t now = millis();
-  if (now - lastWifiAttempt < WIFI_RETRY_MS) return;
+  if (wifiEverAttempted && now - lastWifiAttempt < WIFI_RETRY_MS) return;  // el primer intento es inmediato
+  wifiEverAttempted = true;
   lastWifiAttempt = now;
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -144,6 +149,30 @@ void connectWiFi() {
 bool clockReady() {
   const time_t now = time(nullptr);
   return now > 1700000000;  // evita validar TLS y vigencias antes de tener hora NTP
+}
+
+// Mensajes de estado en el monitor serie (solo cuando algo cambia)
+void reportStatus() {
+  const bool wifi = WiFi.status() == WL_CONNECTED;
+  if (wifi && !wifiWasConnected) {
+    Serial.printf("Wi-Fi conectado: IP %s, señal %d dBm\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  } else if (!wifi && wifiWasConnected) {
+    Serial.println("Wi-Fi desconectado; reintentando. El buzzer conserva su estado.");
+  }
+  wifiWasConnected = wifi;
+  if (!wifi) return;
+  const bool ready = clockReady();
+  if (ready && !clockWasReady) {
+    const time_t t = time(nullptr);
+    struct tm utc;
+    gmtime_r(&t, &utc);
+    Serial.printf("Hora sincronizada (UTC): %04d-%02d-%02d %02d:%02d:%02d\n", utc.tm_year + 1900, utc.tm_mon + 1,
+                  utc.tm_mday, utc.tm_hour, utc.tm_min, utc.tm_sec);
+  } else if (!ready && millis() - lastClockMsg >= 10000) {
+    lastClockMsg = millis();
+    Serial.println("Esperando la hora de Internet (NTP)...");
+  }
+  clockWasReady = ready;
 }
 
 // ---------------- HTTPS ----------------
@@ -373,6 +402,7 @@ void setup() {
 
 void loop() {
   connectWiFi();
+  if (secretsConfigured()) reportStatus();
   const uint32_t now = millis();
   if (secretsConfigured() && now - lastPoll >= POLL_MS) {
     lastPoll = now;
