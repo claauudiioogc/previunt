@@ -382,7 +382,7 @@ textarea:focus { outline: none; border-color: var(--azul); }
 .fila-check input { width: 22px; height: 22px; flex: none; accent-color: var(--azul); }
 
 /* ---------- Prepárate ---------- */
-.niveles-sel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 4px 0 10px; }
+.niveles-sel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 10px; }
 .nivel-sel {
   min-height: 46px; border-radius: 10px; border: 1.5px solid var(--linea); background: #fff; cursor: pointer;
   font-weight: 600; font-size: .85rem; padding: 4px 2px; position: relative;

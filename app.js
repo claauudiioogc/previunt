@@ -3158,10 +3158,11 @@ function renderGuia() {
   const cont = $("#guiaNiveles");
   if (!cont) return;
   const actual = estadoEfectivo().nivel;
-  const sel = nivelGuia ?? (actual ?? 0);
+  // Solo los estados que publica la autoridad (Seco, En aumento, Desborde): no hay nivel de huaico por vecinos
+  const sel = NIVELES_AUTORIDAD.includes(nivelGuia) ? nivelGuia : (NIVELES_AUTORIDAD.includes(actual) ? actual : 0);
   const N = NIVELES[sel], g = GUIA_NIVELES[sel] || {};
   const bloque = (t, arr) => arr ? `<h4>${t}</h4><ul>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : "";
-  cont.innerHTML = `<div class="niveles-sel" role="group" aria-label="Elegir nivel">${NIVELES.map((M) =>
+  cont.innerHTML = `<div class="niveles-sel" role="group" aria-label="Elegir nivel">${NIVELES.filter((M) => NIVELES_AUTORIDAD.includes(M.n)).map((M) =>
       `<button class="nivel-sel" data-n="${M.n}" aria-pressed="${M.n === sel}" style="--c:${M.color}">${M.corto}</button>`).join("")}</div>
     <div class="guia-panel">
       <p class="guia-mensaje nivel-${sel}">${esc(N.mensaje)}</p>
