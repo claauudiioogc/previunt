@@ -77,3 +77,12 @@ Después de cada cambio, si el celular muestra la versión vieja, recarga dos ve
 - Antes de usar la app con gente real: cambiar las contraseñas de los admins, quitar los números de prueba del SMS, poner `ANTIGUEDAD_MIN_MS` en 24 h y encender el consentimiento.
 - Sirena física (ESP32): lee `/alertas/{zona}` (privado) con su propia cuenta; solo la autoridad publica, con vigencia de 1 h que la app de la autoridad renueva. Ver `maqueta/LEEME.md`. **Sin internet no suena.**
 - (Antes) La sirena física leía `nivel` desde Firebase por WiFi: Propuesta: que el ESP32 sensor active la sirena directamente (cable o radio LoRa/ESP-NOW) por umbral local definido por quien calibre la maqueta, y use Firebase solo para difundir el estado a la app.
+
+## Info, capas municipales y reportes (rama info-capas-reportes)
+
+- **Info** (tercera entrada de la barra): pestañas Prepárate | Noticias | Conócenos. Enlaces `#preparate`, `#noticias`, `#conocenos`.
+- **Noticias**: datos en `NOTICIAS` (app.js). Resúmenes escritos a partir del título de cada nota de gob.pe; contrastar con el texto completo antes de publicar.
+- **Conócenos**: motivación en `MOTIVACION` y equipo en `EQUIPO` (vacío: completar con la lista definitiva).
+- **Números**: `DIRECTORIO_EMERGENCIA` por jurisdicción (La Libertad · Trujillo): COER 991 480 550 y COEP Trujillo 925 512 879, entregados por el equipo. Confirmar su vigencia con cada institución antes de publicar.
+- **Reportes**: "Inundación" → "Punto de aniego", "Huaico o lodo" → "Lodo", "Otro" → "Otros". Los ids guardados (`inundacion`, `huaico`, `otro`) no cambian. "Otros" exige descripción en el formulario, la cola y las reglas (solo al crear; no afecta reportes antiguos). **Publicar `database.rules.json` en Firebase Console.**
+- **Mapa**: capas Territorios vecinales y Buzonetas, con leyenda. Ver `datos/LEEME.md` para los archivos que faltan.

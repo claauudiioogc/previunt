@@ -132,27 +132,116 @@ const EVAC = {
   moverseM: 200          // se recalcula si la persona se movió más de 200 m
 };
 
+/* Los ids ("inundacion", "huaico", "otro"…) son los que ya están guardados en Firebase y en la cola:
+   NO se cambian. Solo cambia el rótulo visible. "Lodo" reemplaza a "Huaico o lodo" para no invitar a
+   acercarse al flujo; el nivel "Huaico" del sistema de alertas no cambia.
+   descObligatoria: la descripción es obligatoria solo para "Otros". */
 const TIPOS_REPORTE = {
   bloqueo:    { nombre: "Calle bloqueada",     icono: "construction", color: "#B71C1C" },
-  inundacion: { nombre: "Inundación",          icono: "waves",        color: "#00838F" },
-  huaico:     { nombre: "Huaico o lodo",       icono: "mountain",     color: "#6D4C41" },
+  inundacion: { nombre: "Punto de aniego",     icono: "waves",        color: "#00838F" },
+  huaico:     { nombre: "Lodo",                icono: "mountain",     color: "#6D4C41" },
   afectados:  { nombre: "Vivienda afectada",   icono: "house-ic",     color: "#AD1457" },
-  otro:       { nombre: "Otro",                icono: "circle-alert", color: "#455A64" }
+  otro:       { nombre: "Otros",               icono: "circle-alert", color: "#455A64", descObligatoria: true }
 };
 
 /* Números de emergencia – verificados en gob.pe/547 (Defensa Civil 115, Bomberos 116, SAMU)
    y El Peruano (Policía 105, SAMU 106, Bomberos 116), consultados el 24/11/2026. */
+/* Descripción con texto real (no vacía ni solo espacios) */
+const tieneTexto = (t) => typeof t === "string" && /\S/.test(t);
+/* null si el reporte es válido; si no, el mensaje que se muestra junto al campo */
+function errorDescripcion(tipo, descripcion) {
+  return TIPOS_REPORTE[tipo]?.descObligatoria && !tieneTexto(descripcion) ? "Describe lo que ocurrió." : null;
+}
+
 const NUMEROS_EMERGENCIA = [
   { nombre: "Defensa Civil (INDECI)", numero: "115" },
   { nombre: "Bomberos",               numero: "116" },
   { nombre: "SAMU (ambulancia)",      numero: "106" },
-  { nombre: "Policía Nacional",       numero: "105" },
-  { nombre: "COER La Libertad", numero: "991480550", mostrar: "991 480 550" },
-  { nombre: "COER La Libertad", numero: "991480611", mostrar: "991 480 611" },
-  { nombre: "Municipalidad de Trujillo", numero: "044484240", mostrar: "(044) 484240" }
-  // Central de la MPT: Plan de Contingencia ante Lluvias Intensas, Región La Libertad 2025-2026 (Anexo 5).
-  // COER La Libertad: números entregados por el equipo el 26/11/2026.
-  // TODO: verificar con fuente oficial (no figuran en el Plan de Operaciones de Emergencia Regional 2025-2026).
+  { nombre: "Policía Nacional",       numero: "105" }
+];
+
+/* Centros de operaciones de emergencia por jurisdicción.
+   Esta versión cubre una sola: La Libertad · provincia de Trujillo, y se muestra a todos (con o sin GPS).
+   Para sumar otra región o provincia, agregar otro objeto con su cobertura y contactos.
+   Los COED (distritales) aún no se muestran: no hay números distritales confirmados.
+   Procedencia: COER 991 480 550 entregado por el equipo PREVIUNT (26/11/2026); el 991 480 611 se retiró
+   porque está en desuso según el equipo. COEP Trujillo 925 512 879 entregado por el equipo (27/11/2026).
+   TODO: verificar con fuente oficial: pedir a COER La Libertad y a la MPT que confirmen la vigencia de
+   ambos números antes de publicar. */
+const DIRECTORIO_EMERGENCIA = [
+  {
+    id: "la-libertad-trujillo", cobertura: "La Libertad · Trujillo", region: "La Libertad", provincia: "Trujillo",
+    centros: [
+      { nombre: "COER La Libertad", detalle: "Centro de Operaciones de Emergencia Regional", tel: "+51991480550", mostrar: "991 480 550", procedencia: "Equipo PREVIUNT, 26/11/2026" },
+      { nombre: "COEP Trujillo", detalle: "Centro de Operaciones de Emergencia Provincial", tel: "+51925512879", mostrar: "925 512 879", procedencia: "Equipo PREVIUNT, 27/11/2026" }
+    ],
+    // Central telefónica general de la municipalidad (no es un centro de emergencias).
+    // Fuente: Plan de Contingencia ante Lluvias Intensas, Región La Libertad 2025-2026 (Anexo 5).
+    otros: [
+      { nombre: "Central municipal (MPT)", detalle: "Central telefónica general de la Municipalidad Provincial de Trujillo", tel: "+5144484240", mostrar: "(044) 484240" }
+    ]
+  }
+];
+
+/* NOTICIAS: obras y acciones públicas frente a las lluvias en Trujillo. Son informativas: los avisos
+   activos de la quebrada están en Inicio y nunca se mezclan aquí.
+   Para agregar una: copiar un objeto. Campos: titulo, zona, entidad, fecha (AAAA-MM-DD de la fuente),
+   resumen (qué se hizo o se anunció, dónde, quién y cómo se relaciona con las lluvias), estado
+   ("anunciada" | "en_ejecucion" | "concluida" | null si la fuente no lo dice) y url (fuente oficial).
+   Una intervención anunciada queda como "anunciada" hasta tener una fuente sobre su ejecución.
+   TODO: verificar con fuente oficial: los resúmenes se escribieron con el título de cada nota de gob.pe
+   y los datos del equipo (27/11/2026); contrastarlos con el texto completo de la nota antes de publicar. */
+const NOTICIAS = [
+  {
+    id: "mpt-2026-06-10-planes-lluvias",
+    titulo: "Dos planes trabajan en la MPT ante posibles lluvias",
+    zona: "Provincia de Trujillo",
+    entidad: "Municipalidad Provincial de Trujillo",
+    fecha: "2026-06-10",
+    resumen: "La municipalidad informó que trabaja con dos planes para prepararse ante posibles lluvias. Los planes de contingencia de la MPT se pueden consultar en gob.pe, incluido el de lluvias 2026 y el de la Ruta del Agua.",
+    estado: null,
+    url: "https://www.gob.pe/institucion/munitrujillo/noticias/1404869-dos-planes-trabajan-en-la-mpt-ante-posibles-lluvias",
+    extra: { texto: "Ver planes de contingencia", url: "https://www.gob.pe/institucion/munitrujillo/informes-publicaciones/7861873-planes-de-contingencia" }
+  },
+  {
+    id: "mpt-2026-06-05-buzonetas",
+    titulo: "30 buzonetas hay instaladas para evacuar aguas pluviales",
+    zona: "Ciudad de Trujillo",
+    entidad: "Municipalidad Provincial de Trujillo",
+    fecha: "2026-06-05",
+    resumen: "Las buzonetas son estructuras de captación pluvial: recogen el agua de lluvia de la calle para evacuarla y reducir los aniegos. En la fecha de la nota, la MPT informó 30 buzonetas instaladas. Puedes ver dónde están en el Mapa, capa Buzonetas.",
+    estado: "concluida",
+    url: "https://www.gob.pe/institucion/munitrujillo/noticias/1403839-30-buzonetas-hay-instaladas-para-evacuar-aguas-pluviales",
+    mapa: "buzonetas"
+  },
+  {
+    id: "mpt-2026-03-18-barreras-sacos",
+    titulo: "Municipalidad entrega barreras de canalización y sacos terreros ante posibles lluvias",
+    zona: "Territorios vecinales de la Ruta del Agua",
+    entidad: "Municipalidad Provincial de Trujillo",
+    fecha: "2026-03-18",
+    resumen: "La municipalidad entregó barreras de canalización y sacos terreros a territorios vecinales del recorrido de la Ruta del Agua, para que los vecinos puedan encauzar el agua y proteger sus casas si llueve fuerte.",
+    estado: "concluida",
+    url: "https://www.gob.pe/institucion/munitrujillo/noticias/1367633-municipalidad-entrega-barreras-de-canalizacion-y-sacos-terreros-ante-posibles-lluvias",
+    mapa: "territorios"
+  }
+];
+const ESTADO_NOTICIA = {
+  anunciada:    { texto: "Anunciada",    icono: "clock" },
+  en_ejecucion: { texto: "En ejecución", icono: "construction" },
+  concluida:    { texto: "Concluida",    icono: "circle-check" }
+};
+
+/* CONÓCENOS. Motivación compartida por el equipo (27/11/2026).
+   EQUIPO: completar con la lista definitiva. Solo nombres, roles, aportes, fotos y créditos que entregue
+   el equipo. foto: ruta relativa (p. ej. "icons/equipo/nombre.jpg") o null.
+   Mientras esté vacío, "El equipo" no se muestra. TODO: lista definitiva del equipo. */
+const MOTIVACION = [
+  "A una persona le cuesta encontrar en un mismo lugar el estado de la quebrada San Ildefonso, lo que pasa en su entorno y cómo prepararse.",
+  "PREVIUNT reúne esas tres cosas: el estado de la quebrada publicado por la autoridad, los reportes de los vecinos en el mapa y qué hacer antes, durante y después de las lluvias."
+];
+const EQUIPO = [
+  // { nombre: "Nombre Apellido", rol: "De qué se encargó", aporte: "Qué hizo para PREVIUNT", foto: null }
 ];
 
 /* Mochila para emergencias – "Combo de Supervivencia" de INDECI (cartilla OGRD del Congreso, 2025).
@@ -192,7 +281,7 @@ const GUIA_NIVELES = {
   ] },
   2: { durante: [
     "Prepárate para evacuar hacia tu punto de reunión",
-    "Si ves el huaico, confírmalo en el mapa para avisar a tus vecinos",
+    "Desde un lugar seguro, confirma en el mapa los reportes de tu zona para avisar a tus vecinos",
     "Ten listos a niños, adultos mayores, personas con discapacidad y mascotas",
     "No cruces el cauce de la quebrada"
   ] },
@@ -383,6 +472,7 @@ const NOMBRE_COLA = {
   enviado: "Enviado",
   error: "Error; se reintentará",
   otra_sesion: "Guardado con otra sesión",
+  falta_detalle: "Falta describir lo que ocurrió",
   vencido: "No se envió a tiempo"
 };
 
@@ -399,6 +489,8 @@ const Cola = {
     this.ejecutar(); // al abrir la app se reintenta lo pendiente
   },
   async agregar(datos, foto) {
+    const err = errorDescripcion(datos.tipo, datos.descripcion);
+    if (err) throw new Error(err);
     const item = {
       id: idReporteLocal(), datos, foto: foto || null,
       uid: Datos.uid || null,           // sesión con la que se creó (null si aún no había sesión)
@@ -416,6 +508,11 @@ const Cola = {
     await BD.quitar(id);
     this.items = this.items.filter((x) => x.id !== id);
     renderPendientes(); renderBadgeConexion();
+  },
+  async describir(id, descripcion) {
+    const it = this.items.find((x) => x.id === id); if (!it) return;
+    it.datos.descripcion = descripcion; it.estado = "pendiente"; it.error = ""; it.proximo = 0;
+    await this._guardar(it); this.ejecutar();
   },
   async usarSesionActual(id) {
     const it = this.items.find((x) => x.id === id); if (!it || !Datos.uid) return;
@@ -441,6 +538,10 @@ const Cola = {
         if (it.estado === "otra_sesion" || it.estado === "vencido") continue;
         if (!it.datosOk && ahora() - it.creadoLocal > VENCE_COLA_MS) { it.estado = "vencido"; await this._guardar(it); continue; }
         if (it.estado === "error" && it.proximo > Date.now()) continue;
+        if (it.estado === "falta_detalle" || (!it.datosOk && errorDescripcion(it.datos.tipo, it.datos.descripcion))) {
+          if (it.estado !== "falta_detalle") { it.estado = "falta_detalle"; await this._guardar(it); }
+          continue;
+        }
         if (!Red.conectado) break;
         if (it.uid && it.uid !== Datos.uid) { it.estado = "otra_sesion"; await this._guardar(it); continue; }
         if (!it.uid) it.uid = Datos.uid; // creado antes de tener sesión en este celular: se envía con la de ahora
@@ -522,11 +623,13 @@ function renderPendientes() {
     if (it.estado === "pendiente" && !Red.conectado) extra = "Se enviará cuando vuelva la conexión.";
     if (it.estado === "error") extra = `${esc(it.error)} Próximo intento: ${hora(it.proximo)}.`;
     if (it.estado === "otra_sesion") extra = "Se guardó con otra cuenta de este celular. Puedes enviarlo con tu cuenta actual o descartarlo.";
+    if (it.estado === "falta_detalle") extra = "Para «Otros» hay que describir qué pasó antes de enviarlo.";
     if (it.estado === "vencido") extra = "Pasaron más de 2 horas sin señal: ya no se puede enviar como reporte actual. Si el problema sigue, haz un reporte nuevo.";
     if (it.datosOk && !it.fotoOk && it.estado !== "subiendo_foto") extra = "Los datos ya se enviaron; falta la foto. " + extra;
     const botones = it.estado === "otra_sesion"
       ? `<button class="btn-texto btn-texto-chico" data-cola="sesion" data-id="${esc(it.id)}">Enviar con mi cuenta actual</button><button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>`
       : it.estado === "vencido" ? `<button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>`
+      : it.estado === "falta_detalle" ? `<span class="pend-describir"><label class="solo-lector" for="desc-${esc(it.id)}">Describe lo que ocurrió</label><textarea id="desc-${esc(it.id)}" maxlength="200" rows="2" placeholder="Describe lo que ocurrió">${esc(it.datos.descripcion || "")}</textarea><button class="btn-texto btn-texto-chico" data-cola="describir" data-id="${esc(it.id)}">Guardar y enviar</button><button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button></span>`
       : it.estado === "error" ? `<button class="btn-texto btn-texto-chico" data-cola="reintentar" data-id="${esc(it.id)}">Reintentar ahora</button><button class="btn-texto btn-texto-chico" data-cola="descartar" data-id="${esc(it.id)}">Descartar</button>` : "";
     return `<li class="pend-item pend-${it.estado}">
       <span class="item-foto">${it.foto ? `<img src="${esc(it.foto)}" alt="">` : ic(T.icono)}</span>
@@ -745,6 +848,8 @@ const Datos = {
   },
 
   async addReporte(r) {
+    const errD = errorDescripcion(r.tipo, r.descripcion);
+    if (errD) throw new Error(errD);
     const rep = { ...r, autor: this.uid, creado: ahora(), confirmaciones: 0, negaciones: 0, verificadoAutoridad: false };
     if (this.modo === "local") {
       const todos = lsGet("previunt_reportes", {});
@@ -1910,6 +2015,13 @@ function iniciarMapa() {
   capas.reportes = L.layerGroup().addTo(mapa);
   capas.evac = L.layerGroup().addTo(mapa);
   capas.seguros = L.layerGroup().addTo(mapa);
+  // Capas de cartografía municipal (ocultas hasta activarlas con su botón)
+  capas.territorios = L.layerGroup();
+  capas.buzonetas = L.layerGroup();
+  mapa.on("zoomend", () => {
+    if (mapa.hasLayer(capas.buzonetas)) pintarBuzonetas();
+    mapa.getContainer().classList.toggle("tv-rotulos", mapa.getZoom() >= 14);
+  });
   // Zonas de refugio oficiales (ANA 2015), con botón "Cómo llegar"
   ZONAS_REFUGIO.forEach((z) => L.marker([z.lat, z.lng], {
     icon: L.divIcon({ className: "", html: `<div class="mk mk-refugio">${ic("shield-check")}</div>`, iconSize: [30, 30], iconAnchor: [15, 15] })
@@ -2126,6 +2238,221 @@ function renderListas() {
   lm.innerHTML = fil.length ? fil.map(htmlItemDetalle).join("") : `<li class="lista-vacia">${cercaLista.length ? "No hay reportes con este filtro." : `No hay reportes a menos de ${RADIO_LISTA_M / 1000} km de ti.`}</li>`;
   cargarMiniaturas(lm, 10);
 }
+/* ---------------------------------------------------------------------
+   CARTOGRAFÍA MUNICIPAL: Territorios vecinales (Ruta del Agua) y Buzonetas
+   Archivos estáticos en datos/ (rutas relativas: funcionan bajo /previunt/). No usan Firebase.
+--------------------------------------------------------------------- */
+/* Los 12 territorios vecinales señalados en el plano "Plan de acción – Ruta del Agua – Quebrada San Idelfonso 2026" (MPT).
+   Códigos y nombres entregados por el equipo a partir del plano (27/11/2026). */
+const TERRITORIOS_RUTA_AGUA = [
+  { codigo: "TV28", nombre: "Semirústica Mampuesto" },
+  { codigo: "TV41", nombre: "Urb. Pay Pay" },
+  { codigo: "TV17", nombre: "Urb. Miraflores" },
+  { codigo: "TV18", nombre: "Urb. El Molino" },
+  { codigo: "TV45", nombre: "Urb. Huerta Grande" },
+  { codigo: "TV16", nombre: "Urb. Las Quintanas I" },
+  { codigo: "TV27", nombre: "Centro Histórico Norte" },
+  { codigo: "TV11", nombre: "Urb. Jorge Chávez" },
+  { codigo: "TV43", nombre: "Urb. San Nicolás" },
+  { codigo: "TV10", nombre: "Urb. San Andrés" },
+  { codigo: "TV49", nombre: "Urb. San Judas Tadeo" },
+  { codigo: "TV53", nombre: "Urb. Los Rosales de San Andrés" }
+];
+/* Puntos críticos del mismo plano, en su orden y colores. lat/lng: null hasta tener la ubicación
+   georreferenciada de la fuente (no se colocan a ojo). TODO: verificar con fuente oficial. */
+const PUNTOS_CRITICOS = [
+  { codigo: "PC1", color: "#6A1B9A", nombreColor: "morado",   interseccion: "Av. 26 de Marzo y Av. Miraflores", lat: null, lng: null },
+  { codigo: "PC2", color: "#C62828", nombreColor: "rojo",     interseccion: "Av. América Norte y Av. Miraflores", lat: null, lng: null },
+  { codigo: "PC3", color: "#EF6C00", nombreColor: "naranja",  interseccion: "Av. España y Av. Miraflores", lat: null, lng: null },
+  { codigo: "PC4", color: "#F9A825", nombreColor: "amarillo", interseccion: "Óvalo Papal y Av. Juan Pablo II", lat: null, lng: null }
+];
+const FUENTE_PLANES_MPT = "https://www.gob.pe/institucion/munitrujillo/informes-publicaciones/7861873-planes-de-contingencia";
+const FUENTE_TV_PLANDET = "https://munitrujillo.gob.pe/Archivosvirtual/plandet/Territorios%20Vecinales%20TRU.pdf";
+/* Archivos de geometría oficial. Si un archivo no existe, la capa muestra solo el catálogo y la leyenda dice qué falta.
+   TODO: verificar con fuente oficial: pedir a la MPT/PLANDET los polígonos de territorios vecinales y el límite provincial
+   (shapefile o GeoJSON en WGS 84) y guardarlos con estos nombres. */
+const ARCHIVOS_CARTO = {
+  territorios: "datos/territorios-vecinales.geojson",     // propiedades: codigo (TV17), nombre, fuente
+  limiteProvincial: "datos/limite-provincial-trujillo.geojson",
+  buzonetas: "datos/buzonetas-trujillo-2026.geojson"
+};
+const Carto = { territorios: undefined, limite: undefined, buzonetas: undefined }; // undefined = sin pedir; null = no existe
+
+async function cargarGeojson(ruta) {
+  try {
+    const r = await fetch(ruta, { cache: "no-cache" });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d && Array.isArray(d.features) ? d : null;
+  } catch (e) { console.warn("Cartografía:", ruta, e); return null; }
+}
+
+/* ----- Territorios vecinales + Ruta del Agua ----- */
+let cauceDeTerritorios = false; // el cauce se encendió solo para acompañar esta capa
+async function activarTerritorios(on) {
+  const chipCauce = $('.chip[data-capa="cauce"]');
+  if (on) {
+    capas.territorios.addTo(mapa);
+    // Ruta del Agua: se usa la misma línea del cauce (no se dibuja otra encima)
+    if (!mapa.hasLayer(capas.cauce)) { capas.cauce.addTo(mapa); chipCauce?.setAttribute("aria-pressed", "true"); cauceDeTerritorios = true; }
+    if (Carto.territorios === undefined) Carto.territorios = await cargarGeojson(ARCHIVOS_CARTO.territorios);
+    if (Carto.limite === undefined) Carto.limite = await cargarGeojson(ARCHIVOS_CARTO.limiteProvincial);
+    pintarTerritorios();
+  } else {
+    capas.territorios.remove();
+    if (cauceDeTerritorios) { capas.cauce.remove(); chipCauce?.setAttribute("aria-pressed", "false"); cauceDeTerritorios = false; }
+  }
+  renderLeyenda();
+}
+function pintarTerritorios() {
+  capas.territorios.clearLayers();
+  const prioridad = new Set(TERRITORIOS_RUTA_AGUA.map((t) => t.codigo));
+  const nombreDe = (c) => TERRITORIOS_RUTA_AGUA.find((t) => t.codigo === c)?.nombre;
+  if (Carto.limite) {
+    L.geoJSON(Carto.limite, { interactive: false, style: { color: "#263238", weight: 2.5, dashArray: "10 5 2 5", fill: false } }).addTo(capas.territorios);
+  }
+  if (Carto.territorios) {
+    L.geoJSON(Carto.territorios, {
+      style: (f) => {
+        const p = prioridad.has(String(f.properties?.codigo || "").toUpperCase());
+        return p ? { color: "#0E2846", weight: 2.2, dashArray: "6 4", fillColor: "#1565C0", fillOpacity: 0.14 }
+                 : { color: "#607D8B", weight: 1, dashArray: "3 4", fillColor: "#90A4AE", fillOpacity: 0.04 };
+      },
+      onEachFeature: (f, capa) => {
+        const P = f.properties || {};
+        const cod = String(P.codigo || "").toUpperCase();
+        const nom = P.nombre || nombreDe(cod) || "";
+        capa.bindTooltip(esc(cod), { permanent: true, direction: "center", className: "tv-rotulo" + (prioridad.has(cod) ? " tv-prioridad" : "") });
+        capa.bindPopup(`<strong>${esc(cod)} · ${esc(nom)}</strong>${prioridad.has(cod) ? "<br>Señalado en el plano de la Ruta del Agua 2026" : ""}
+          <br><span class="cuenta">Fuente: ${esc(P.fuente || "MPT – PLANDET, Territorios Vecinales")}</span>`);
+      }
+    }).addTo(capas.territorios);
+  }
+  PUNTOS_CRITICOS.filter((p) => typeof p.lat === "number" && typeof p.lng === "number").forEach((p) => {
+    L.marker([p.lat, p.lng], {
+      icon: L.divIcon({ className: "", html: `<div class="mk-pc" style="--c:${p.color}">${esc(p.codigo)}</div>`, iconSize: [40, 26], iconAnchor: [20, 13] }),
+      title: `${p.codigo} · ${p.interseccion}`
+    }).bindPopup(`<strong>${esc(p.codigo)} · Punto crítico</strong><br>${esc(p.interseccion)}<br><span class="cuenta">Plan de acción – Ruta del Agua 2026 (MPT)</span>`)
+      .addTo(capas.territorios);
+  });
+}
+
+/* ----- Buzonetas de captación pluvial (30, plan 2026) ----- */
+const RIESGO_BUZ = {
+  alto:     { texto: "Riesgo alto según plan 2026",     clase: "buz-alto", letra: "A" },
+  moderado: { texto: "Riesgo moderado según plan 2026", clase: "buz-mod",  letra: "M" }
+};
+let buzPuntos = null; // [{ id, ll, p }]
+async function activarBuzonetas(on) {
+  if (!on) { capas.buzonetas.remove(); renderLeyenda(); return; }
+  capas.buzonetas.addTo(mapa);
+  if (Carto.buzonetas === undefined) {
+    Carto.buzonetas = await cargarGeojson(ARCHIVOS_CARTO.buzonetas);
+    // GeoJSON viene en [longitud, latitud]: se convierte con la función de Leaflet, sin mover los puntos
+    buzPuntos = Carto.buzonetas ? Carto.buzonetas.features
+      .filter((f) => f.geometry?.type === "Point")
+      .map((f) => ({ id: f.properties.id || f.id, ll: L.GeoJSON.coordsToLatLng(f.geometry.coordinates), p: f.properties })) : null;
+  }
+  if (!buzPuntos) toast("No se pudo cargar la capa de buzonetas. Revisa tu conexión.");
+  pintarBuzonetas();
+  renderLeyenda();
+}
+const iconoBuz = (p) => {
+  const R = RIESGO_BUZ[p.riesgo] || RIESGO_BUZ.moderado;
+  return L.divIcon({ className: "", html: `<div class="mk-buz ${R.clase}">${ic("rejilla")}<span class="buz-letra" aria-hidden="true">${R.letra}</span></div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+};
+function popupBuz(b) {
+  const p = b.p, R = RIESGO_BUZ[p.riesgo] || RIESGO_BUZ.moderado;
+  return `<strong>${esc(b.id)} · ${esc(p.nombre)}</strong>
+    <br>${esc(p.referencia || "")}
+    <br><span class="clasif ${R.clase}">${R.letra === "A" ? "▲" : "●"} ${esc(R.texto)}</span>
+    ${p.tv ? `<br>Territorio vecinal: ${esc(p.tv)}${p.territorio ? " · " + esc(p.territorio) : ""}` : ""}
+    <br><span class="cuenta">La clasificación es la del punto de aniego en el plan. No es un aviso en tiempo real ni indica si la buzoneta funciona.</span>
+    <br><span class="cuenta">Fuente: MPT, Plan de Acción ante Lluvias Intensas y Peligros Asociados 2026, anexos 15.1 (tabla 13) y 15.2 (mapa 2). Coordenadas convertidas de la tabla UTM del plan. <a href="${FUENTE_PLANES_MPT}" target="_blank" rel="noopener">Ver planes</a></span>`;
+}
+/* Agrupa las buzonetas que se tocan en pantalla (zoom bajo); al acercarse se ven una por una */
+function pintarBuzonetas() {
+  capas.buzonetas.clearLayers();
+  if (!buzPuntos) return;
+  const sueltas = mapa.getZoom() >= 15;
+  const grupos = [];
+  buzPuntos.forEach((b) => {
+    const px = mapa.latLngToLayerPoint(b.ll);
+    const g = sueltas ? null : grupos.find((x) => x.px.distanceTo(px) < 34);
+    if (g) g.items.push(b); else grupos.push({ px, items: [b] });
+  });
+  grupos.forEach((g) => {
+    if (g.items.length === 1) {
+      const b = g.items[0];
+      L.marker(b.ll, { icon: iconoBuz(b.p), title: `${b.id} · ${b.p.nombre}` })
+        .bindPopup(() => popupBuz(b), { maxWidth: 270, autoPanPaddingTopLeft: [12, 70], autoPanPaddingBottomRight: [12, 150] })
+        .addTo(capas.buzonetas);
+      return;
+    }
+    const altos = g.items.filter((b) => b.p.riesgo === "alto").length;
+    const lim = L.latLngBounds(g.items.map((b) => b.ll));
+    L.marker(lim.getCenter(), {
+      icon: L.divIcon({ className: "", html: `<div class="mk-buz-grupo${altos ? " con-alto" : ""}">${ic("rejilla")}<span>${g.items.length}</span></div>`, iconSize: [40, 40], iconAnchor: [20, 20] }),
+      title: `${g.items.length} buzonetas: acerca el mapa para verlas`, keyboard: true
+    }).on("click", () => mapa.fitBounds(lim.pad(0.4), { maxZoom: 16 })).addTo(capas.buzonetas);
+  });
+}
+
+/* Leyenda: se arma según las capas activas */
+const muestraLinea = (estilo) => `<svg class="ley-linea" viewBox="0 0 40 10" aria-hidden="true"><line x1="2" y1="5" x2="38" y2="5" style="${estilo}"/></svg>`;
+function renderLeyenda() {
+  const cuerpo = $("#leyendaCuerpo"); if (!cuerpo) return;
+  const activa = (c) => $(`.chip[data-capa="${c}"]`)?.getAttribute("aria-pressed") === "true";
+  const partes = [];
+  partes.push(`<h3>Mapa</h3><ul class="ley-lista">
+    <li><span class="ley-pin ley-gris" aria-hidden="true"></span>Reporte vecinal sin validar</li>
+    <li><span class="ley-pin" aria-hidden="true"></span>Reporte confirmado por vecinos</li>
+    <li>${muestraLinea("stroke:#2E7D32;stroke-width:3;stroke-dasharray:2 5;stroke-linecap:round")}Cauce de la quebrada (trazado referencial; color según el nivel)</li>
+    <li><span class="ley-zona" aria-hidden="true"></span>Zona de sirena (referencial)</li></ul>`);
+  if (activa("territorios")) {
+    const falta = [];
+    if (!Carto.limite) falta.push("límite provincial");
+    if (!Carto.territorios) falta.push("polígonos de territorios vecinales");
+    const sinPc = PUNTOS_CRITICOS.filter((p) => typeof p.lat !== "number");
+    partes.push(`<h3>Ruta del Agua · Territorios vecinales</h3>
+      <ul class="ley-lista">
+        <li>${muestraLinea("stroke:#263238;stroke-width:2.5;stroke-dasharray:10 5 2 5")}Límite provincial${Carto.limite ? "" : ' <span class="ley-falta">(no cargado)</span>'}</li>
+        <li>${muestraLinea("stroke:#0E2846;stroke-width:2;stroke-dasharray:6 4")}Límite de territorio vecinal${Carto.territorios ? "" : ' <span class="ley-falta">(no cargado)</span>'}</li>
+        <li>${muestraLinea("stroke:#2E7D32;stroke-width:3;stroke-dasharray:2 5;stroke-linecap:round")}Ruta del Agua: recorrido del agua (se muestra el trazado referencial del cauce)</li>
+      </ul>
+      <h4>Puntos críticos</h4>
+      <ul class="ley-lista">${PUNTOS_CRITICOS.map((p) => `<li><span class="mk-pc mk-pc-ley" style="--c:${p.color}">${esc(p.codigo)}</span>${esc(p.interseccion)} <span class="meta">(${esc(p.nombreColor)})</span></li>`).join("")}</ul>
+      <h4>Territorios señalados en el plano</h4>
+      <ul class="ley-tv">${TERRITORIOS_RUTA_AGUA.map((t) => `<li><strong>${esc(t.codigo)}</strong> ${esc(t.nombre)}</li>`).join("")}</ul>
+      ${falta.length || sinPc.length ? `<p class="ley-aviso">${ic("info")}<span>Aún no se muestran en el mapa: ${[...falta, ...(sinPc.length ? [`ubicación de ${sinPc.map((p) => p.codigo).join(", ")}`] : [])].join("; ")}. Falta el archivo oficial georreferenciado: <a href="${FUENTE_TV_PLANDET}" target="_blank" rel="noopener">Territorios Vecinales (PLANDET)</a> en formato GeoJSON o shapefile, y las coordenadas de los puntos críticos del plan de la Ruta del Agua. No se dibujan a ojo.</span></p>` : ""}
+      <p class="fuente">Fuente: MPT, <a href="${FUENTE_PLANES_MPT}" target="_blank" rel="noopener">Plan de acción – Ruta del Agua 2026</a>; PLANDET.</p>`);
+  }
+  if (activa("buzonetas")) {
+    const n = buzPuntos ? buzPuntos.length : 0;
+    const altos = buzPuntos ? buzPuntos.filter((b) => b.p.riesgo === "alto").length : 0;
+    partes.push(`<h3>Buzonetas de captación pluvial</h3>
+      <ul class="ley-lista">
+        <li><span class="mk-buz buz-alto mk-ley">${ic("rejilla")}<span class="buz-letra">A</span></span>▲ Riesgo alto según plan 2026${buzPuntos ? ` (${altos})` : ""}</li>
+        <li><span class="mk-buz buz-mod mk-ley">${ic("rejilla")}<span class="buz-letra">M</span></span>● Riesgo moderado según plan 2026${buzPuntos ? ` (${n - altos})` : ""}</li>
+        <li><span class="mk-buz-grupo mk-ley">${ic("rejilla")}<span>5</span></span>Varias buzonetas juntas: acerca el mapa</li>
+      </ul>
+      <p class="meta">${buzPuntos ? `${n} buzonetas del plano del plan 2026.` : "No se pudo cargar la capa."} La clasificación describe el punto de aniego en el plan; no es un aviso en tiempo real ni el estado de la buzoneta.</p>
+      <p class="fuente">Fuente: MPT, Plan de Acción ante Lluvias Intensas y Peligros Asociados 2026, anexos 15.1 y 15.2.</p>`);
+  }
+  cuerpo.innerHTML = partes.join("");
+}
+function abrirLeyenda(abrir) {
+  $("#leyendaMapa").hidden = !abrir;
+  $("#btnLeyenda").setAttribute("aria-expanded", String(abrir));
+  if (abrir) renderLeyenda();
+}
+/* Desde Noticias: abrir el mapa con una capa encendida */
+function verCapaEnMapa(capa) {
+  irATab("mapa");
+  const chip = $(`.chip[data-capa="${capa}"]`);
+  if (chip && chip.getAttribute("aria-pressed") !== "true") chip.click();
+}
+
 function verReporteEnMapa(id) {
   irATab("mapa");
   const r = S.reportes[id];
@@ -2672,10 +2999,28 @@ function cerrarReporte(limpiar = true) {
     $$(".opcion-tipo").forEach((b) => b.setAttribute("aria-pressed", "false"));
     $("#previewFoto").hidden = true;
     $("#contadorDesc").textContent = "0";
+    actualizarDetalleRequerido(); mostrarErrorDesc(null);
     $("#textoUbicacion").textContent = "Sin ubicación todavía.";
     if (marcadorTemp) { marcadorTemp.remove(); marcadorTemp = null; }
     if (capaTemp) { capaTemp.remove(); capaTemp = null; }
   }
+}
+/* "Otros": el detalle pasa a ser obligatorio. Al volver a otra categoría vuelve a ser opcional y el texto se conserva. */
+function actualizarDetalleRequerido() {
+  const req = !!TIPOS_REPORTE[R.tipo]?.descObligatoria;
+  const t = $("#inputDesc");
+  t.required = req; t.setAttribute("aria-required", String(req));
+  $("#etqDesc").textContent = req ? "Describe lo que ocurrió" : "Detalle";
+  $("#marcaDesc").textContent = req ? "obligatorio" : "opcional";
+  $("#marcaDesc").className = req ? "requerido" : "opcional";
+  t.placeholder = req ? "Ej.: hay un árbol caído en la vía" : "Ej.: agua acumulada en la esquina, no pasan autos";
+  if (!req) mostrarErrorDesc(null);
+}
+function mostrarErrorDesc(msg) {
+  $("#errorDesc").hidden = !msg;
+  if (msg) $("#errorDesc").textContent = msg;
+  $("#inputDesc").setAttribute("aria-invalid", String(!!msg));
+  $("#fsDetalle").classList.toggle("con-error", !!msg);
 }
 function validarFormReporte() {
   const ubicOK = R.forma === "tramo" ? !!(R.trazo && R.trazo.length >= 2) : typeof R.lat === "number";
@@ -2846,7 +3191,7 @@ function prepararFormReporte() {
   $("#opcionesTipo").addEventListener("click", (e) => {
     const b = e.target.closest(".opcion-tipo"); if (!b) return;
     $$(".opcion-tipo").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    R.tipo = b.dataset.tipo; validarFormReporte();
+    R.tipo = b.dataset.tipo; actualizarDetalleRequerido(); validarFormReporte();
   });
   $("#inputFoto").addEventListener("change", async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
@@ -2862,7 +3207,11 @@ function prepararFormReporte() {
     finally { $("#cargandoFoto").hidden = true; }
   });
   $("#btnQuitarFoto").onclick = () => { R.foto = null; $("#inputFoto").value = ""; $("#previewFoto").hidden = true; $("#cargandoFoto").hidden = true; };
-  $("#inputDesc").addEventListener("input", (e) => ($("#contadorDesc").textContent = e.target.value.length));
+  $("#inputDesc").addEventListener("input", (e) => {
+    $("#contadorDesc").textContent = e.target.value.length;
+    if (!$("#errorDesc").hidden && !errorDescripcion(R.tipo, e.target.value)) mostrarErrorDesc(null);
+  });
+  $("#inputDesc").addEventListener("blur", (e) => { if (R.tipo && e.target.value.length) mostrarErrorDesc(errorDescripcion(R.tipo, e.target.value)); });
   $("#btnGPS").onclick = () => usarGPSReporte();
   $("#btnCerrarVisor").onclick = cerrarVisor;
   $("#visorFoto").addEventListener("click", (e) => { if (e.target.id === "visorFoto") cerrarVisor(); });
@@ -2887,6 +3236,9 @@ function prepararFormReporte() {
   $("#formReporte").addEventListener("submit", async (e) => {
     e.preventDefault();
     if ($("#btnEnviarReporte").disabled) return;
+    // "Otros" sin descripción: no se guarda ni se envía; los datos del formulario se conservan
+    const errDesc = errorDescripcion(R.tipo, $("#inputDesc").value);
+    if (errDesc) { mostrarErrorDesc(errDesc); $("#inputDesc").focus(); return; }
     if (Datos.modo !== "local") {
       const motivo = Cuenta.motivoNoPuede(R.ambito || "ciudad");
       if (motivo) { cerrarReporte(false); puertaCuenta(R.ambito || "ciudad", abrirReporteNuevo); return; }
@@ -2973,11 +3325,93 @@ function renderPreparate() {
     renderMochila();
   };
 
-  $("#listaNumeros").innerHTML = NUMEROS_EMERGENCIA.map((n) =>
-    `<li class="${n.mostrar ? "ancho" : ""}"><a href="tel:${n.numero}">${ic("phone")}<span><span class="num">${esc(n.mostrar || n.numero)}</span><span class="nombre">${esc(n.nombre)}</span></span></a></li>`).join("");
-  $("#numerosFuente").innerHTML = '<a href="https://www.gob.pe/547" target="_blank" rel="noopener">gob.pe</a>, Gob. Regional La Libertad. Lluvia: ERA5 (Open-Meteo). Mapa: © OpenStreetMap.';
+  renderNumeros();
+  $("#numerosFuente").innerHTML = '<a href="https://www.gob.pe/547" target="_blank" rel="noopener">gob.pe</a>; COER y COEP: números entregados por el equipo PREVIUNT (vigencia por confirmar con cada institución). Lluvia: ERA5 (Open-Meteo). Mapa: © OpenStreetMap.';
+  renderNoticias();
+  renderConocenos();
   $("#fuenteGuia").href = FUENTE_GUIA;
   $("#fuenteMochila").href = FUENTE_MOCHILA;
+}
+
+/* Números: tarjeta con ícono de teléfono, número destacado y nombre del centro (un toque para llamar) */
+const tarjetaNumero = (n, ancho) =>
+  `<li class="${ancho ? "ancho" : ""}"><a href="tel:${esc(n.tel || n.numero)}">${ic("phone")}<span><span class="num">${esc(n.mostrar || n.numero)}</span><span class="nombre">${esc(n.nombre)}</span></span></a></li>`;
+function renderNumeros() {
+  $("#listaNumeros").innerHTML = NUMEROS_EMERGENCIA.map((n) => tarjetaNumero(n, false)).join("");
+  $("#directorioNumeros").innerHTML = DIRECTORIO_EMERGENCIA.map((j) => `
+    <div class="jurisdiccion" data-jurisdiccion="${esc(j.id)}">
+      <h3 class="jurisdiccion-tit">Centros de operaciones de emergencia <span class="pill">${esc(j.cobertura)}</span></h3>
+      <ul class="numeros">${j.centros.map((n) => tarjetaNumero(n, true)).join("")}</ul>
+      ${j.otros?.length ? `<h3 class="jurisdiccion-tit">Otros teléfonos</h3><ul class="numeros">${j.otros.map((n) => tarjetaNumero(n, true)).join("")}</ul>` : ""}
+    </div>`).join("");
+}
+
+/* Noticias: primero las más recientes */
+const fechaLarga = (iso) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("es-PE", { day: "numeric", month: "long", year: "numeric" });
+};
+function renderNoticias() {
+  const lista = [...NOTICIAS].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  $("#listaNoticias").innerHTML = lista.map((n) => {
+    const E = n.estado ? ESTADO_NOTICIA[n.estado] : null;
+    return `<li class="noticia" id="noticia-${esc(n.id)}">
+      <article>
+        <div class="noticia-meta">
+          <time datetime="${esc(n.fecha)}">${esc(fechaLarga(n.fecha))}</time>
+          ${E ? `<span class="estado-noticia estado-${esc(n.estado)}">${ic(E.icono)}${esc(E.texto)}</span>` : `<span class="estado-noticia estado-sin">Sin estado indicado</span>`}
+        </div>
+        <h2 class="noticia-tit">${esc(n.titulo)}</h2>
+        <p class="noticia-datos"><span><strong>Dónde:</strong> ${esc(n.zona)}</span><span><strong>A cargo:</strong> ${esc(n.entidad)}</span></p>
+        <p class="noticia-resumen">${esc(n.resumen)}</p>
+        <p class="noticia-enlaces">
+          <a href="${esc(n.url)}" target="_blank" rel="noopener">Ver fuente oficial</a>
+          ${n.extra ? `<a href="${esc(n.extra.url)}" target="_blank" rel="noopener">${esc(n.extra.texto)}</a>` : ""}
+          ${n.mapa ? `<button type="button" class="btn-texto btn-texto-chico" data-ver-capa="${esc(n.mapa)}">Ver en el mapa</button>` : ""}
+        </p>
+      </article></li>`;
+  }).join("");
+}
+function renderConocenos() {
+  $("#textoMotivacion").innerHTML = MOTIVACION.map((p) => `<p>${esc(p)}</p>`).join("");
+  const conDatos = EQUIPO.filter((p) => p && p.nombre);
+  $("#bloqueEquipo").hidden = conDatos.length === 0;
+  $("#listaEquipo").innerHTML = conDatos.map((p) => `<li class="persona">
+      ${p.foto ? `<img class="persona-foto" src="${esc(p.foto)}" alt="" loading="lazy">` : `<span class="persona-foto persona-ini" aria-hidden="true">${esc(p.nombre.trim().charAt(0).toUpperCase())}</span>`}
+      <span><strong class="persona-nombre">${esc(p.nombre)}</strong>
+      ${p.rol ? `<span class="persona-rol">${esc(p.rol)}</span>` : ""}
+      ${p.aporte ? `<span class="persona-aporte">${esc(p.aporte)}</span>` : ""}</span></li>`).join("");
+}
+
+/* Pestañas internas de Info (Prepárate | Noticias | Conócenos), con teclado y aria-selected */
+const SUBTABS_INFO = ["preparate", "noticias", "conocenos"];
+let subInfo = "preparate";
+function elegirSubInfo(nombre, foco = false) {
+  if (!SUBTABS_INFO.includes(nombre)) nombre = "preparate";
+  subInfo = nombre;
+  SUBTABS_INFO.forEach((n) => {
+    const t = $("#subtab-" + n), p = $("#panel-" + n);
+    const on = n === nombre;
+    t.setAttribute("aria-selected", String(on));
+    t.tabIndex = on ? 0 : -1;
+    p.hidden = !on;
+  });
+  if (foco) $("#subtab-" + nombre).focus();
+}
+function prepararSubtabs() {
+  const lista = $(".subtabs");
+  lista.addEventListener("click", (e) => { const b = e.target.closest("[role=tab]"); if (b) elegirSubInfo(b.dataset.sub); });
+  lista.addEventListener("keydown", (e) => {
+    const i = SUBTABS_INFO.indexOf(subInfo);
+    const destino = { ArrowRight: (i + 1) % 3, ArrowLeft: (i + 2) % 3, Home: 0, End: 2 }[e.key];
+    if (destino === undefined) return;
+    e.preventDefault();
+    elegirSubInfo(SUBTABS_INFO[destino], true);
+  });
+  $("#listaNoticias").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ver-capa]"); if (!b) return;
+    verCapaEnMapa(b.dataset.verCapa);
+  });
 }
 
 /* Mochila: cada objeto se enciende al tocarlo; con los 14, "Mochila lista" */
@@ -3914,6 +4348,8 @@ function pintarAmbito() {
    NAVEGACIÓN
 --------------------------------------------------------------------- */
 function irATab(nombre) {
+  // Enlaces antiguos a "preparate" (y los nuevos a noticias/conocenos) abren Info en esa pestaña
+  if (SUBTABS_INFO.includes(nombre)) { elegirSubInfo(nombre); nombre = "info"; }
   $$(".tab").forEach((t) => t.classList.toggle("activa", t.id === "tab-" + nombre));
   $$(".nav-btn").forEach((b) => b.classList.toggle("activa", b.dataset.tab === nombre));
   if (nombre === "mapa") { iniciarMapa(); setTimeout(() => mapa?.invalidateSize(), 60); }
@@ -3969,6 +4405,11 @@ async function iniciar() {
   $("#avisoVecinal").onclick = () => { const id = $("#avisoVecinal").dataset.rep; if (id) verReporteEnMapa(id); };
   $("#btnReportarInicio").onclick = abrirReporteNuevo;
   $$("[data-ir]").forEach((b) => b.addEventListener("click", () => irATab(b.dataset.ir)));
+  prepararSubtabs();
+  // Enlaces directos: #info, #preparate, #noticias, #conocenos
+  const porHash = () => { const h = location.hash.slice(1); if (h === "info" || SUBTABS_INFO.includes(h)) irATab(h); };
+  window.addEventListener("hashchange", porHash);
+  porHash();
   const listaClick = (ev) => { const b = ev.target.closest("[data-rep]"); if (b) verReporteEnMapa(b.dataset.rep); };
   $("#listaReportesInicio").addEventListener("click", listaClick);
   $("#listaReportesMapa").addEventListener("click", listaClick);
@@ -4015,9 +4456,16 @@ async function iniciar() {
     const on = b.getAttribute("aria-pressed") !== "true";
     b.setAttribute("aria-pressed", String(on));
     if (!mapa) return;
-    const grupos = b.dataset.capa === "reportes" ? [capas.reportes, capas.bloqueos] : b.dataset.capa === "cauce" ? [capas.cauce] : [capas.zonas];
+    const capa = b.dataset.capa;
+    if (capa === "territorios") { activarTerritorios(on); return; }
+    if (capa === "buzonetas") { activarBuzonetas(on); return; }
+    if (capa === "cauce") cauceDeTerritorios = false; // la persona decidió: ya no se apaga junto con Territorios
+    const grupos = capa === "reportes" ? [capas.reportes, capas.bloqueos] : capa === "cauce" ? [capas.cauce] : [capas.zonas];
     grupos.forEach((g) => on ? g.addTo(mapa) : g.remove());
+    renderLeyenda();
   }));
+  $("#btnLeyenda").onclick = () => abrirLeyenda($("#leyendaMapa").hidden);
+  $("#btnCerrarLeyenda").onclick = () => { abrirLeyenda(false); $("#btnLeyenda").focus(); };
   $("#btnCentrarme").onclick = () => centrarEnMi(false);
   $("#guiaNiveles").addEventListener("click", (ev) => {
     const b = ev.target.closest(".nivel-sel"); if (!b) return;
@@ -4052,6 +4500,11 @@ async function iniciar() {
   $("#listaPendientes").addEventListener("click", async (ev) => {
     const b = ev.target.closest("[data-cola]"); if (!b) return;
     const id = b.dataset.id;
+    if (b.dataset.cola === "describir") {
+      const t = $("#desc-" + CSS.escape(id)), txt = (t?.value || "").trim().slice(0, 200);
+      if (!tieneTexto(txt)) { toast("Describe lo que ocurrió."); t?.focus(); return; }
+      await Cola.describir(id, txt); return;
+    }
     if (b.dataset.cola === "descartar") { if (confirm("¿Descartar este reporte? Se borrará de tu celular sin enviarse.")) await Cola.descartar(id); }
     if (b.dataset.cola === "sesion") {
       const it = Cola.items.find((x) => x.id === id);

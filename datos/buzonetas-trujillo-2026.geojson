@@ -1,0 +1,669 @@
+{
+  "type": "FeatureCollection",
+  "name": "Buzonetas de captación pluvial de Trujillo (Plan 2026)",
+  "fuente": "https://www.gob.pe/institucion/munitrujillo/informes-publicaciones/7861873-planes-de-contingencia",
+  "referencia_fuente": "Anexos 15.1 (tabla 13, p. 33) y 15.2 (mapa 2, p. 34)",
+  "crs_entrada": "EPSG:32717 interpretado según la cartografía PLANDET",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "B-1",
+      "properties": {
+        "id": "B-1",
+        "nombre": "Av. Mansiche 1",
+        "referencia": "Av. Mansiche – Clínica Peruano Americana",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV42",
+        "territorio": "Urb. Sánchez Carrión",
+        "utm_este_m": 716299.56,
+        "utm_norte_m": 9103691.9
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.037066,
+          -8.103913
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-2",
+      "properties": {
+        "id": "B-2",
+        "nombre": "Av. Olímpica",
+        "referencia": "Av. Olímpica - Estadio Mansiche Puerta 6",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV16",
+        "territorio": "Urb. Las Quintanas I",
+        "utm_este_m": 716965.04,
+        "utm_norte_m": 9103325.72
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.031013,
+          -8.107194
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-3",
+      "properties": {
+        "id": "B-3",
+        "nombre": "Psje. San Luis",
+        "referencia": "Psje. San Luis – Ministerio Público",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV10",
+        "territorio": "Urb. San Andrés",
+        "utm_este_m": 716721.57,
+        "utm_norte_m": 9102812.66
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.033199,
+          -8.111843
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-4",
+      "properties": {
+        "id": "B-4",
+        "nombre": "Av. Jesús de Nazareth con Alcides Carrión",
+        "referencia": "Int. Av. Jesús de Nazareth con Alcides Carrión",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV43",
+        "territorio": "Urb. San Nicolás",
+        "utm_este_m": 716442.6,
+        "utm_norte_m": 9102834.43
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.03573,
+          -8.111658
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-5",
+      "properties": {
+        "id": "B-5",
+        "nombre": "Av. Jesús de Nazareth con CIDUNT",
+        "referencia": "Av. Jesús de Nazareth - CIDUNT",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV43",
+        "territorio": "Urb. San Nicolás",
+        "utm_este_m": 716388.0,
+        "utm_norte_m": 9102868.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.036227,
+          -8.111357
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-6",
+      "properties": {
+        "id": "B-6",
+        "nombre": "Av. Jesús de Nazareth con calle Londres",
+        "referencia": "Int. Av. Jesús de Nazareth con Londres",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV43",
+        "territorio": "Urb. San Nicolás",
+        "utm_este_m": 716227.55,
+        "utm_norte_m": 9102981.35
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.037688,
+          -8.11034
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-7",
+      "properties": {
+        "id": "B-7",
+        "nombre": "Av. Jesús de Nazareth con av. Roma",
+        "referencia": "Int. Av. Jesús de Nazareth con Av. Roma",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV43",
+        "territorio": "Urb. San Nicolás",
+        "utm_este_m": 716180.92,
+        "utm_norte_m": 9103024.24
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.038113,
+          -8.109954
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-8",
+      "properties": {
+        "id": "B-8",
+        "nombre": "Óvalo Mansiche",
+        "referencia": "Int. Av. Roma y Salaverry",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV11",
+        "territorio": "Urb. Jorge Chávez",
+        "utm_este_m": 716438.19,
+        "utm_norte_m": 9103435.05
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.035797,
+          -8.106229
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-9",
+      "properties": {
+        "id": "B-9",
+        "nombre": "Av. Mansiche II",
+        "referencia": "Av. Mansiche – Mall Plaza Puerta Sodimac",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV14",
+        "territorio": "Urb. El Cortijo",
+        "utm_este_m": 714981.95,
+        "utm_norte_m": 9104021.19
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.049033,
+          -8.100994
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-10",
+      "properties": {
+        "id": "B-10",
+        "nombre": "Calle Tito Cusi Yupanqui",
+        "referencia": "Int. Calles Titu Cusi Yupanqui y Apumayta - Parque Santa María de Guadalupe",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV03",
+        "territorio": "Urb. Santa María I, IV, y V etapa",
+        "utm_este_m": 718119.16,
+        "utm_norte_m": 9101673.16
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.02047,
+          -8.122083
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-11",
+      "properties": {
+        "id": "B-11",
+        "nombre": "Prol. Cuba",
+        "referencia": "Int. Prol. Cuba y Pje. Mónaco – Parque Inmaculada Concepción",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV36",
+        "territorio": "Urb. Monserrate",
+        "utm_este_m": 716905.57,
+        "utm_norte_m": 9101697.48
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.03148,
+          -8.121916
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-12",
+      "properties": {
+        "id": "B-12",
+        "nombre": "Urb. Santa María I",
+        "referencia": "Int. Calles Manuel Romero y Miguel Iglesias",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV03",
+        "territorio": "Urb. Santa María I, IV, y V etapa",
+        "utm_este_m": 718098.34,
+        "utm_norte_m": 9100857.54
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.020623,
+          -8.129457
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-13",
+      "properties": {
+        "id": "B-13",
+        "nombre": "Urb. Santa María II",
+        "referencia": "Int. Calles Manuel Romero y Víctor Fajardo",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV03",
+        "territorio": "Urb. Santa María I, IV, y V etapa",
+        "utm_este_m": 718045.83,
+        "utm_norte_m": 9101001.12
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.021105,
+          -8.128161
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-14",
+      "properties": {
+        "id": "B-14",
+        "nombre": "Av. Pucará",
+        "referencia": "Int. Av. Pucará y Av. Miraflores",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV28",
+        "territorio": "Semi Rústica Mampuesto",
+        "utm_este_m": 718289.7,
+        "utm_norte_m": 9104862.25
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.019064,
+          -8.093246
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-15",
+      "properties": {
+        "id": "B-15",
+        "nombre": "Calle Huallaga",
+        "referencia": "Int. Calle Huallaga y Huampani",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV17",
+        "territorio": "Urb. Miraflores",
+        "utm_este_m": 717755.56,
+        "utm_norte_m": 9103995.84
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.023871,
+          -8.101102
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-16",
+      "properties": {
+        "id": "B-16",
+        "nombre": "Villa Contadores I",
+        "referencia": "Av. Santa Rosa - Frente de Residencial Torres de Quevedo",
+        "riesgo": "alto",
+        "color": "rojo",
+        "tv": "TV59",
+        "territorio": "Urb. Villa el contador.",
+        "utm_este_m": 719741.0,
+        "utm_norte_m": 9102160.0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.005779,
+          -8.11761
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-17",
+      "properties": {
+        "id": "B-17",
+        "nombre": "Baipás Mansiche",
+        "referencia": "Int. Av. Mansiche y Av. Jerónimo de la Torre",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV16",
+        "territorio": "Urb. Las Quintanas I",
+        "utm_este_m": 716728.87,
+        "utm_norte_m": 9103462.71
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.033161,
+          -8.105966
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-18",
+      "properties": {
+        "id": "B-18",
+        "nombre": "Jr. Gamarra",
+        "referencia": "Int. Jr. Gamarra y Francisco Pizarro",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV26",
+        "territorio": "Centro Histórico Sur",
+        "utm_este_m": 717445.81,
+        "utm_norte_m": 9102944.24
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.026635,
+          -8.110622
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-19",
+      "properties": {
+        "id": "B-19",
+        "nombre": "Urb. Primavera",
+        "referencia": "Av. Teodoro Valcárcel – Plaza Vea",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV15",
+        "territorio": "Urb. Primavera",
+        "utm_este_m": 716446.32,
+        "utm_norte_m": 9103986.13
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.035747,
+          -8.101247
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-20",
+      "properties": {
+        "id": "B-20",
+        "nombre": "Calle Suiza",
+        "referencia": "Int. Calles Suiza y Alemania",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV36",
+        "territorio": "Urb. Monserrate",
+        "utm_este_m": 717144.64,
+        "utm_norte_m": 9101225.3
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.029291,
+          -8.126174
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-21",
+      "properties": {
+        "id": "B-21",
+        "nombre": "Calle Jhon F. Kennedy I",
+        "referencia": "Int. Calle Jhon F. Kennedy y Martin Luther King",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV04",
+        "territorio": "Urb. Los Jazmines",
+        "utm_este_m": 717274.96,
+        "utm_norte_m": 9101131.63
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.028104,
+          -8.127016
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-22",
+      "properties": {
+        "id": "B-22",
+        "nombre": "Calle Jhon F. Kennedy II",
+        "referencia": "Int. Calle Jhon F. Kennedy y Truman",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV04",
+        "territorio": "Urb. Los Jazmines",
+        "utm_este_m": 717394.44,
+        "utm_norte_m": 9101168.98
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.027022,
+          -8.126673
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-23",
+      "properties": {
+        "id": "B-23",
+        "nombre": "Calle Roosevelt",
+        "referencia": "Int. Calle Jhon F. Kennedy y Roosevelt",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV04",
+        "territorio": "Urb. Los Jazmines",
+        "utm_este_m": 717501.52,
+        "utm_norte_m": 9101211.77
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.026053,
+          -8.126281
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-24",
+      "properties": {
+        "id": "B-24",
+        "nombre": "Calle Mantaro",
+        "referencia": "Int. Calle Mantaro y Av. Santa (Eco Plaza)",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV18",
+        "territorio": "Urb. La Intendencia- El Molino",
+        "utm_este_m": 718149.33,
+        "utm_norte_m": 9103820.56
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.020291,
+          -8.102669
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-25",
+      "properties": {
+        "id": "B-25",
+        "nombre": "Urb. Las Quintanas III Etapa",
+        "referencia": "Calle Cavero y Muñoz – Parque Orlando Legua Peláez",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV46",
+        "territorio": "Urb. Las Quintanas III",
+        "utm_este_m": 717203.16,
+        "utm_norte_m": 9104128.36
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.028888,
+          -8.099928
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-26",
+      "properties": {
+        "id": "B-26",
+        "nombre": "Santa Lucía",
+        "referencia": "Int. Calle Sta. Lucia y Av. Larco",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV07",
+        "territorio": "La Merced",
+        "utm_este_m": 715901.91,
+        "utm_norte_m": 9101109.47
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.04056,
+          -8.127276
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-27",
+      "properties": {
+        "id": "B-27",
+        "nombre": "Calle Wilfredo Torres",
+        "referencia": "Calle Wilfredo Torres – Final de calle",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV17",
+        "territorio": "Urb. Miraflores",
+        "utm_este_m": 717929.03,
+        "utm_norte_m": 9104081.4
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.022301,
+          -8.100321
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-28",
+      "properties": {
+        "id": "B-28",
+        "nombre": "Calle Guatemala",
+        "referencia": "Calle Guatemala – I.E 80002 Antonio Torres Araujo",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV05",
+        "territorio": "Urb. Torres Araujo",
+        "utm_este_m": 717516.47,
+        "utm_norte_m": 9101818.11
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.025944,
+          -8.120799
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-29",
+      "properties": {
+        "id": "B-29",
+        "nombre": "29 de Diciembre",
+        "referencia": "Int. Av.28 de Julio y 29 de Diciembre",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV05",
+        "territorio": "Urb. Torres Araujo",
+        "utm_este_m": 717339.58,
+        "utm_norte_m": 9102070.27
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.02756,
+          -8.118527
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "B-30",
+      "properties": {
+        "id": "B-30",
+        "nombre": "Calle Santa Clara",
+        "referencia": "Int. Calles Sta. Clara y Sta. Úrsula",
+        "riesgo": "moderado",
+        "color": "amarillo",
+        "tv": "TV07",
+        "territorio": "La Merced",
+        "utm_este_m": 716207.68,
+        "utm_norte_m": 9101169.14
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -79.037788,
+          -8.126723
+        ]
+      }
+    }
+  ]
+}
