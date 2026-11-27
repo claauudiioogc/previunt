@@ -1755,7 +1755,7 @@ async function cargarClima() {
     }
     S.clima = null;
     $("#climaCuerpo").innerHTML = cwHtmlError();
-    $("#climaFuente").textContent = `Open-Meteo no respondió · ${hora(Date.now())}`;
+    $("#climaFuente").innerHTML = `Open-Meteo no respondió · ${hora(Date.now())}` + enlaceClimaExterno();
   }
 }
 const fmt = (x, u, dec = 1) => (x === null || x === undefined ? "s/d" : `${Number(x).toFixed(dec)}${u}`);
@@ -1881,12 +1881,19 @@ function cwAlternar() {
   $("#cwDetalle")?.classList.toggle("abierto", S.cwAbierto);
 }
 
+/* Pronóstico completo FUERA de la app (Windy, gratis): misma ubicación que el clima de Inicio.
+   Formato https://www.windy.com/LAT/LON (abre el detalle del punto); lat/lon con parte decimal. */
+function enlaceClimaExterno() {
+  const lat = (S.ubicacion ? S.ubicacion.lat : TRUJILLO.lat).toFixed(3);
+  const lng = (S.ubicacion ? S.ubicacion.lng : TRUJILLO.lng).toFixed(3);
+  return `<a class="clima-externo" href="https://www.windy.com/${lat}/${lng}" target="_blank" rel="noopener">Ver pronóstico completo ${ic("external-link")}</a>`;
+}
 function renderClima() {
   const K = S.clima; if (!K) return;
   $("#climaCuerpo").innerHTML = cwHtmlFila(K);
-  $("#climaFuente").textContent = S.climaGuardado
-    ? `Guardado · Open-Meteo ${K.c.time.slice(11, 16)} (no se pudo actualizar)`
-    : `Open-Meteo · ${K.c.time.slice(11, 16)}`;
+  $("#climaFuente").innerHTML = (S.climaGuardado
+    ? `Guardado · Open-Meteo ${esc(K.c.time.slice(11, 16))} (no se pudo actualizar)`
+    : `Open-Meteo · ${esc(K.c.time.slice(11, 16))}`) + enlaceClimaExterno();
 }
 
 

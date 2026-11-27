@@ -1086,3 +1086,7 @@ body.emergencia .badge-conexion.off, body.emergencia .badge-conexion.sync { back
 .equipo .persona-nombre { font-size: 1.18rem; font-weight: 750; color: var(--marino); line-height: 1.25; }
 .texto-motivacion p { margin: 0 0 10px; }
 .texto-motivacion p:last-child { margin-bottom: 0; font-weight: 600; }
+
+/* Clima: enlace al pronóstico completo fuera de la app */
+.clima-externo { display: flex; width: fit-content; align-items: center; gap: 3px; color: var(--azul); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; padding: 6px 0; }
+.clima-externo .ic { width: 12px; height: 12px; }
