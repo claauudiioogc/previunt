@@ -74,6 +74,7 @@ bool authEverAttempted = false;
 size_t paso = 0;
 uint32_t pasoDesde = 0;
 bool buzzerOn = false;
+uint32_t pruebaLocalHasta = 0;  // prueba local del buzzer desde el monitor serie
 
 // ---------------- Buzzer ----------------
 void buzzerTone(uint16_t hz) {
@@ -105,7 +106,7 @@ void failClosedAtBoot() {
 }
 
 void updateBuzzer() {
-  if (!alarmLatched) {
+  if (!alarmLatched && !pruebaLocalHasta) {
     if (buzzerOn) buzzerTone(0);
     return;
   }
@@ -114,6 +115,26 @@ void updateBuzzer() {
     paso = (paso + 1) % N_PASOS;
     pasoDesde = now;
     buzzerTone(SECUENCIA[paso].hz);
+  }
+}
+
+// Prueba LOCAL del buzzer (sin Firebase): escribir "p" + Enter en el monitor serie.
+// Solo se puede con el ESP32 conectado por USB; no sirve para encender la alarma a distancia.
+void handleSerialTest() {
+  while (Serial.available()) {
+    const char c = (char)Serial.read();
+    if (c == 'p' || c == 'P') {
+      Serial.printf("PRUEBA LOCAL: buzzer 3 s en GPIO%d (el pin da 3,3 V; el transistor conecta el buzzer a 5 V).\n", BUZZER_PIN);
+      pruebaLocalHasta = millis() + 3000;
+      paso = 0;
+      pasoDesde = millis();
+      buzzerTone(SECUENCIA[0].hz);
+    }
+  }
+  if (pruebaLocalHasta && (int32_t)(millis() - pruebaLocalHasta) >= 0) {
+    pruebaLocalHasta = 0;
+    if (!alarmLatched) buzzerTone(0);
+    Serial.println("PRUEBA LOCAL terminada.");
   }
 }
 
@@ -386,6 +407,7 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
+  Serial.println("Para probar solo el buzzer: escribe p y Enter en este monitor.");
   if (!secretsConfigured()) {
     Serial.println("Falta completar secretos.h (Wi-Fi, API key, cuenta del dispositivo y zona). Buzzer apagado.");
     return;
@@ -401,6 +423,7 @@ void setup() {
 }
 
 void loop() {
+  handleSerialTest();
   connectWiFi();
   if (secretsConfigured()) reportStatus();
   const uint32_t now = millis();
